@@ -1,4 +1,4 @@
-pub mod cartridge;
+pub mod memory;
 
 #[cfg(test)]
 mod cartridge_api_tests;

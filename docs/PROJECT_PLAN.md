@@ -4,6 +4,8 @@
 
 The user owns emulator implementation. The assistant owns planning, issue and milestone management, review, writing and maintaining automated tests, running checks, and recording results. Test ownership was clarified explicitly by the user; minimal test-module wiring is included in the assistant's scope.
 
+The assistant also leads architecture: draft component boundaries, ownership, interface contracts, invariants, and tradeoffs before dependent implementation begins. The user can challenge or revise those proposals and owns the implementation. Architecture review must consider the overall system, not only compiler errors and test results.
+
 ## Development goals
 
 The primary goal is to build software development skills and a portfolio project while enjoying emulator development. The user has intermediate Rust experience, including traits and generics, and has built a basic PICO-8 emulator. This project should develop experience structuring a larger Rust application, debugging interacting systems, validating behavior, and delivering a usable release.
@@ -38,6 +40,10 @@ System coordinates execution and gives CPU temporary mutable access to Bus when 
 
 Bus routes memory accesses to the resources it owns. System coordinates advancement of emulated time. The core remains usable without a frontend.
 
+The shared Memory trait has been removed by agreement. Use inherent Bus read/write methods for CPU addresses; Cartridge exposes its read-only ROM slice. ROM-only writes are ignored by Bus. Revisit a CPU-facing abstraction only when a concrete testing requirement calls for it. Bus access methods must be visible to sibling core modules (pub(crate) is sufficient).
+
+After this refactor, all 27 tests, formatting, and strict Clippy pass. One obsolete direct-cartridge-write test was removed because that operation no longer exists; Bus ROM-write protection remains tested. Bus read/write methods are public and available to future sibling core modules.
+
 ## Timing decision
 
 Target machine-cycle-level coordination from the start. CPU execution must allow System to interleave device advancement and CPU bus accesses within instructions. Do not execute all instruction side effects atomically and only then advance devices for the instruction's total duration.
@@ -70,11 +76,11 @@ The broad architecture decisions are agreed. Remaining work for issue #1 is to s
 
 - Rust 2024 binary crate; no dependencies.
 - src/main.rs prints Hello, world!.
-- ROM-only cartridge loading is verified locally with 19 passing tests, including a sibling-module public API test proving metadata snapshot independence. Formatting and strict Clippy pass. CPU and hardware-device behavior remain unimplemented and untested. Implementation, tests, and planning files have not yet been committed/published.
+- ROM-only cartridge loading is published in checkpoint d03788d, verified against GitHub main. The next checkpoint contains the initial bus and simplified inherent access methods: 27 cartridge/API/bus tests pass, including constructor initialization and full address-space routing. Formatting and strict Clippy pass. Publication of this checkpoint is pending. CPU and hardware-device behavior remain unimplemented and untested.
 - Public GitHub repository: [Lorithan/gameboy-emu](https://github.com/Lorithan/gameboy-emu), connected as origin.
 - GitHub connector access and local GitHub CLI access are verified. The Windows keyring works outside the sandbox; sandboxed CLI authentication misleadingly reports an invalid token. Use approved execution outside the sandbox for authenticated CLI operations.
 - Initial issues and all seven [GitHub milestones](https://github.com/Lorithan/gameboy-emu/milestones) are published. Issue #1 is assigned to M0; issues #2 and #3 are assigned to M1.
-- No milestone is complete.
+- M1 (cartridge and memory foundation) meets its completion criteria on local verification. Issue #1/M0 still requires exact timing and startup details before CPU execution work.
 
 ## Proposed milestones
 
@@ -133,11 +139,11 @@ Acceptance criteria:
 
 ## Current implementation task
 
-[ #2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2) is complete based on local implementation review and checks. Its input policy and verification evidence are mirrored in [the loader task](tasks/ROM_ONLY_LOADER.md). Commit/publish the verified work before building further changes on it. Next, refine #3's bus mapping and temporary device-region behavior; exact CPU timing and startup details in #1 remain open.
+[#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3) is complete, with evidence in [the initial bus task](tasks/INITIAL_BUS.md). This checkpoint includes the bus implementation, refactor, tests, and documentation. Publish it, then settle exact CPU timing/event ordering and the sourced startup profile in #1 before beginning CPU execution.
 
 Initial implementation backlog:
 
-- [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete locally; commit/publish pending.
-- [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), after #1 and #2.
+- [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete and published in d03788d.
+- [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in this checkpoint; publication pending.
 
 Next planned issues: define CPU register state; implement a small first instruction family with independent test expectations. Refine these after the core contract is settled.

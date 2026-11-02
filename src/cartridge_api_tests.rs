@@ -1,4 +1,4 @@
-use crate::cartridge::Cartridge;
+use crate::memory::Cartridge;
 
 #[test]
 fn metadata_is_public_and_mutating_the_snapshot_does_not_change_the_cartridge() {

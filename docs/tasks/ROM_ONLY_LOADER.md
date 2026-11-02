@@ -85,3 +85,7 @@ Choose the Rust API and module layout yourself. Start with the valid in-memory c
 - The assistant added only tests and test-module wiring; emulator implementation remains the user's work.
 - Issue #2 is complete on local evidence. Source/tests/docs remain uncommitted and unpublished at the time of this verification.
 - Permission-specific read errors after a successful open were not independently forced on Windows. Existing missing-path/directory tests and inspection of both error mappings cover the current I/O contract; this limitation is retained explicitly.
+
+## Published checkpoint
+
+Implementation, tests, and documentation were committed in d03788d (Implement cartridge loading and verification). GitHub main was verified to match that checkpoint. The publication-pending status in the earlier local verification is resolved.
