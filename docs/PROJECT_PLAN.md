@@ -1,0 +1,143 @@
+# Game Boy emulator project plan
+
+## Ownership and scope
+
+The user owns emulator implementation. The assistant owns planning, issue and milestone management, review, writing and maintaining automated tests, running checks, and recording results. Test ownership was clarified explicitly by the user; minimal test-module wiring is included in the assistant's scope.
+
+## Development goals
+
+The primary goal is to build software development skills and a portfolio project while enjoying emulator development. The user has intermediate Rust experience, including traits and generics, and has built a basic PICO-8 emulator. This project should develop experience structuring a larger Rust application, debugging interacting systems, validating behavior, and delivering a usable release.
+
+Prioritize a finished, explainable scope over broad hardware support. Portfolio evidence should include a reproducible build, meaningful automated tests, documented design decisions and tradeoffs, focused issues and pull requests, a short demonstration, and an honest compatibility report. These are project goals, not guarantees about hiring outcomes.
+
+Prefer concrete types and simple ownership initially. Introduce abstractions when an actual testing or implementation need justifies them. The assistant should explain requirements and review reasoning without supplying implementation code unless requested.
+
+The current architecture discussion should begin with the CPU, bus, cartridge, system coordinator, and frontend boundaries. Settle timing and startup behavior before marking the core contract issue complete.
+
+## Initial release scope
+
+Proposed first release: an original monochrome Game Boy (DMG) emulator in Rust, with a desktop frontend, keyboard controls, audio, and ROM-only plus MBC1 cartridges. These are planning defaults, open to revision before the relevant milestone. Game Boy Color, link cable, additional cartridge controllers, save states, and performance optimization are deferred.
+
+Scope clarification: focus implementation and architecture on DMG. Game Boy Color is a possible future extension, with no committed milestone or speculative implementation. Game Boy Advance is outside the project plan. Do not build a general multi-system framework in anticipation of either system.
+
+First aim for observable, deterministic behavior. Introduce hardware timing checks as components become available. Declare compatibility by tested behavior and ROM results, without claiming full hardware accuracy.
+
+## Frontend decision
+
+Use SDL2 through the Rust sdl2 crate for the desktop frontend. The user has prior SDL2 experience.
+
+Defer all SDL2 setup, dependencies, native libraries, frontend scaffolding, and feasibility work until frontend development begins in M4. Initial core development and tests should run headlessly. Audio integration follows in M6.
+
+Keep SDL2 types and host resources in the frontend. The core should expose framebuffer data and audio samples and accept Game Boy button state without depending on SDL2.
+
+## Core ownership decision
+
+The frontend owns a System instance. System owns the CPU and Bus. CPU owns registers and execution state. Bus owns the cartridge, work RAM, and hardware devices as they are introduced.
+
+System coordinates execution and gives CPU temporary mutable access to Bus when stepping. CPU and Bus do not own each other. Begin with ordinary ownership and borrowing rather than shared ownership through `Rc<RefCell<_>>`.
+
+Bus routes memory accesses to the resources it owns. System coordinates advancement of emulated time. The core remains usable without a frontend.
+
+## Timing decision
+
+Target machine-cycle-level coordination from the start. CPU execution must allow System to interleave device advancement and CPU bus accesses within instructions. Do not execute all instruction side effects atomically and only then advance devices for the instruction's total duration.
+
+Retain an instruction-step operation for tests and debugging, implemented through the smaller internal steps. Keep host pacing outside the core. Define the exact ordering of CPU accesses and device updates, timing units, and idle/interrupt steps before implementing the scheduler; devices may require finer internal timing.
+
+Distinguish CPU machine cycles from device/system time explicitly. Implement the DMG relationship first; do not add GBC speed modes or hardware-model abstractions until that scope is adopted.
+
+This is an accuracy target, not a claim of cycle accuracy. Validate access ordering and device interactions through focused tests and appropriate external ROM checks.
+
+## Startup decision
+
+Initially skip execution of the boot ROM and start cartridge execution from an explicitly defined DMG post-boot state. Authentic boot ROM execution is deferred.
+
+Before implementation, specify the target hardware/boot variant and cite references for the chosen CPU register, device register, and memory initialization values. Mark approximations and unknown state explicitly rather than treating all memory as known or claiming exact power-on behavior. Skipping the boot ROM does not change the machine-cycle coordination target.
+
+Still to settle for issue #1: exact timing conventions, the detailed startup profile and its sources, and the initial cartridge/bus test cases.
+
+## Headless execution decision
+
+Support advancing one machine cycle or stepping to an instruction boundary for tests and debugging. Instruction stepping must also be bounded so a halted or otherwise non-progressing CPU cannot hang a test.
+
+Longer runs require an explicit emulated cycle budget and a caller-defined completion condition. Report completion, unsupported behavior, and budget exhaustion distinctly; exhausting a budget is never evidence of success. Host pacing does not determine emulated outcomes.
+
+On failure, expose CPU state and bounded recent execution history. Define the trace fields and stopping semantics alongside the stepping API, keeping diagnostics independent of SDL2.
+
+The broad architecture decisions are agreed. Remaining work for issue #1 is to specify exact timing and event ordering, source the startup profile, and list concrete initial cartridge/bus test cases. Do not mark the issue complete until those details are reviewed.
+
+## Current baseline
+
+- Rust 2024 binary crate; no dependencies.
+- src/main.rs prints Hello, world!.
+- ROM-only cartridge loading is verified locally with 19 passing tests, including a sibling-module public API test proving metadata snapshot independence. Formatting and strict Clippy pass. CPU and hardware-device behavior remain unimplemented and untested. Implementation, tests, and planning files have not yet been committed/published.
+- Public GitHub repository: [Lorithan/gameboy-emu](https://github.com/Lorithan/gameboy-emu), connected as origin.
+- GitHub connector access and local GitHub CLI access are verified. The Windows keyring works outside the sandbox; sandboxed CLI authentication misleadingly reports an invalid token. Use approved execution outside the sandbox for authenticated CLI operations.
+- Initial issues and all seven [GitHub milestones](https://github.com/Lorithan/gameboy-emu/milestones) are published. Issue #1 is assigned to M0; issues #2 and #3 are assigned to M1.
+- No milestone is complete.
+
+## Proposed milestones
+
+| Milestone | Deliverable | Completion evidence |
+| --- | --- | --- |
+| M0 — Project foundation | Scope decisions, component boundaries, timing vocabulary, test strategy, and repository setup | Decisions documented; build/test baseline recorded; GitHub linked; first implementation issues ready |
+| M1 — Cartridge and memory foundation | ROM-only cartridge loading, header interpretation, and initial bus mapping | Valid and invalid input cases covered; memory regions, read-only ROM behavior, and unsupported hardware behavior verified |
+| M2 — CPU execution | Registers, decoding, instruction families, flags, stack/control flow, and cycle accounting | Focused instruction tests cover edge cases; deterministic stepping and traces exist; selected CPU ROM checks run with documented outcomes |
+| M3 — Timers and interrupts | Timer behavior, interrupt requests/service, HALT behavior, and device time advancement | Timing and interrupt tests pass for the declared scope; relevant external ROM tests run without hangs |
+| M4 — Video and controls | DMG display, backgrounds/window/sprites, PPU timing, DMA, and joypad | Known visual fixtures compared; targeted PPU/DMA/input checks recorded; an agreed ROM-only interactive demo works |
+| M5 — Cartridge compatibility | MBC1 banking and applicable battery-backed RAM persistence | Bank boundaries, modes, RAM enable/disable, and save/reload behavior verified; selected MBC1 software works |
+| M6 — Audio and first release | DMG audio channels, host playback/pacing, usability, and compatibility report | Repeatable audio checks and listening review; regression suite recorded; supported software and known limitations documented |
+
+Milestones express dependency order, not deadlines. Split each into small issues before starting it. Revisit the scope at each gate; test results may require returning to an earlier component.
+
+## Testing strategy
+
+1. Use focused unit tests for CPU flags, boundary values, memory behavior, banking, and device state transitions. Expected values should come from hardware specifications or independent fixtures.
+2. Plan deterministic headless execution with a bounded cycle/instruction budget, observable output, and useful failure traces before relying on external test ROMs. A timeout is a failure, never a pass.
+3. Add external ROM checks as their prerequisites become available. Record suite revision, hardware target, exact tests selected, success protocol, budget, outcome, and unsupported prerequisites.
+4. Use framebuffer comparisons and controlled input scripts for video and integration work; add audio evidence when audio is implemented.
+5. Run existing formatting, lint, and test checks during review. A green check alone does not close an issue: its acceptance criteria must also have evidence.
+
+Primary references:
+
+- [Pan Docs](https://gbdev.io/pandocs/) for hardware behavior.
+- [gbdev opcode tables](https://gbdev.io/gb-opcodes/optables/) for instruction lookup, checked against the relevant specification sections.
+- [Mooneye Test Suite](https://github.com/Gekkio/mooneye-test-suite) for hardware-oriented regression tests. Select tests matching the declared DMG target and implemented features; follow the suite's documented result protocol.
+
+## GitHub workflow
+
+- Repository: [Lorithan/gameboy-emu](https://github.com/Lorithan/gameboy-emu), public.
+- Maintain the published GitHub milestones in line with the table.
+- Start with a small actionable backlog rather than opening every future task immediately.
+- Suggested labels: component:cpu, component:bus, component:cartridge, component:timer, component:ppu, component:audio, component:input, testing, documentation, bug.
+- Each implementation issue states the behavior, scope, dependencies, acceptance criteria, validation method, and relevant references. Avoid embedding the implementation solution by default.
+- Prefer one focused branch and pull request per issue. Review behavior and validation evidence before closing it.
+- Track known inaccuracies and failing external tests explicitly. Reopen or create follow-up issues when evidence shows a regression.
+
+## Design work — Define the emulator core contract
+
+GitHub: [#1 — Define the DMG emulator core contract](https://github.com/Lorithan/gameboy-emu/issues/1).
+
+Goal: decide the boundaries that let CPU and hardware components be developed and tested incrementally.
+
+This is a design issue; no emulator implementation is required to finish it.
+
+Acceptance criteria:
+
+- Confirm the initial DMG target and desktop-first scope.
+- Describe responsibilities for the CPU, memory bus, cartridge, devices, and frontend.
+- Choose and define timing units; distinguish CPU machine cycles from clock ticks and explain how devices receive elapsed time.
+- Decide whether the first executable stage skips the boot ROM; document the source of any initial hardware state and keep authentic boot behavior as a separate task if deferred.
+- Describe how a headless run stops, exposes results, and reports unsupported behavior.
+- Identify focused tests for the first cartridge/bus issue.
+
+## Current implementation task
+
+[ #2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2) is complete based on local implementation review and checks. Its input policy and verification evidence are mirrored in [the loader task](tasks/ROM_ONLY_LOADER.md). Commit/publish the verified work before building further changes on it. Next, refine #3's bus mapping and temporary device-region behavior; exact CPU timing and startup details in #1 remain open.
+
+Initial implementation backlog:
+
+- [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete locally; commit/publish pending.
+- [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), after #1 and #2.
+
+Next planned issues: define CPU register state; implement a small first instruction family with independent test expectations. Refine these after the core contract is settled.
