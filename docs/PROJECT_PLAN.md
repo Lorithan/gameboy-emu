@@ -74,13 +74,15 @@ The broad architecture decisions are agreed. Remaining work for issue #1 is to s
 
 ## Current baseline
 
-- Rust 2024 binary crate; no dependencies.
+- Rust 2024 library and binary crate; no dependencies. Core modules are declared by src/lib.rs; public API integration tests live in tests/core_api.rs.
 - src/main.rs prints Hello, world!.
-- ROM-only cartridge loading is published in checkpoint d03788d, verified against GitHub main. The next checkpoint contains the initial bus and simplified inherent access methods: 27 cartridge/API/bus tests pass, including constructor initialization and full address-space routing. Formatting and strict Clippy pass. Publication of this checkpoint is pending. CPU and hardware-device behavior remain unimplemented and untested.
+- ROM-only cartridge loading is in d03788d and the initial bus is in 85c6312. CPU now supports single-cycle NOP and LD A immediate execution, with register/startup/snapshot and trace/error tests. Hardware devices remain unimplemented.
 - Public GitHub repository: [Lorithan/gameboy-emu](https://github.com/Lorithan/gameboy-emu), connected as origin.
 - GitHub connector access and local GitHub CLI access are verified. The Windows keyring works outside the sandbox; sandboxed CLI authentication misleadingly reports an invalid token. Use approved execution outside the sandbox for authenticated CLI operations.
 - Initial issues and all seven [GitHub milestones](https://github.com/Lorithan/gameboy-emu/milestones) are published. Issue #1 is assigned to M0; issues #2 and #3 are assigned to M1.
-- M1 (cartridge and memory foundation) meets its completion criteria on local verification. Issue #1/M0 still requires exact timing and startup details before CPU execution work.
+- M1 is complete. Issue #1/M0 remains open for architecture review and staged device startup; the first execution slice uses the explicit M-cycle approximation documented in task #5.
+- Library extraction and the first CPU/System execution slice are verified: 67 tests (61 unit, six integration) and formatting pass. Strict Clippy is blocked by private unread CpuFault fields, unused future register variants, and pair setters. No warnings have been suppressed to hide these gaps.
+- This checkpoint includes the library, CPU, System, tests, and architecture documentation. Publication is pending; bounded instruction stepping is not yet implemented.
 
 ## Proposed milestones
 
@@ -124,6 +126,8 @@ Primary references:
 
 GitHub: [#1 — Define the DMG emulator core contract](https://github.com/Lorithan/gameboy-emu/issues/1).
 
+Review draft: [Core architecture](CORE_ARCHITECTURE.md). It proposes the library boundary, CPU cycle-request/completion interface, and sourced ordinary-DMG CPU startup profile. Bus-access phase and device event ordering remain unresolved; distinguish these proposals from already agreed ownership and scope.
+
 Goal: decide the boundaries that let CPU and hardware components be developed and tested incrementally.
 
 This is a design issue; no emulator implementation is required to finish it.
@@ -139,11 +143,11 @@ Acceptance criteria:
 
 ## Current implementation task
 
-[#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3) is complete, with evidence in [the initial bus task](tasks/INITIAL_BUS.md). This checkpoint includes the bus implementation, refactor, tests, and documentation. Publish it, then settle exact CPU timing/event ordering and the sourced startup profile in #1 before beginning CPU execution.
+Continue [#5 — Machine-cycle stepping for NOP and LD A immediate](https://github.com/Lorithan/gameboy-emu/issues/5), specified in [the first CPU cycle task](tasks/FIRST_CPU_CYCLES.md). Single-cycle NOP/LD execution, startup, snapshots, traces, and sticky-fault timing are verified with 67 passing tests (61 unit, six integration); formatting passes. Strict Clippy still reports unread fault fields and unused future register variants/pair setters. The remaining task is bounded step_instruction(max_mcycles), using the existing single-cycle path and preserving partial instructions on budget exhaustion. The user implements execution; the assistant owns its tests and architecture review.
 
 Initial implementation backlog:
 
 - [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete and published in d03788d.
-- [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in this checkpoint; publication pending.
+- [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in checkpoint 85c6312.
 
-Next planned issues: define CPU register state; implement a small first instruction family with independent test expectations. Refine these after the core contract is settled.
+The current checkpoint includes core library extraction, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. It does not complete #5 until bounded instruction stepping is implemented and tested. Physical edge accuracy, device startup, HRAM, and additional instructions remain later work.
