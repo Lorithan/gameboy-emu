@@ -26,6 +26,8 @@ pub(super) enum DecodedOpcode {
     Decrement(RegisterValue),
     IncrementHL,
     DecrementHL,
+    AddRegister(RegisterValue),
+    SubRegister(RegisterValue),
     Unknown,
 }
 
@@ -321,6 +323,20 @@ impl From<u8> for DecodedOpcode {
                 source: RegisterValue::A,
                 destination: RegisterValue::A,
             },
+            0x80 => DecodedOpcode::AddRegister(RegisterValue::B),
+            0x81 => DecodedOpcode::AddRegister(RegisterValue::C),
+            0x82 => DecodedOpcode::AddRegister(RegisterValue::D),
+            0x83 => DecodedOpcode::AddRegister(RegisterValue::E),
+            0x84 => DecodedOpcode::AddRegister(RegisterValue::H),
+            0x85 => DecodedOpcode::AddRegister(RegisterValue::L),
+            0x87 => DecodedOpcode::AddRegister(RegisterValue::A),
+            0x90 => DecodedOpcode::SubRegister(RegisterValue::B),
+            0x91 => DecodedOpcode::SubRegister(RegisterValue::C),
+            0x92 => DecodedOpcode::SubRegister(RegisterValue::D),
+            0x93 => DecodedOpcode::SubRegister(RegisterValue::E),
+            0x94 => DecodedOpcode::SubRegister(RegisterValue::H),
+            0x95 => DecodedOpcode::SubRegister(RegisterValue::L),
+            0x97 => DecodedOpcode::SubRegister(RegisterValue::A),
             _ => DecodedOpcode::Unknown,
         }
     }

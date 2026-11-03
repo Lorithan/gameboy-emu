@@ -3,6 +3,7 @@ use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, R
 
 mod byte_transfers;
 mod memory_inc_dec;
+mod register_add_sub;
 mod register_inc_dec;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {

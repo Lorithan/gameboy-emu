@@ -298,6 +298,28 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::AddRegister(register) => {
+                let a = self.register(RegisterValue::A);
+                let b = self.register(register);
+
+                let result = self.add(a, b);
+                self.store_register(RegisterValue::A, result);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::SubRegister(register) => {
+                let a = self.register(RegisterValue::A);
+                let b = self.register(register);
+
+                let result = self.sub(a, b);
+                self.store_register(RegisterValue::A, result);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             DecodedOpcode::Unknown => {
                 let addr = self.registers.pc;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -427,5 +449,31 @@ impl CPU {
         self.registers.set_flag(registers::FlagValue::H, h);
 
         value
+    }
+
+    fn add(&mut self, a: u8, b: u8) -> u8 {
+        let (result, c) = a.overflowing_add(b);
+        let z = result == 0;
+        let h = ((a ^ b ^ result) & 0x10) != 0;
+
+        self.registers.set_flag(registers::FlagValue::C, c);
+        self.registers.set_flag(registers::FlagValue::Z, z);
+        self.registers.set_flag(registers::FlagValue::N, false);
+        self.registers.set_flag(registers::FlagValue::H, h);
+
+        result
+    }
+
+    fn sub(&mut self, a: u8, b: u8) -> u8 {
+        let (result, c) = a.overflowing_sub(b);
+        let z = result == 0;
+        let h = ((a ^ b ^ result) & 0x10) != 0;
+
+        self.registers.set_flag(registers::FlagValue::C, c);
+        self.registers.set_flag(registers::FlagValue::Z, z);
+        self.registers.set_flag(registers::FlagValue::N, true);
+        self.registers.set_flag(registers::FlagValue::H, h);
+
+        result
     }
 }
