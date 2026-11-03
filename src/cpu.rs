@@ -187,6 +187,18 @@ impl CPU {
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
+            DecodedOpcode::LoadRegister {
+                source,
+                destination,
+            } => {
+                let value = self.register(source);
+
+                self.store_register(destination, value);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ExecutionState::FetchOpcode;
+                Ok(true)
+            }
             DecodedOpcode::LoadImmediate { destination } => {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediate8 {
@@ -207,18 +219,10 @@ impl CPU {
                 };
                 Ok(false)
             }
-            DecodedOpcode::StoreToHL { from } => {
+            DecodedOpcode::StoreToHL { source } => {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
-                let value = match from {
-                    RegisterValue::A => self.registers.a,
-                    RegisterValue::B => self.registers.b,
-                    RegisterValue::C => self.registers.c,
-                    RegisterValue::D => self.registers.d,
-                    RegisterValue::E => self.registers.e,
-                    RegisterValue::H => self.registers.h,
-                    RegisterValue::L => self.registers.l,
-                };
+                let value = self.register(source);
 
                 self.state = ExecutionState::WriteMemory {
                     addr: self.registers.hl(),
@@ -294,6 +298,18 @@ impl CPU {
             RegisterValue::E => self.registers.e = value,
             RegisterValue::H => self.registers.h = value,
             RegisterValue::L => self.registers.l = value,
+        }
+    }
+
+    fn register(&self, register: RegisterValue) -> u8 {
+        match register {
+            RegisterValue::A => self.registers.a,
+            RegisterValue::B => self.registers.b,
+            RegisterValue::C => self.registers.c,
+            RegisterValue::D => self.registers.d,
+            RegisterValue::E => self.registers.e,
+            RegisterValue::H => self.registers.h,
+            RegisterValue::L => self.registers.l,
         }
     }
 

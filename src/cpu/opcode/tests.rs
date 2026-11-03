@@ -9,7 +9,7 @@ fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
     assert!(matches!(
         DecodedOpcode::from(0x77),
         DecodedOpcode::StoreToHL {
-            from: RegisterValue::A
+            source: RegisterValue::A
         }
     ));
     assert!(matches!(
@@ -57,6 +57,9 @@ fn word_loads_decode_to_word_destinations() {
 #[test]
 fn every_other_byte_remains_explicitly_unknown() {
     for byte in 0u8..=u8::MAX {
+        if (0x40..=0x7F).contains(&byte) && byte != 0x76 {
+            continue;
+        }
         if [
             0x00, 0x01, 0x06, 0x0E, 0x11, 0x16, 0x1E, 0x21, 0x26, 0x2E, 0x31, 0x36, 0x3E, 0x77,
             0x7E,

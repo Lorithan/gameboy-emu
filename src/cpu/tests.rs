@@ -1,6 +1,8 @@
 use super::registers::{RegisterValue, WordValue};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
+mod byte_transfers;
+
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {
         CpuError::UnsupportedOpcode(fault) => fault,
