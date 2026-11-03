@@ -94,3 +94,15 @@ Current run: 56 unit tests pass and five fail; four public API tests pass and tw
 The user fixed read-value propagation and trace ordering. Full suite: 67 tests pass (61 unit, six integration); formatting passes. Read traces now retain the actual byte even when CPU completion faults, with correct absolute tick spans. Existing sticky faults consume no extra time. Strict Clippy still reports private unread fault fields and unused future register variants/pair setters.
 
 Single-cycle NOP/LD execution and cycle/error traces are locally verified. Bounded step_instruction(max_mcycles) is the remaining behavior in issue #5. Idle/write paths remain structurally reviewed, not exercised end-to-end by the current read-only instruction slice. The model remains the documented M-cycle approximation.
+
+## Bounded stepping completion
+
+The user implemented InstructionStep::{Complete,BudgetExhausted} and step_instruction, with a corrected one-based completed-cycle count. Added six public integration tests covering zero budgets on fresh/partial states, exact and excessive budgets, no fetch beyond completion, load resumption, per-call counts after earlier execution, and completion/request fault behavior including consumed-cycle traces.
+
+All 73 tests pass (61 unit, 12 integration), and formatting passes. Strict Clippy still reports unread fault fields, unused register variants/pair setters, and a needless final return in step_instruction. These lint failures are explicitly retained; no visibility changes or warning suppression were made by the assistant.
+
+Issue #5's supported behavior and acceptance tests are complete locally. The new wrapper/tests need committing and publication. Device-edge accuracy and end-to-end Idle/write instructions remain outside this slice. The assistant changed only tests/documentation; emulator logic is the user's work.
+
+## Bounded stepping checkpoint
+
+The user removed the needless final return. The checkpoint contains bounded instruction stepping, its six integration tests, and completion documentation. The previous 73-test verification applies; formatting and staged whitespace checks are checked before commit. Remaining strict Clippy failures concern existing unread fault fields and unused register scaffolding. Publication is pending.

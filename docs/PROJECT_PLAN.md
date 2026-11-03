@@ -143,11 +143,11 @@ Acceptance criteria:
 
 ## Current implementation task
 
-Continue [#5 — Machine-cycle stepping for NOP and LD A immediate](https://github.com/Lorithan/gameboy-emu/issues/5), specified in [the first CPU cycle task](tasks/FIRST_CPU_CYCLES.md). Single-cycle NOP/LD execution, startup, snapshots, traces, and sticky-fault timing are verified with 67 passing tests (61 unit, six integration); formatting passes. Strict Clippy still reports unread fault fields and unused future register variants/pair setters. The remaining task is bounded step_instruction(max_mcycles), using the existing single-cycle path and preserving partial instructions on budget exhaustion. The user implements execution; the assistant owns its tests and architecture review.
+[#5 — Machine-cycle stepping for NOP and LD A immediate](https://github.com/Lorithan/gameboy-emu/issues/5) is complete, including bounded step_instruction and partial-instruction resumption. All 73 tests pass (61 unit, 12 integration); formatting passes. The needless final return is resolved; strict Clippy still reports unread fault fields and unused future register variants/pair setters. This checkpoint includes the wrapper, tests, and completion evidence; publication is pending. Define the next instruction/device task before expanding scope; the user implements emulator logic and the assistant owns tests/architecture review.
 
 Initial implementation backlog:
 
 - [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete and published in d03788d.
 - [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in checkpoint 85c6312.
 
-The current checkpoint includes core library extraction, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. It does not complete #5 until bounded instruction stepping is implemented and tested. Physical edge accuracy, device startup, HRAM, and additional instructions remain later work.
+Checkpoint d0960a4 contains the core library, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. This checkpoint adds bounded instruction stepping and completes #5. Physical edge accuracy, device startup, HRAM, and additional instructions remain later work.

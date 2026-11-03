@@ -21,6 +21,12 @@ pub struct CycleTrace {
     pub complete: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum InstructionStep {
+    Complete { mcycles: u64, ticks: u64 },
+    BudgetExhausted { mcycles: u64, ticks: u64 },
+}
+
 pub struct System {
     memory: Bus,
     cpu: CPU,
@@ -101,6 +107,26 @@ impl System {
         trace.tick_after = self.elapsed_ticks;
 
         Ok(trace)
+    }
+
+    pub fn step_instruction(&mut self, max_mcycles: u64) -> Result<InstructionStep, SystemError> {
+        let starting_ticks = self.elapsed_ticks;
+
+        for cycle in 0..max_mcycles {
+            let trace = self.step_machine_cycle()?;
+
+            if trace.complete {
+                return Ok(InstructionStep::Complete {
+                    mcycles: cycle + 1,
+                    ticks: self.elapsed_ticks - starting_ticks,
+                });
+            }
+        }
+
+        Ok(InstructionStep::BudgetExhausted {
+            mcycles: max_mcycles,
+            ticks: self.elapsed_ticks - starting_ticks,
+        })
     }
 
     pub fn elapsed_ticks(&self) -> u64 {
