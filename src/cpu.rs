@@ -17,6 +17,12 @@ enum Destination {
     Memory(u16),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Operation {
+    Increment,
+    Decrement,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum ExecutionState {
     FetchOpcode,
@@ -33,6 +39,10 @@ enum ExecutionState {
     ReadMemory {
         addr: u16,
         destination: RegisterValue,
+    },
+    ReadOperation {
+        addr: u16,
+        operation: Operation,
     },
     WriteMemory {
         addr: u16,
@@ -115,6 +125,7 @@ impl CPU {
                 addr: self.registers.pc,
             }),
             ReadMemory { addr, .. } => Ok(CycleAction::Read { addr }),
+            ReadOperation { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
             Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
         }
@@ -163,6 +174,21 @@ impl CPU {
                 self.store_immediate_word(destination, low, read_value)
             }
             ReadMemory { destination, addr } => self.store_fetched(destination, addr, read_value),
+            ReadOperation { addr, operation } => {
+                let mut value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { address: addr });
+                    }
+                };
+                value = match operation {
+                    Operation::Increment => self.increment(value),
+                    Operation::Decrement => self.decrement(value),
+                };
+
+                self.state = WriteMemory { addr, value };
+                Ok(false)
+            }
             WriteMemory { .. } => {
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
@@ -240,15 +266,8 @@ impl CPU {
             }
             DecodedOpcode::Increment(register) => {
                 let mut value = self.register(register);
-                let h = (value & 0x0F) == 0x0F;
-
-                value = value.wrapping_add(1);
+                value = self.increment(value);
                 self.store_register(register, value);
-
-                let z = value == 0;
-                self.registers.set_flag(registers::FlagValue::Z, z);
-                self.registers.set_flag(registers::FlagValue::N, false);
-                self.registers.set_flag(registers::FlagValue::H, h);
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
@@ -256,19 +275,28 @@ impl CPU {
             }
             DecodedOpcode::Decrement(register) => {
                 let mut value = self.register(register);
-                let h = (value & 0x0F) == 0x00;
-
-                value = value.wrapping_sub(1);
+                value = self.decrement(value);
                 self.store_register(register, value);
-
-                let z = value == 0;
-                self.registers.set_flag(registers::FlagValue::Z, z);
-                self.registers.set_flag(registers::FlagValue::N, true);
-                self.registers.set_flag(registers::FlagValue::H, h);
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
+            }
+            DecodedOpcode::IncrementHL => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadOperation {
+                    addr: self.registers.hl(),
+                    operation: Operation::Increment,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::DecrementHL => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadOperation {
+                    addr: self.registers.hl(),
+                    operation: Operation::Decrement,
+                };
+                Ok(false)
             }
             DecodedOpcode::Unknown => {
                 let addr = self.registers.pc;
@@ -373,5 +401,31 @@ impl CPU {
         self.registers.pc = self.registers.pc.wrapping_add(1);
 
         Ok(true)
+    }
+
+    fn increment(&mut self, mut value: u8) -> u8 {
+        let h = (value & 0x0F) == 0x0F;
+
+        value = value.wrapping_add(1);
+
+        let z = value == 0;
+        self.registers.set_flag(registers::FlagValue::Z, z);
+        self.registers.set_flag(registers::FlagValue::N, false);
+        self.registers.set_flag(registers::FlagValue::H, h);
+
+        value
+    }
+
+    fn decrement(&mut self, mut value: u8) -> u8 {
+        let h = (value & 0x0F) == 0x00;
+
+        value = value.wrapping_sub(1);
+
+        let z = value == 0;
+        self.registers.set_flag(registers::FlagValue::Z, z);
+        self.registers.set_flag(registers::FlagValue::N, true);
+        self.registers.set_flag(registers::FlagValue::H, h);
+
+        value
     }
 }

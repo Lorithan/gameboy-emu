@@ -24,6 +24,8 @@ pub(super) enum DecodedOpcode {
     StoreImmediateHL,
     Increment(RegisterValue),
     Decrement(RegisterValue),
+    IncrementHL,
+    DecrementHL,
     Unknown,
 }
 
@@ -73,6 +75,8 @@ impl From<u8> for DecodedOpcode {
             0x31 => DecodedOpcode::LoadImmediateWord {
                 destination: WordValue::SP,
             },
+            0x34 => DecodedOpcode::IncrementHL,
+            0x35 => DecodedOpcode::DecrementHL,
             0x36 => DecodedOpcode::StoreImmediateHL,
             0x3C => DecodedOpcode::Increment(RegisterValue::A),
             0x3D => DecodedOpcode::Decrement(RegisterValue::A),

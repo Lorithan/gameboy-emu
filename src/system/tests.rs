@@ -13,6 +13,115 @@ fn hl_access_machine(address: u16, tail: &[u8]) -> System {
 }
 
 #[test]
+fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
+    use super::InstructionStep;
+    for (opcode, old, value, flags) in [(0x34, 0x0F, 0x10, 0x30u16), (0x35, 0x10, 0x0F, 0x70)] {
+        for prefix in 0u64..=3 {
+            let mut system = hl_access_machine(0xC123, &[opcode, 0xD3]);
+            system.memory.write(0xC123, old);
+            let mut expected = system.cpu_snapshot();
+            match system
+                .step_instruction(prefix)
+                .expect("partial instruction")
+            {
+                InstructionStep::Complete { mcycles, ticks } => {
+                    assert_eq!((prefix, mcycles, ticks), (3, 3, 12))
+                }
+                InstructionStep::BudgetExhausted { mcycles, ticks } => {
+                    assert!(prefix < 3);
+                    assert_eq!((mcycles, ticks), (prefix, prefix * 4));
+                }
+            }
+            if prefix > 0 {
+                expected.pc += 1;
+            }
+            if prefix >= 2 {
+                expected.af = (expected.af & 0xFF00) | flags;
+            }
+            assert_eq!(system.cpu_snapshot(), expected);
+            assert_eq!(
+                system.memory.read(0xC123),
+                if prefix == 3 { value } else { old }
+            );
+            let tick = system.elapsed_ticks();
+            for _ in 0..2 {
+                system.cpu.request_cycle().expect("inspect pending cycle");
+                assert!(matches!(
+                    system.step_instruction(0),
+                    Ok(InstructionStep::BudgetExhausted {
+                        mcycles: 0,
+                        ticks: 0
+                    })
+                ));
+                assert_eq!(system.cpu_snapshot(), expected);
+                assert_eq!(system.elapsed_ticks(), tick);
+                assert_eq!(
+                    system.memory.read(0xC123),
+                    if prefix == 3 { value } else { old }
+                );
+            }
+            if prefix < 3 {
+                if prefix == 0 {
+                    expected.pc += 1;
+                }
+                expected.af = (expected.af & 0xFF00) | flags;
+                assert!(
+                    matches!(system.step_instruction(100), Ok(InstructionStep::Complete { mcycles, ticks }) if mcycles == 3 - prefix && ticks == (3 - prefix) * 4)
+                );
+            }
+            assert_eq!(system.cpu_snapshot(), expected);
+            assert_eq!(system.memory.read(0xC123), value);
+            assert_eq!(system.elapsed_ticks(), 32);
+        }
+    }
+}
+
+#[test]
+fn memory_modifications_obey_bus_boundaries_even_when_writes_are_ignored() {
+    for (opcode, increment) in [(0x34, true), (0x35, false)] {
+        for address in [
+            0u16, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF, 0xFE00,
+            0xFF80, 0xFFFF,
+        ] {
+            let mut system = hl_access_machine(address, &[opcode, 0xD3]);
+            system.memory.write(address, 0x0F);
+            let old = system.memory.read(address);
+            let delta = if increment { 1i16 } else { -1 };
+            let value = (i16::from(old) + delta).rem_euclid(256) as u8;
+            let half = !(0..16).contains(&(i16::from(old % 16) + delta));
+            let flags = 0x10u16
+                | if value == 0 { 0x80 } else { 0 }
+                | if increment { 0 } else { 0x40 }
+                | if half { 0x20 } else { 0 };
+            let mut expected = system.cpu_snapshot();
+            expected.pc += 1;
+            expected.af = (expected.af & 0xFF00) | flags;
+            assert!(matches!(
+                system.step_instruction(100),
+                Ok(super::InstructionStep::Complete {
+                    mcycles: 3,
+                    ticks: 12
+                })
+            ));
+            assert_eq!(system.cpu_snapshot(), expected);
+            assert_eq!(
+                system.memory.read(address),
+                if (0xC000..=0xFDFF).contains(&address) {
+                    value
+                } else {
+                    old
+                }
+            );
+            match address {
+                0xC000..=0xDDFF => assert_eq!(system.memory.read(address + 0x2000), value),
+                0xE000..=0xFDFF => assert_eq!(system.memory.read(address - 0x2000), value),
+                _ => {}
+            }
+        }
+    }
+}
+
+#[test]
 fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches() {
     use super::InstructionStep;
     for (opcode, cycles, bytes) in [(0x77, 2u64, 1u16), (0x36, 3, 2), (0x7E, 2, 1)] {

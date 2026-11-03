@@ -72,7 +72,7 @@ fn inc_dec_opcode_mapping_is_explicit_for_every_register() {
             matches!(DecodedOpcode::from(dec), DecodedOpcode::Decrement(register) if register == target)
         );
     }
-    for unsupported in [0x34, 0x35, 0x76] {
+    for unsupported in [0x03, 0x0B, 0x76] {
         assert!(matches!(
             DecodedOpcode::from(unsupported),
             DecodedOpcode::Unknown
