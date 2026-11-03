@@ -238,6 +238,38 @@ impl CPU {
 
                 Ok(false)
             }
+            DecodedOpcode::Increment(register) => {
+                let mut value = self.register(register);
+                let h = (value & 0x0F) == 0x0F;
+
+                value = value.wrapping_add(1);
+                self.store_register(register, value);
+
+                let z = value == 0;
+                self.registers.set_flag(registers::FlagValue::Z, z);
+                self.registers.set_flag(registers::FlagValue::N, false);
+                self.registers.set_flag(registers::FlagValue::H, h);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::Decrement(register) => {
+                let mut value = self.register(register);
+                let h = (value & 0x0F) == 0x00;
+
+                value = value.wrapping_sub(1);
+                self.store_register(register, value);
+
+                let z = value == 0;
+                self.registers.set_flag(registers::FlagValue::Z, z);
+                self.registers.set_flag(registers::FlagValue::N, true);
+                self.registers.set_flag(registers::FlagValue::H, h);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             DecodedOpcode::Unknown => {
                 let addr = self.registers.pc;
                 self.registers.pc = self.registers.pc.wrapping_add(1);

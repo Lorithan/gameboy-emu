@@ -2,6 +2,7 @@ use super::registers::{RegisterValue, WordValue};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
 mod byte_transfers;
+mod register_inc_dec;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {
