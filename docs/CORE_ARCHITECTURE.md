@@ -108,3 +108,9 @@ Before instruction implementation, settle the internal register mutation interfa
 The user implemented pub(super) access for ordinary registers and PC/SP, retained private flag storage, and added Registers::get_flag/set_flag with FlagValue::{Z,N,H,C}. This satisfies the parent CPU's internal mutation needs without exposing the encoded flag byte. CPU can refer to the selector through its private registers child module; external callers do not currently have a re-export of FlagValue, which is acceptable for the internal instruction interface.
 
 Two new tests exercise all flag combinations through Registers, checking getters and set/clear operations while preserving other flags, the unused-bit invariant, and all other registers. All 45 tests (41 unit, four integration) and formatting pass. Strict Clippy remains blocked only by unused pair setters and System memory. The register mutation boundary is ready; cycle event ordering remains the next architecture decision before instruction execution.
+
+## Decoder extraction review
+
+The user introduced a pure internal DecodedOpcode enum with Nop, LoadImmediate(destination), and Unknown, converted from a raw byte. CPU retains execution-state transitions and error-address context; the decoder does not touch Bus, registers, or time. This separates byte interpretation from cycle execution without a per-opcode type hierarchy.
+
+Two decoder tests verify all eight supported mappings and rejection of every other byte. The complete suite has 81 passing tests (65 unit, 16 integration); formatting passes. Strict Clippy still reports existing unread CpuFault fields and unused pair setters. Keeping the raw byte in a local before decoding would avoid the safe-but-unnecessary later read_value.unwrap in the Unknown branch; no behavior bug was found in this refactor. Application logic was left unchanged by the assistant.

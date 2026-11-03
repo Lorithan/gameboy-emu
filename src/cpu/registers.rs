@@ -58,6 +58,7 @@ impl Flag {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlagValue {
     Z,
     N,
@@ -65,6 +66,7 @@ pub enum FlagValue {
     C,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RegisterValue {
     A,
     B,
@@ -73,6 +75,14 @@ pub(super) enum RegisterValue {
     E,
     H,
     L,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum WordValue {
+    BC,
+    DE,
+    HL,
+    SP,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -145,12 +155,12 @@ impl Registers {
         self.h = ((hl >> 8) & 0xFF) as u8;
     }
 
-    pub fn pc(&self) -> u16 {
-        self.pc
+    pub fn set_pc(&mut self, pc: u16) {
+        self.pc = pc;
     }
 
-    pub fn sp(&self) -> u16 {
-        self.sp
+    pub fn set_sp(&mut self, sp: u16) {
+        self.sp = sp
     }
 
     pub fn get_flag(&self, flag: FlagValue) -> bool {

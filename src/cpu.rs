@@ -1,3 +1,4 @@
+mod opcode;
 mod registers;
 
 #[cfg(test)]
@@ -5,20 +6,45 @@ mod tests;
 
 pub use registers::Registers;
 
-use crate::cpu::{ExecutionState::FetchOpcode, registers::RegisterValue};
+use crate::cpu::{
+    opcode::DecodedOpcode,
+    registers::{RegisterValue, WordValue},
+};
+
+#[derive(Debug, Clone, Copy)]
+enum Destination {
+    Register(RegisterValue),
+    Memory(u16),
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ExecutionState {
     FetchOpcode,
-    FetchImmediateA,
-    Faulted { opcode: u8, addr: u16 },
+    ReadImmediate8 {
+        destination: Destination,
+    },
+    ReadImmediate16Low {
+        destination: WordValue,
+    },
+    ReadImmediate16High {
+        destination: WordValue,
+        low: u8,
+    },
+    ReadMemory {
+        addr: u16,
+        destination: RegisterValue,
+    },
+    WriteMemory {
+        addr: u16,
+        value: u8,
+    },
+    Faulted {
+        opcode: u8,
+        addr: u16,
+    },
 }
 
-#[derive(Debug, Clone)]
-pub struct CPU {
-    registers: Registers,
-    state: ExecutionState,
-}
+use ExecutionState::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CpuSnapShot {
@@ -49,6 +75,12 @@ pub enum CpuError {
     MissingReadValue { address: u16 },
 }
 
+#[derive(Debug, Clone)]
+pub struct CPU {
+    registers: Registers,
+    state: ExecutionState,
+}
+
 impl CPU {
     pub fn from_registers(registers: Registers) -> Self {
         CPU {
@@ -63,38 +95,85 @@ impl CPU {
             bc: self.registers.bc(),
             de: self.registers.de(),
             hl: self.registers.hl(),
-            pc: self.registers.pc(),
-            sp: self.registers.sp(),
+            pc: self.registers.pc,
+            sp: self.registers.sp,
         }
     }
 
     pub fn request_cycle(&self) -> Result<CycleAction, CpuError> {
         match self.state {
-            ExecutionState::FetchOpcode => Ok(CycleAction::Read {
+            FetchOpcode => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
-            ExecutionState::FetchImmediateA => Ok(CycleAction::Read {
+            ReadImmediate8 { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
-            ExecutionState::Faulted { opcode, addr } => {
-                Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr }))
-            }
+            ReadImmediate16Low { .. } => Ok(CycleAction::Read {
+                addr: self.registers.pc,
+            }),
+            ReadImmediate16High { .. } => Ok(CycleAction::Read {
+                addr: self.registers.pc,
+            }),
+            ReadMemory { addr, .. } => Ok(CycleAction::Read { addr }),
+            WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
+            Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
         }
     }
 
     pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
         match self.state {
-            ExecutionState::FetchOpcode => self.read_opcode(read_value),
-            ExecutionState::FetchImmediateA => self.store_immediate(RegisterValue::A, read_value),
-            ExecutionState::Faulted { opcode, addr } => {
-                Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr }))
+            FetchOpcode => self.read_opcode(read_value),
+            ReadImmediate8 {
+                destination: Destination::Register(register),
+            } => self.store_immediate(register, read_value),
+            ReadImmediate8 {
+                destination: Destination::Memory(addr),
+            } => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            address: self.registers.pc,
+                        });
+                    }
+                };
+
+                self.state = ExecutionState::WriteMemory { addr, value };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                Ok(false)
             }
+            ReadImmediate16Low { destination } => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            address: self.registers.pc,
+                        });
+                    }
+                };
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediate16High {
+                    destination,
+                    low: value,
+                };
+                Ok(false)
+            }
+            ReadImmediate16High { destination, low } => {
+                self.store_immediate_word(destination, low, read_value)
+            }
+            ReadMemory { destination, addr } => self.store_fetched(destination, addr, read_value),
+            WriteMemory { .. } => {
+                self.state = ExecutionState::FetchOpcode;
+                Ok(true)
+            }
+            Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
         }
     }
 
     fn read_opcode(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
-        let opcode = match read_value {
-            Some(byte) => byte,
+        let (opcode, byte) = match read_value {
+            Some(byte) => (DecodedOpcode::from(byte), byte),
             None => {
                 return Err(CpuError::MissingReadValue {
                     address: self.registers.pc,
@@ -103,21 +182,63 @@ impl CPU {
         };
 
         match opcode {
-            0x00 => {
+            DecodedOpcode::Nop => {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
-            0x3E => {
+            DecodedOpcode::LoadImmediate { destination } => {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
-                self.state = ExecutionState::FetchImmediateA;
+                self.state = ReadImmediate8 {
+                    destination: Destination::Register(destination),
+                };
                 Ok(false)
             }
-            _ => {
+            DecodedOpcode::LoadImmediateWord { destination } => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediate16Low { destination };
+                Ok(false)
+            }
+            DecodedOpcode::LoadFromHL { destination } => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadMemory {
+                    addr: self.registers.hl(),
+                    destination,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::StoreToHL { from } => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                let value = match from {
+                    RegisterValue::A => self.registers.a,
+                    RegisterValue::B => self.registers.b,
+                    RegisterValue::C => self.registers.c,
+                    RegisterValue::D => self.registers.d,
+                    RegisterValue::E => self.registers.e,
+                    RegisterValue::H => self.registers.h,
+                    RegisterValue::L => self.registers.l,
+                };
+
+                self.state = ExecutionState::WriteMemory {
+                    addr: self.registers.hl(),
+                    value,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::StoreImmediateHL => {
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediate8 {
+                    destination: Destination::Memory(self.registers.hl()),
+                };
+
+                Ok(false)
+            }
+            DecodedOpcode::Unknown => {
                 let addr = self.registers.pc;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
-                self.state = ExecutionState::Faulted { opcode, addr };
-                Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr }))
+                self.state = ExecutionState::Faulted { opcode: byte, addr };
+                Err(CpuError::UnsupportedOpcode(CpuFault { opcode: byte, addr }))
             }
         }
     }
@@ -136,7 +257,36 @@ impl CPU {
             }
         };
 
-        match register {
+        self.store_register(register, value);
+
+        self.state = ExecutionState::FetchOpcode;
+        self.registers.pc = self.registers.pc.wrapping_add(1);
+
+        Ok(true)
+    }
+
+    fn store_fetched(
+        &mut self,
+        destination: RegisterValue,
+        addr: u16,
+        read_value: Option<u8>,
+    ) -> Result<bool, CpuError> {
+        let value = match read_value {
+            Some(byte) => byte,
+            None => {
+                return Err(CpuError::MissingReadValue { address: addr });
+            }
+        };
+
+        self.store_register(destination, value);
+
+        self.state = ExecutionState::FetchOpcode;
+
+        Ok(true)
+    }
+
+    fn store_register(&mut self, destination: RegisterValue, value: u8) {
+        match destination {
             RegisterValue::A => self.registers.a = value,
             RegisterValue::B => self.registers.b = value,
             RegisterValue::C => self.registers.c = value,
@@ -145,8 +295,33 @@ impl CPU {
             RegisterValue::H => self.registers.h = value,
             RegisterValue::L => self.registers.l = value,
         }
+    }
 
-        self.state = FetchOpcode;
+    fn store_immediate_word(
+        &mut self,
+        destination: WordValue,
+        low: u8,
+        read_value: Option<u8>,
+    ) -> Result<bool, CpuError> {
+        let high_value = match read_value {
+            Some(byte) => byte,
+            None => {
+                return Err(CpuError::MissingReadValue {
+                    address: self.registers.pc,
+                });
+            }
+        };
+
+        let value = (high_value as u16) << 8 | low as u16;
+
+        match destination {
+            WordValue::BC => self.registers.set_bc(value),
+            WordValue::DE => self.registers.set_de(value),
+            WordValue::HL => self.registers.set_hl(value),
+            WordValue::SP => self.registers.set_sp(value),
+        }
+
+        self.state = ExecutionState::FetchOpcode;
         self.registers.pc = self.registers.pc.wrapping_add(1);
 
         Ok(true)

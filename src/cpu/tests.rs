@@ -1,4 +1,5 @@
-use super::{CPU, CpuError, CpuFault, CycleAction, ExecutionState, Registers};
+use super::registers::{RegisterValue, WordValue};
+use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {
@@ -149,7 +150,9 @@ fn immediate_completion_wraps_pc() {
     let mut registers = Registers::dmg_post_boot(0);
     registers.pc = 0xFFFF;
     let mut cpu = CPU::from_registers(registers);
-    cpu.state = ExecutionState::FetchImmediateA;
+    cpu.state = ExecutionState::ReadImmediate8 {
+        destination: Destination::Register(RegisterValue::A),
+    };
     assert!(
         cpu.complete_cycle(Some(0x42))
             .expect("immediate at final address")
@@ -160,7 +163,12 @@ fn immediate_completion_wraps_pc() {
 
 #[test]
 fn missing_read_value_returns_an_error_without_mutating_cpu() {
-    for state in [ExecutionState::FetchOpcode, ExecutionState::FetchImmediateA] {
+    for state in [
+        ExecutionState::FetchOpcode,
+        ExecutionState::ReadImmediate8 {
+            destination: Destination::Register(RegisterValue::A),
+        },
+    ] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0));
         cpu.state = state;
         let original = cpu.snapshot();
@@ -173,6 +181,45 @@ fn missing_read_value_returns_an_error_without_mutating_cpu() {
             std::mem::discriminant(&cpu.state),
             std::mem::discriminant(&state)
         );
+    }
+}
+
+#[test]
+fn all_immediate_register_loads_preserve_every_valid_flag_combination() {
+    for opcode in [0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E] {
+        for combination in 0u16..16 {
+            let flags = combination << 4;
+            let mut registers = Registers::dmg_post_boot(0);
+            registers.set_af(0x0100 | flags);
+            let mut cpu = CPU::from_registers(registers);
+            assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
+            assert_eq!(cpu.snapshot().af & 0xFF, flags);
+            assert!(cpu.complete_cycle(Some(0x80)).expect("operand"));
+            assert_eq!(cpu.snapshot().af & 0xFF, flags, "opcode {opcode:#04X}");
+        }
+    }
+}
+
+#[test]
+fn all_immediate_register_loads_wrap_pc_and_retain_destination_after_missing_data() {
+    for opcode in [0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E] {
+        let mut registers = Registers::dmg_post_boot(0);
+        registers.pc = 0xFFFF;
+        let mut cpu = CPU::from_registers(registers);
+        assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode at FFFF"));
+        assert_eq!(cpu.snapshot().pc, 0);
+        let pending = cpu.snapshot();
+        assert!(matches!(
+            cpu.complete_cycle(None),
+            Err(CpuError::MissingReadValue { address: 0 })
+        ));
+        assert_eq!(cpu.snapshot(), pending);
+        assert!(matches!(
+            cpu.request_cycle(),
+            Ok(CycleAction::Read { addr: 0 })
+        ));
+        assert!(cpu.complete_cycle(Some(0x42)).expect("retry operand"));
+        assert_eq!(cpu.snapshot().pc, 1);
     }
 }
 
@@ -205,4 +252,276 @@ fn unsupported_fetch_wraps_pc_and_retains_the_original_fault_address() {
     );
     assert_eq!((fault.opcode, fault.addr), (0xD3, 0xFFFF));
     assert_eq!(cpu.snapshot().pc, 0);
+}
+
+// Isolate operand handling from decoding so a decoder omission cannot hide
+// bugs in the new execution states. Public tests exercise the complete path.
+#[test]
+fn word_operand_states_load_every_value_without_partial_register_updates() {
+    for destination in [WordValue::BC, WordValue::DE, WordValue::HL, WordValue::SP] {
+        for value in 0u16..=u16::MAX {
+            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+            cpu.state = ExecutionState::ReadImmediate16Low { destination };
+            let mut expected = cpu.snapshot();
+            assert!(!cpu.complete_cycle(Some(value as u8)).expect("low byte"));
+            expected.pc += 1;
+            assert_eq!(cpu.snapshot(), expected);
+            assert!(
+                cpu.complete_cycle(Some((value >> 8) as u8))
+                    .expect("high byte")
+            );
+            expected.pc += 1;
+            match destination {
+                WordValue::BC => expected.bc = value,
+                WordValue::DE => expected.de = value,
+                WordValue::HL => expected.hl = value,
+                WordValue::SP => expected.sp = value,
+            }
+            assert_eq!(cpu.snapshot(), expected);
+            assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+        }
+    }
+}
+
+#[test]
+fn word_operand_states_preserve_pending_data_on_missing_reads_and_wrap_pc() {
+    for destination in [WordValue::BC, WordValue::DE, WordValue::HL, WordValue::SP] {
+        for start in [0xFFFEu16, 0xFFFF] {
+            for flags in 0u16..16 {
+                let mut registers = Registers::dmg_post_boot(1);
+                registers.pc = start;
+                registers.set_af(0x0100 | flags << 4);
+                let mut cpu = CPU::from_registers(registers);
+                cpu.state = ExecutionState::ReadImmediate16Low { destination };
+                for byte in [0x34, 0x12] {
+                    let pending = cpu.snapshot();
+                    assert!(
+                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == pending.pc)
+                    );
+                    assert_eq!(cpu.snapshot(), pending);
+                    assert!(
+                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pending.pc)
+                    );
+                    cpu.complete_cycle(Some(byte)).expect("retry operand");
+                }
+                let final_state = cpu.snapshot();
+                let mut expected = CPU::from_registers(registers).snapshot();
+                expected.pc = start.wrapping_add(2);
+                match destination {
+                    WordValue::BC => expected.bc = 0x1234,
+                    WordValue::DE => expected.de = 0x1234,
+                    WordValue::HL => expected.hl = 0x1234,
+                    WordValue::SP => expected.sp = 0x1234,
+                }
+                assert_eq!(final_state, expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn word_loads_wrap_at_each_fetch_stage_and_retry_without_losing_data() {
+    for opcode in [0x01, 0x11, 0x21, 0x31] {
+        for start in [0xFFFDu16, 0xFFFE, 0xFFFF] {
+            let mut registers = Registers::dmg_post_boot(1);
+            registers.pc = start;
+            let mut cpu = CPU::from_registers(registers);
+            let mut expected = cpu.snapshot();
+            for (index, byte) in [opcode, 0x34, 0x12].into_iter().enumerate() {
+                let pending = cpu.snapshot();
+                assert!(
+                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == pending.pc)
+                );
+                assert_eq!(cpu.snapshot(), pending);
+                assert!(
+                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pending.pc)
+                );
+                assert_eq!(
+                    cpu.complete_cycle(Some(byte)).expect("retry fetch"),
+                    index == 2
+                );
+                expected.pc = expected.pc.wrapping_add(1);
+                if index == 2 {
+                    match opcode {
+                        0x01 => expected.bc = 0x1234,
+                        0x11 => expected.de = 0x1234,
+                        0x21 => expected.hl = 0x1234,
+                        0x31 => expected.sp = 0x1234,
+                        _ => unreachable!(),
+                    }
+                }
+                assert_eq!(cpu.snapshot(), expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn missing_data_memory_read_reports_the_requested_address_and_can_be_retried() {
+    let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+    assert!(!cpu.complete_cycle(Some(0x7E)).expect("LD A,(HL) opcode"));
+    let pending = cpu.snapshot();
+    assert!(matches!(
+        cpu.request_cycle(),
+        Ok(CycleAction::Read { addr: 0x014D })
+    ));
+    assert!(matches!(
+        cpu.complete_cycle(None),
+        Err(CpuError::MissingReadValue { address: 0x014D })
+    ));
+    assert_eq!(cpu.snapshot(), pending);
+    assert!(cpu.complete_cycle(Some(0x42)).expect("retry data read"));
+    let mut expected = pending;
+    expected.af = 0x4200 | (pending.af & 0xFF);
+    assert_eq!(cpu.snapshot(), expected);
+}
+
+#[test]
+fn missing_immediate_store_operand_reports_pc_and_preserves_pending_state() {
+    // Isolate operand handling; public tests cover the opcode transition.
+    let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+    cpu.state = ExecutionState::ReadImmediate8 {
+        destination: Destination::Memory(0x014D),
+    };
+    let pending = cpu.snapshot();
+    assert!(matches!(
+        cpu.request_cycle(),
+        Ok(CycleAction::Read { addr: 0x0100 })
+    ));
+    assert!(matches!(
+        cpu.complete_cycle(None),
+        Err(CpuError::MissingReadValue { address: 0x0100 })
+    ));
+    assert_eq!(cpu.snapshot(), pending);
+    assert!(!cpu.complete_cycle(Some(0x42)).expect("retry immediate"));
+    assert!(matches!(
+        cpu.request_cycle(),
+        Ok(CycleAction::Write {
+            addr: 0x014D,
+            value: 0x42
+        })
+    ));
+    assert!(cpu.complete_cycle(None).expect("write completion"));
+    let mut expected = pending;
+    expected.pc += 1;
+    assert_eq!(cpu.snapshot(), expected);
+    assert!(matches!(
+        cpu.request_cycle(),
+        Ok(CycleAction::Read { addr: 0x0101 })
+    ));
+}
+
+#[test]
+fn pending_memory_read_uses_its_captured_address_for_requests_and_errors() {
+    let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+    // Exercise the resolved-address state independently of HL, as required
+    // for future non-HL addressing. No current instruction changes HL here.
+    cpu.state = ExecutionState::ReadMemory {
+        addr: 0xC123,
+        destination: RegisterValue::A,
+    };
+    let pending = cpu.snapshot();
+    for _ in 0..2 {
+        assert!(matches!(
+            cpu.request_cycle(),
+            Ok(CycleAction::Read { addr: 0xC123 })
+        ));
+        assert!(matches!(
+            cpu.complete_cycle(None),
+            Err(CpuError::MissingReadValue { address: 0xC123 })
+        ));
+        assert_eq!(cpu.snapshot(), pending);
+    }
+    assert!(cpu.complete_cycle(Some(0x42)).expect("retry captured read"));
+    let mut expected = pending;
+    expected.af = 0x4200 | (pending.af & 0xFF);
+    assert_eq!(cpu.snapshot(), expected);
+}
+
+#[test]
+fn hl_loads_preserve_flags_and_unrelated_registers_across_wraps_and_read_retries() {
+    for opcode in [0x36, 0x77, 0x7E] {
+        for start in [0xFFFEu16, 0xFFFF] {
+            for flags in 0u16..16 {
+                let mut registers = Registers::dmg_post_boot(1);
+                registers.pc = start;
+                registers.set_hl(0xC123);
+                registers.set_af(0x9900 | flags << 4);
+                let mut cpu = CPU::from_registers(registers);
+                let mut expected = cpu.snapshot();
+                assert!(
+                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == start)
+                );
+                assert_eq!(cpu.snapshot(), expected);
+                assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
+                expected.pc = expected.pc.wrapping_add(1);
+                assert_eq!(cpu.snapshot(), expected);
+                if opcode == 0x36 || opcode == 0x7E {
+                    let read_address = if opcode == 0x36 { expected.pc } else { 0xC123 };
+                    for _ in 0..2 {
+                        assert!(
+                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == read_address)
+                        );
+                        assert!(
+                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == read_address)
+                        );
+                        assert_eq!(cpu.snapshot(), expected);
+                    }
+                    assert_eq!(
+                        cpu.complete_cycle(Some(0x42)).expect("read"),
+                        opcode == 0x7E
+                    );
+                    if opcode == 0x36 {
+                        expected.pc = expected.pc.wrapping_add(1);
+                    } else {
+                        expected.af = 0x4200 | flags << 4;
+                    }
+                }
+                if opcode != 0x7E {
+                    let expected_value = if opcode == 0x77 { 0x99 } else { 0x42 };
+                    assert!(
+                        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if value == expected_value)
+                    );
+                    assert!(cpu.complete_cycle(None).expect("write"));
+                }
+                assert_eq!(cpu.snapshot(), expected);
+                assert!(
+                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn pending_writes_capture_address_and_value_and_preserve_pc_on_completion() {
+    for opcode in [0x77, 0x36] {
+        let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+        cpu.registers.set_hl(0xC123);
+        cpu.registers.a = 0x42;
+        assert!(!cpu.complete_cycle(Some(opcode)).expect("store opcode"));
+        // Deliberately change registers to check that resolved address/data
+        // belong to the pending state, rather than being re-read on request.
+        cpu.registers.set_hl(0xD456);
+        cpu.registers.a = 0x99;
+        if opcode == 0x36 {
+            assert!(!cpu.complete_cycle(Some(0x42)).expect("immediate byte"));
+        }
+        let pending = cpu.snapshot();
+        for _ in 0..2 {
+            assert!(matches!(
+                cpu.request_cycle(),
+                Ok(CycleAction::Write {
+                    addr: 0xC123,
+                    value: 0x42
+                })
+            ));
+            assert_eq!(cpu.snapshot(), pending);
+        }
+        assert!(cpu.complete_cycle(None).expect("write completion"));
+        assert_eq!(cpu.snapshot(), pending);
+        assert!(
+            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pending.pc)
+        );
+    }
 }

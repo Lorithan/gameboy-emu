@@ -143,11 +143,17 @@ Acceptance criteria:
 
 ## Current implementation task
 
-[#5 — Machine-cycle stepping for NOP and LD A immediate](https://github.com/Lorithan/gameboy-emu/issues/5) is complete, including bounded step_instruction and partial-instruction resumption. All 73 tests pass (61 unit, 12 integration); formatting passes. The needless final return is resolved; strict Clippy still reports unread fault fields and unused future register variants/pair setters. This checkpoint includes the wrapper, tests, and completion evidence; publication is pending. Define the next instruction/device task before expanding scope; the user implements emulator logic and the assistant owns tests/architecture review.
+[#6 — Byte-register immediate loads](https://github.com/Lorithan/gameboy-emu/issues/6), the pure decoder extraction, and [#7 — Immediate 16-bit loads](https://github.com/Lorithan/gameboy-emu/issues/7) are locally complete. The current suite passes 90 tests (69 unit, 21 integration); formatting passes. Remaining strict Clippy failures concern unread fault fields and unused `set_af`. Changes remain uncommitted; commit this checkpoint before the next implementation task.
+
+[#8 — Initial memory loads and stores through HL](https://github.com/Lorithan/gameboy-emu/issues/8) is locally complete: `LD (HL),A`, `LD A,(HL)`, and `LD (HL),d8`. See [the task document](tasks/HL_MEMORY_LOADS.md) for acceptance evidence. Current checkpoint: 102 tests pass (77 unit, 25 integration), formatting passes; strict Clippy still reports unread CpuFault fields and unused set_af. Next action: commit the accumulated immediate-load, decoder, and memory-load changes before selecting the next instruction family.
+
+Execution-state refactor for #8 is complete: named pending cycles, a shared immediate-byte destination selector, captured memory addresses/data, and one write state. ReadMemory's destination is RegisterValue, and missing data reports the captured address. Shared register assignment has no cycle side effects. Full #8 coverage now includes all-byte round-trips, traces, budgets with no early writes, bus boundaries, flags, and wrap/retry behavior. The assistant changed tests/documentation only; application implementation remains user-owned.
+
+Final #7 review: decoder mappings recognize all four word loads. Separate `RegisterValue` and `WordValue` types remove invalid destination combinations and the production `unreachable!()` branches. Acceptance coverage includes exhaustive operand values, flags, missing-data retries, all PC wrap stages, public traces, budget resumes, and mixed byte/word/NOP execution. Issue #7 is closed with local validation evidence.
 
 Initial implementation backlog:
 
 - [#2 — Load and validate a ROM-only cartridge](https://github.com/Lorithan/gameboy-emu/issues/2), complete and published in d03788d.
 - [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in checkpoint 85c6312.
 
-Checkpoint d0960a4 contains the core library, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. This checkpoint adds bounded instruction stepping and completes #5. Physical edge accuracy, device startup, HRAM, and additional instructions remain later work.
+Checkpoint d0960a4 contains the core library, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. Checkpoint 3a388e9 adds bounded instruction stepping and completes #5; GitHub main is verified to match it. The baseline is 73 passing tests with formatting passing. Remaining strict Clippy failures concern unread fault fields and unused register scaffolding. Physical edge accuracy, device startup, HRAM, and other instruction families remain later work.

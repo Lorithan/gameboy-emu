@@ -1,0 +1,73 @@
+use super::{DecodedOpcode, RegisterValue, WordValue};
+
+#[test]
+fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
+    assert!(matches!(
+        DecodedOpcode::from(0x36),
+        DecodedOpcode::StoreImmediateHL
+    ));
+    assert!(matches!(
+        DecodedOpcode::from(0x77),
+        DecodedOpcode::StoreToHL {
+            from: RegisterValue::A
+        }
+    ));
+    assert!(matches!(
+        DecodedOpcode::from(0x7E),
+        DecodedOpcode::LoadFromHL {
+            destination: RegisterValue::A
+        }
+    ));
+}
+
+#[test]
+fn known_opcode_bytes_decode_to_the_expected_operation_and_destination() {
+    assert!(matches!(DecodedOpcode::from(0), DecodedOpcode::Nop));
+    for (byte, expected) in [
+        (0x06, RegisterValue::B),
+        (0x0E, RegisterValue::C),
+        (0x16, RegisterValue::D),
+        (0x1E, RegisterValue::E),
+        (0x26, RegisterValue::H),
+        (0x2E, RegisterValue::L),
+        (0x3E, RegisterValue::A),
+    ] {
+        match DecodedOpcode::from(byte) {
+            DecodedOpcode::LoadImmediate { destination } => assert_eq!(destination, expected),
+            _ => panic!("opcode {byte:#04X} did not decode as an immediate register load"),
+        }
+    }
+}
+
+#[test]
+fn word_loads_decode_to_word_destinations() {
+    for (byte, expected) in [
+        (0x01, WordValue::BC),
+        (0x11, WordValue::DE),
+        (0x21, WordValue::HL),
+        (0x31, WordValue::SP),
+    ] {
+        match DecodedOpcode::from(byte) {
+            DecodedOpcode::LoadImmediateWord { destination } => assert_eq!(destination, expected),
+            _ => panic!("opcode {byte:#04X} did not decode as a word load"),
+        }
+    }
+}
+
+#[test]
+fn every_other_byte_remains_explicitly_unknown() {
+    for byte in 0u8..=u8::MAX {
+        if [
+            0x00, 0x01, 0x06, 0x0E, 0x11, 0x16, 0x1E, 0x21, 0x26, 0x2E, 0x31, 0x36, 0x3E, 0x77,
+            0x7E,
+        ]
+        .contains(&byte)
+        {
+            continue;
+        }
+        assert!(
+            matches!(DecodedOpcode::from(byte), DecodedOpcode::Unknown),
+            "unexpectedly accepted opcode {byte:#04X}"
+        );
+    }
+}

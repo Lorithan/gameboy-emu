@@ -1,6 +1,120 @@
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 
+fn hl_access_machine(address: u16, tail: &[u8]) -> System {
+    let mut rom = vec![0; 32_768];
+    rom[0x014D] = 0xE7;
+    rom[0x0100..0x0105].copy_from_slice(&[0x21, address as u8, (address >> 8) as u8, 0x3E, 0x42]);
+    rom[0x0105..0x0105 + tail.len()].copy_from_slice(tail);
+    let mut system = System::new(Cartridge::from_bytes(&rom).expect("synthetic ROM"));
+    system.step_instruction(3).expect("set HL");
+    system.step_instruction(2).expect("set A");
+    system
+}
+
+#[test]
+fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches() {
+    use super::InstructionStep;
+    for (opcode, cycles, bytes) in [(0x77, 2u64, 1u16), (0x36, 3, 2), (0x7E, 2, 1)] {
+        let tail: &[u8] = if opcode == 0x36 {
+            &[0x36, 0x42, 0xD3]
+        } else {
+            &[opcode, 0xD3]
+        };
+        for prefix in 0..=cycles {
+            let mut system = hl_access_machine(0xC123, tail);
+            if opcode == 0x7E {
+                system.memory.write(0xC123, 0x5A);
+            }
+            let mut expected = system.cpu_snapshot();
+            let result = system.step_instruction(prefix).expect("bounded access");
+            match result {
+                InstructionStep::Complete { mcycles, ticks } => {
+                    assert_eq!(prefix, cycles);
+                    assert_eq!((mcycles, ticks), (cycles, cycles * 4));
+                }
+                InstructionStep::BudgetExhausted { mcycles, ticks } => {
+                    assert!(prefix < cycles);
+                    assert_eq!((mcycles, ticks), (prefix, prefix * 4));
+                }
+            }
+            let paused = system.cpu_snapshot();
+            let paused_ticks = system.elapsed_ticks();
+            let paused_memory = system.memory.read(0xC123);
+            assert_eq!(paused_ticks, 20 + prefix * 4);
+            if prefix < cycles && opcode != 0x7E {
+                assert_eq!(paused_memory, 0, "write must wait for its own cycle");
+            }
+            for _ in 0..2 {
+                system.cpu.request_cycle().expect("inspect pending action");
+                assert!(matches!(
+                    system.step_instruction(0),
+                    Ok(InstructionStep::BudgetExhausted {
+                        mcycles: 0,
+                        ticks: 0
+                    })
+                ));
+                assert_eq!(system.cpu_snapshot(), paused);
+                assert_eq!(system.elapsed_ticks(), paused_ticks);
+                assert_eq!(system.memory.read(0xC123), paused_memory);
+            }
+            if prefix < cycles {
+                assert!(
+                    matches!(system.step_instruction(100), Ok(InstructionStep::Complete { mcycles, ticks }) if mcycles == cycles - prefix && ticks == (cycles - prefix) * 4)
+                );
+            }
+            expected.pc += bytes;
+            if opcode == 0x7E {
+                expected.af = 0x5A00 | (expected.af & 0xFF);
+            }
+            assert_eq!(system.cpu_snapshot(), expected);
+            assert_eq!(system.elapsed_ticks(), 20 + cycles * 4);
+            assert_eq!(
+                system.memory.read(0xC123),
+                if opcode == 0x7E { 0x5A } else { 0x42 }
+            );
+            assert!(
+                matches!(system.cpu.request_cycle(), Ok(crate::cpu::CycleAction::Read { addr }) if addr == expected.pc)
+            );
+        }
+    }
+}
+
+#[test]
+fn cpu_memory_accesses_respect_wram_echo_rom_and_unimplemented_boundaries() {
+    for opcode in [0x77, 0x36] {
+        for address in [
+            0x0000u16, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF,
+            0xFE00, 0xFF80, 0xFFFF,
+        ] {
+            let tail: &[u8] = if opcode == 0x36 {
+                &[0x36, 0x42, 0x7E, 0xD3]
+            } else {
+                &[0x77, 0x7E, 0xD3]
+            };
+            let mut system = hl_access_machine(address, tail);
+            let original = system.memory.read(address);
+            system.step_instruction(3).expect("store");
+            let expected = match address {
+                0x0000..=0x7FFF => original,
+                0xC000..=0xFDFF => 0x42,
+                _ => 0xFF,
+            };
+            assert_eq!(system.memory.read(address), expected);
+            match address {
+                0xC000..=0xDDFF => assert_eq!(system.memory.read(address + 0x2000), 0x42),
+                0xE000..=0xFDFF => assert_eq!(system.memory.read(address - 0x2000), 0x42),
+                _ => {}
+            }
+            let mut expected_snapshot = system.cpu_snapshot();
+            expected_snapshot.pc += 1;
+            expected_snapshot.af = u16::from(expected) << 8 | (expected_snapshot.af & 0xFF);
+            system.step_instruction(2).expect("read back through CPU");
+            assert_eq!(system.cpu_snapshot(), expected_snapshot);
+        }
+    }
+}
+
 fn assert_post_boot_registers(system: &System, expected_af: u16) {
     assert_eq!(
         system.cpu_snapshot(),
