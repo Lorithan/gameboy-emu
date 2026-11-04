@@ -143,7 +143,7 @@ Acceptance criteria:
 
 ## Current implementation task
 
-Current stack checkpoint: all PUSH/POP BC/DE/HL/AF mappings and cycle paths under [#20](https://github.com/Lorithan/gameboy-emu/issues/20) are complete locally, pending commit. All 192 tests pass (135 unit, 57 integration); formatting and Clippy pass without warnings. Source/destination selection, captured payloads, wrapping/retry/budgets, nested LIFO stacks, AF masking and full-memory preservation checks pass. See [STACK_PUSH_POP.md](tasks/STACK_PUSH_POP.md) for evidence. No correctness findings remain. Next specify subroutine calls/returns as a separate small issue before implementation.
+Current stack checkpoint: all PUSH/POP BC/DE/HL/AF mappings and cycle paths under [#20](https://github.com/Lorithan/gameboy-emu/issues/20) are complete and committed locally as 9f6e47e (not yet pushed). All 192 tests pass (135 unit, 57 integration); formatting and Clippy pass without warnings. Source/destination selection, captured payloads, wrapping/retry/budgets, nested LIFO stacks, AF masking and full-memory preservation checks pass. See [STACK_PUSH_POP.md](tasks/STACK_PUSH_POP.md) for evidence. No correctness findings remain. Next: [#21 — Unconditional CALL/RET](https://github.com/Lorithan/gameboy-emu/issues/21), specified in [CALL_RET.md](tasks/CALL_RET.md). Begin with CD CALL a16, then C9 RET. Extend captured stack continuations to avoid an extra CALL jump cycle; conditional forms, RST and RETI follow separately.
 
 [#6 — Byte-register immediate loads](https://github.com/Lorithan/gameboy-emu/issues/6), the pure decoder extraction, and [#7 — Immediate 16-bit loads](https://github.com/Lorithan/gameboy-emu/issues/7) are complete and published in commit b14d33f.
 
