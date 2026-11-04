@@ -1,4 +1,4 @@
-use super::{Flag, FlagValue, Registers};
+use super::{Flag, Flags, Registers};
 use crate::cpu::CPU;
 
 fn explicit_registers() -> Registers {
@@ -8,7 +8,7 @@ fn explicit_registers() -> Registers {
         c: 0x34,
         d: 0x56,
         e: 0x78,
-        f: Flag::new(0xA0),
+        f: Flags::new(0xA0),
         h: 0x9A,
         l: 0xBC,
         pc: 0x2345,
@@ -77,23 +77,23 @@ fn af_writes_discard_the_unused_flag_bits() {
 fn flag_getters_decode_all_valid_combinations() {
     for combination in 0u8..16 {
         let raw = combination << 4;
-        let flags = Flag::new(raw);
-        assert_eq!(flags.z(), raw & 0x80 != 0);
-        assert_eq!(flags.n(), raw & 0x40 != 0);
-        assert_eq!(flags.h(), raw & 0x20 != 0);
-        assert_eq!(flags.c(), raw & 0x10 != 0);
+        let flags = Flags::new(raw);
+        assert_eq!(flags.get(Flag::Z), raw & 0x80 != 0);
+        assert_eq!(flags.get(Flag::N), raw & 0x40 != 0);
+        assert_eq!(flags.get(Flag::H), raw & 0x20 != 0);
+        assert_eq!(flags.get(Flag::C), raw & 0x10 != 0);
     }
 }
 
 #[test]
 fn flag_setters_preserve_other_flags_for_all_valid_combinations() {
-    let setters: [fn(&mut Flag, bool); 4] = [Flag::set_z, Flag::set_n, Flag::set_h, Flag::set_c];
+    let selectors = [Flag::Z, Flag::N, Flag::H, Flag::C];
     for combination in 0u8..16 {
         let raw = combination << 4;
-        for (setter, mask) in setters.into_iter().zip([0x80, 0x40, 0x20, 0x10]) {
+        for (selector, mask) in selectors.into_iter().zip([0x80, 0x40, 0x20, 0x10]) {
             for enabled in [false, true] {
-                let mut flags = Flag::new(raw);
-                setter(&mut flags, enabled);
+                let mut flags = Flags::new(raw);
+                flags.set(selector, enabled);
                 let expected = if enabled { raw | mask } else { raw & !mask };
                 assert_eq!(flags.0, expected);
                 assert_eq!(flags.0 & 0x0F, 0);
@@ -105,12 +105,12 @@ fn flag_setters_preserve_other_flags_for_all_valid_combinations() {
 #[test]
 fn flag_constructor_masks_unused_bits_for_every_byte() {
     for raw in 0u8..=u8::MAX {
-        let flags = Flag::new(raw);
+        let flags = Flags::new(raw);
         assert_eq!(flags.0, raw & 0xF0, "input {raw:#04X}");
-        assert_eq!(flags.z(), raw & 0x80 != 0);
-        assert_eq!(flags.n(), raw & 0x40 != 0);
-        assert_eq!(flags.h(), raw & 0x20 != 0);
-        assert_eq!(flags.c(), raw & 0x10 != 0);
+        assert_eq!(flags.get(Flag::Z), raw & 0x80 != 0);
+        assert_eq!(flags.get(Flag::N), raw & 0x40 != 0);
+        assert_eq!(flags.get(Flag::H), raw & 0x20 != 0);
+        assert_eq!(flags.get(Flag::C), raw & 0x10 != 0);
     }
 }
 
@@ -162,21 +162,16 @@ fn register_flag_getters_decode_all_valid_combinations() {
         let raw = combination << 4;
         let mut registers = explicit_registers();
         registers.set_af(0x4200 | u16::from(raw));
-        assert_eq!(registers.get_flag(FlagValue::Z), raw & 0x80 != 0);
-        assert_eq!(registers.get_flag(FlagValue::N), raw & 0x40 != 0);
-        assert_eq!(registers.get_flag(FlagValue::H), raw & 0x20 != 0);
-        assert_eq!(registers.get_flag(FlagValue::C), raw & 0x10 != 0);
+        assert_eq!(registers.get_flag(Flag::Z), raw & 0x80 != 0);
+        assert_eq!(registers.get_flag(Flag::N), raw & 0x40 != 0);
+        assert_eq!(registers.get_flag(Flag::H), raw & 0x20 != 0);
+        assert_eq!(registers.get_flag(Flag::C), raw & 0x10 != 0);
     }
 }
 
 #[test]
 fn register_flag_setters_preserve_other_flags_and_registers() {
-    let selectors: [fn() -> FlagValue; 4] = [
-        || FlagValue::Z,
-        || FlagValue::N,
-        || FlagValue::H,
-        || FlagValue::C,
-    ];
+    let selectors: [fn() -> Flag; 4] = [|| Flag::Z, || Flag::N, || Flag::H, || Flag::C];
     for combination in 0u8..16 {
         let raw = combination << 4;
         for (selector, mask) in selectors.into_iter().zip([0x80, 0x40, 0x20, 0x10]) {

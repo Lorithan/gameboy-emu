@@ -1,4 +1,4 @@
-use super::registers::{Register, WordValue};
+use super::registers::{Register, Register16};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
 mod adc_sbc;
@@ -266,7 +266,12 @@ fn unsupported_fetch_wraps_pc_and_retains_the_original_fault_address() {
 // bugs in the new execution states. Public tests exercise the complete path.
 #[test]
 fn word_operand_states_load_every_value_without_partial_register_updates() {
-    for destination in [WordValue::BC, WordValue::DE, WordValue::HL, WordValue::SP] {
+    for destination in [
+        Register16::BC,
+        Register16::DE,
+        Register16::HL,
+        Register16::SP,
+    ] {
         for value in 0u16..=u16::MAX {
             let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
             cpu.state = ExecutionState::ReadImmediate16Low { destination };
@@ -280,10 +285,10 @@ fn word_operand_states_load_every_value_without_partial_register_updates() {
             );
             expected.pc += 1;
             match destination {
-                WordValue::BC => expected.bc = value,
-                WordValue::DE => expected.de = value,
-                WordValue::HL => expected.hl = value,
-                WordValue::SP => expected.sp = value,
+                Register16::BC => expected.bc = value,
+                Register16::DE => expected.de = value,
+                Register16::HL => expected.hl = value,
+                Register16::SP => expected.sp = value,
             }
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
@@ -293,7 +298,12 @@ fn word_operand_states_load_every_value_without_partial_register_updates() {
 
 #[test]
 fn word_operand_states_preserve_pending_data_on_missing_reads_and_wrap_pc() {
-    for destination in [WordValue::BC, WordValue::DE, WordValue::HL, WordValue::SP] {
+    for destination in [
+        Register16::BC,
+        Register16::DE,
+        Register16::HL,
+        Register16::SP,
+    ] {
         for start in [0xFFFEu16, 0xFFFF] {
             for flags in 0u16..16 {
                 let mut registers = Registers::dmg_post_boot(1);
@@ -316,10 +326,10 @@ fn word_operand_states_preserve_pending_data_on_missing_reads_and_wrap_pc() {
                 let mut expected = CPU::from_registers(registers).snapshot();
                 expected.pc = start.wrapping_add(2);
                 match destination {
-                    WordValue::BC => expected.bc = 0x1234,
-                    WordValue::DE => expected.de = 0x1234,
-                    WordValue::HL => expected.hl = 0x1234,
-                    WordValue::SP => expected.sp = 0x1234,
+                    Register16::BC => expected.bc = 0x1234,
+                    Register16::DE => expected.de = 0x1234,
+                    Register16::HL => expected.hl = 0x1234,
+                    Register16::SP => expected.sp = 0x1234,
                 }
                 assert_eq!(final_state, expected);
             }

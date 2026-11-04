@@ -21,10 +21,10 @@ enum ExecutionState {
         target: Destination,
     },
     ReadImmediate16Low {
-        destination: WordValue,
+        destination: Register16,
     },
     ReadImmediate16High {
-        destination: WordValue,
+        destination: Register16,
         low: u8,
     },
     ReadMemory {
@@ -320,10 +320,10 @@ impl CPU {
             DecodedOpcode::Arithmetic { kind, operand } => {
                 let operation = match kind {
                     ArithmeticKind::Add { carry } => ArithmeticKind::Add {
-                        carry: carry && self.registers.get_flag(FlagValue::C),
+                        carry: carry && self.registers.get_flag(Flag::C),
                     },
                     ArithmeticKind::Sub { carry } => ArithmeticKind::Sub {
-                        carry: carry && self.registers.get_flag(FlagValue::C),
+                        carry: carry && self.registers.get_flag(Flag::C),
                     },
                     _ => kind,
                 };
@@ -433,7 +433,7 @@ impl CPU {
 
     fn store_immediate_word(
         &mut self,
-        destination: WordValue,
+        destination: Register16,
         low: u8,
         read_value: Option<u8>,
     ) -> Result<bool, CpuError> {
@@ -449,10 +449,10 @@ impl CPU {
         let value = (high_value as u16) << 8 | low as u16;
 
         match destination {
-            WordValue::BC => self.registers.set_bc(value),
-            WordValue::DE => self.registers.set_de(value),
-            WordValue::HL => self.registers.set_hl(value),
-            WordValue::SP => self.registers.set_sp(value),
+            Register16::BC => self.registers.set_bc(value),
+            Register16::DE => self.registers.set_de(value),
+            Register16::HL => self.registers.set_hl(value),
+            Register16::SP => self.registers.set_sp(value),
         }
 
         self.state = ExecutionState::FetchOpcode;
@@ -467,9 +467,9 @@ impl CPU {
         value = value.wrapping_add(1);
 
         let z = value == 0;
-        self.registers.set_flag(registers::FlagValue::Z, z);
-        self.registers.set_flag(registers::FlagValue::N, false);
-        self.registers.set_flag(registers::FlagValue::H, h);
+        self.registers.set_flag(registers::Flag::Z, z);
+        self.registers.set_flag(registers::Flag::N, false);
+        self.registers.set_flag(registers::Flag::H, h);
 
         value
     }
@@ -480,9 +480,9 @@ impl CPU {
         value = value.wrapping_sub(1);
 
         let z = value == 0;
-        self.registers.set_flag(registers::FlagValue::Z, z);
-        self.registers.set_flag(registers::FlagValue::N, true);
-        self.registers.set_flag(registers::FlagValue::H, h);
+        self.registers.set_flag(registers::Flag::Z, z);
+        self.registers.set_flag(registers::Flag::N, true);
+        self.registers.set_flag(registers::Flag::H, h);
 
         value
     }
@@ -497,10 +497,10 @@ impl CPU {
         let z = result == 0;
         let h = ((left ^ right ^ result) & 0x10) != 0;
 
-        self.registers.set_flag(registers::FlagValue::C, c);
-        self.registers.set_flag(registers::FlagValue::Z, z);
-        self.registers.set_flag(registers::FlagValue::N, false);
-        self.registers.set_flag(registers::FlagValue::H, h);
+        self.registers.set_flag(registers::Flag::C, c);
+        self.registers.set_flag(registers::Flag::Z, z);
+        self.registers.set_flag(registers::Flag::N, false);
+        self.registers.set_flag(registers::Flag::H, h);
 
         result
     }
@@ -515,10 +515,10 @@ impl CPU {
         let z = result == 0;
         let h = ((left ^ right ^ result) & 0x10) != 0;
 
-        self.registers.set_flag(registers::FlagValue::C, c);
-        self.registers.set_flag(registers::FlagValue::Z, z);
-        self.registers.set_flag(registers::FlagValue::N, true);
-        self.registers.set_flag(registers::FlagValue::H, h);
+        self.registers.set_flag(registers::Flag::C, c);
+        self.registers.set_flag(registers::Flag::Z, z);
+        self.registers.set_flag(registers::Flag::N, true);
+        self.registers.set_flag(registers::Flag::H, h);
 
         result
     }

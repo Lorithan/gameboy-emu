@@ -1,4 +1,4 @@
-use super::{DecodedOpcode, Register, Target, UnaryOperation, WordValue};
+use super::{DecodedOpcode, Register, Register16, Target, UnaryOperation};
 
 #[test]
 fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
@@ -48,10 +48,10 @@ fn known_opcode_bytes_decode_to_the_expected_operation_and_destination() {
 #[test]
 fn word_loads_decode_to_word_destinations() {
     for (byte, expected) in [
-        (0x01, WordValue::BC),
-        (0x11, WordValue::DE),
-        (0x21, WordValue::HL),
-        (0x31, WordValue::SP),
+        (0x01, Register16::BC),
+        (0x11, Register16::DE),
+        (0x21, Register16::HL),
+        (0x31, Register16::SP),
     ] {
         match DecodedOpcode::from(byte) {
             DecodedOpcode::LoadImmediateWord { destination } => assert_eq!(destination, expected),

@@ -49,4 +49,4 @@ Further selector renaming, bit-field compression for unary/immediate tables, req
 
 ## Completion review — 2026-11-04
 
-All 152 tests pass (111 unit, 41 integration), formatting passes, and no correctness findings remain. Existing independent opcode matrices and all-byte rejection checks verify unchanged supported instructions; exhaustive arithmetic/comparison tests and cycle traces/budgets/captures remain green. Clippy reports unused set_af and set_pc only. Changes remain local and uncommitted. Stop this refactor at the verified checkpoint; conditional branches are the next functionality to specify.
+All 152 tests pass (111 unit, 41 integration), formatting passes, and no correctness findings remain. Existing independent opcode matrices and all-byte rejection checks verify unchanged supported instructions; exhaustive arithmetic/comparison tests and cycle traces/budgets/captures remain green. Clippy reports unused set_af and set_pc only. Committed locally as 32aef0f; not yet pushed. Stop this refactor at the verified checkpoint; relative jumps are specified next in RELATIVE_JUMPS.md and issue #17.

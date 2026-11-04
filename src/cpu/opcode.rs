@@ -1,4 +1,4 @@
-use crate::cpu::{Register, registers::WordValue};
+use crate::cpu::{Register, registers::Register16};
 
 #[cfg(test)]
 mod tests;
@@ -55,7 +55,7 @@ pub(super) enum DecodedOpcode {
         destination: Target,
     },
     LoadImmediateWord {
-        destination: WordValue,
+        destination: Register16,
     },
     Unary {
         operation: UnaryOperation,
@@ -73,7 +73,7 @@ impl From<u8> for DecodedOpcode {
         match value {
             0x00 => DecodedOpcode::Nop,
             0x01 => DecodedOpcode::LoadImmediateWord {
-                destination: WordValue::BC,
+                destination: Register16::BC,
             },
             0x04 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -98,7 +98,7 @@ impl From<u8> for DecodedOpcode {
                 destination: Target::Register(Register::C),
             },
             0x11 => DecodedOpcode::LoadImmediateWord {
-                destination: WordValue::DE,
+                destination: Register16::DE,
             },
             0x14 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -123,7 +123,7 @@ impl From<u8> for DecodedOpcode {
                 destination: Target::Register(Register::E),
             },
             0x21 => DecodedOpcode::LoadImmediateWord {
-                destination: WordValue::HL,
+                destination: Register16::HL,
             },
             0x24 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -148,7 +148,7 @@ impl From<u8> for DecodedOpcode {
                 destination: Target::Register(Register::L),
             },
             0x31 => DecodedOpcode::LoadImmediateWord {
-                destination: WordValue::SP,
+                destination: Register16::SP,
             },
             0x34 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,

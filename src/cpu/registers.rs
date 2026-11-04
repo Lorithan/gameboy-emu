@@ -2,68 +2,43 @@
 mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Flag(u8);
+pub enum Flag {
+    Z,
+    N,
+    H,
+    C,
+}
 
 impl Flag {
-    fn new(val: u8) -> Self {
-        Flag(val & 0xF0)
-    }
-
-    fn z(&self) -> bool {
-        self.0 & (1 << 7) > 0
-    }
-
-    fn set_z(&mut self, val: bool) {
-        if val {
-            self.0 |= 1 << 7;
-        } else {
-            self.0 &= !(1 << 7);
-        }
-    }
-
-    fn n(&self) -> bool {
-        self.0 & (1 << 6) > 0
-    }
-
-    fn set_n(&mut self, val: bool) {
-        if val {
-            self.0 |= 1 << 6;
-        } else {
-            self.0 &= !(1 << 6);
-        }
-    }
-
-    fn h(&self) -> bool {
-        self.0 & (1 << 5) > 0
-    }
-
-    fn set_h(&mut self, val: bool) {
-        if val {
-            self.0 |= 1 << 5;
-        } else {
-            self.0 &= !(1 << 5);
-        }
-    }
-
-    fn c(&self) -> bool {
-        self.0 & (1 << 4) > 0
-    }
-
-    fn set_c(&mut self, val: bool) {
-        if val {
-            self.0 |= 1 << 4;
-        } else {
-            self.0 &= !(1 << 4);
+    const fn mask(self) -> u8 {
+        match self {
+            Flag::Z => 0x80,
+            Flag::N => 0x40,
+            Flag::H => 0x20,
+            Flag::C => 0x10,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlagValue {
-    Z,
-    N,
-    H,
-    C,
+struct Flags(u8);
+
+impl Flags {
+    fn new(val: u8) -> Self {
+        Flags(val & 0xF0)
+    }
+
+    fn get(self, flag: Flag) -> bool {
+        self.0 & flag.mask() != 0
+    }
+
+    fn set(&mut self, flag: Flag, val: bool) {
+        if val {
+            self.0 |= flag.mask();
+        } else {
+            self.0 &= !flag.mask();
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +53,7 @@ pub(super) enum Register {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum WordValue {
+pub(super) enum Register16 {
     BC,
     DE,
     HL,
@@ -92,10 +67,10 @@ pub struct Registers {
     pub(super) c: u8,
     pub(super) d: u8,
     pub(super) e: u8,
-    f: Flag,
+    f: Flags,
     pub(super) h: u8,
     pub(super) l: u8,
-    /// Programm counter
+    /// Program counter
     pub(super) pc: u16,
     /// Stack Pointer
     pub(super) sp: u16,
@@ -111,7 +86,7 @@ impl Registers {
             c: 0x13,
             d: 0,
             e: 0xD8,
-            f: Flag::new(flag),
+            f: Flags::new(flag),
             h: 0x01,
             l: 0x4d,
             pc: 0x0100,
@@ -124,7 +99,7 @@ impl Registers {
     }
 
     pub(super) fn set_af(&mut self, af: u16) {
-        self.f = Flag::new(af as u8);
+        self.f = Flags::new(af as u8);
         self.a = ((af >> 8) & 0xFF) as u8;
     }
 
@@ -163,21 +138,11 @@ impl Registers {
         self.sp = sp
     }
 
-    pub fn get_flag(&self, flag: FlagValue) -> bool {
-        match flag {
-            FlagValue::Z => self.f.z(),
-            FlagValue::N => self.f.n(),
-            FlagValue::H => self.f.h(),
-            FlagValue::C => self.f.c(),
-        }
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        self.f.get(flag)
     }
 
-    pub fn set_flag(&mut self, flag: FlagValue, val: bool) {
-        match flag {
-            FlagValue::Z => self.f.set_z(val),
-            FlagValue::N => self.f.set_n(val),
-            FlagValue::H => self.f.set_h(val),
-            FlagValue::C => self.f.set_c(val),
-        }
+    pub fn set_flag(&mut self, flag: Flag, val: bool) {
+        self.f.set(flag, val);
     }
 }

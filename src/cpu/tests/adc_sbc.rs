@@ -1,7 +1,7 @@
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
-    registers::{FlagValue, Register},
+    registers::{Flag, Register},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -195,7 +195,7 @@ fn pending_carry_reads_preserve_captured_inputs_across_retry_and_pc_wrap() {
                     // ordinary instruction flow leaves live A/flags alone.
                     cpu.registers.a = 0x99;
                     cpu.registers.set_hl(0xD456);
-                    cpu.registers.set_flag(FlagValue::C, !carry);
+                    cpu.registers.set_flag(Flag::C, !carry);
                     pending = cpu.snapshot();
                     let address = if source == Source::Immediate {
                         pending.pc
