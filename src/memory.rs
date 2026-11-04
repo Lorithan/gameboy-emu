@@ -8,6 +8,7 @@ mod tests;
 pub struct Bus {
     cart: Cartridge,
     ram: [u8; 8 * 1024],
+    hram: [u8; 0x7F],
 }
 
 impl Bus {
@@ -15,6 +16,7 @@ impl Bus {
         Self {
             cart,
             ram: [0; 8 * 1024],
+            hram: [0; 0x7F],
         }
     }
 
@@ -26,6 +28,7 @@ impl Bus {
             }
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize],
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize],
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
             _ => 0xFF,
         }
     }
@@ -34,6 +37,7 @@ impl Bus {
         match addr {
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize] = value,
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = value,
             _ => {
                 // Ignore writes
             }

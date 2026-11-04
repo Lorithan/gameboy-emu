@@ -69,7 +69,7 @@ fn every_unimplemented_address_ignores_writes_without_corrupting_storage() {
     bus.write(0xC000, 0x35);
     bus.write(0xDFFF, 0x76);
     for address in 0u16..=u16::MAX {
-        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF) {
+        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
             continue;
         }
         assert_eq!(bus.read(address), 0xFF, "address {address:#06X}");
@@ -88,11 +88,16 @@ fn full_address_space_routes_to_expected_storage() {
     for (offset, &value) in expected_ram.iter().enumerate() {
         bus.write(0xC000 + offset as u16, value);
     }
+    let expected_hram: Vec<u8> = (0u8..127).map(|offset| offset ^ 0xA5).collect();
+    for (offset, &value) in expected_hram.iter().enumerate() {
+        bus.write(0xFF80 + offset as u16, value);
+    }
     for address in 0u16..=u16::MAX {
         let expected = match address {
             0x0000..=0x7FFF => rom[usize::from(address)],
             0xC000..=0xDFFF => expected_ram[usize::from(address - 0xC000)],
             0xE000..=0xFDFF => expected_ram[usize::from(address - 0xE000)],
+            0xFF80..=0xFFFE => expected_hram[usize::from(address - 0xFF80)],
             _ => 0xFF,
         };
         assert_eq!(bus.read(address), expected, "address {address:#06X}");
@@ -107,4 +112,59 @@ fn bus_instances_do_not_share_work_ram() {
     assert_eq!(first.read(0xE000), 0x35);
     assert_eq!(second.read(0xC000), 0);
     assert_eq!(second.read(0xE000), 0);
+}
+
+#[test]
+fn high_ram_is_zeroed_and_independent_across_bus_instances() {
+    let (mut first, _) = fixture();
+    let (second, _) = fixture();
+    for address in 0xFF80u16..=0xFFFE {
+        assert_eq!(first.read(address), 0);
+        first.write(address, 0xA5);
+        assert_eq!(first.read(address), 0xA5);
+        assert_eq!(second.read(address), 0);
+    }
+}
+
+#[test]
+fn every_high_ram_location_stores_every_byte_without_aliasing_other_locations() {
+    let (mut bus, _) = fixture();
+    let mut expected = [0u8; 127];
+    for address in 0xFF80u16..=0xFFFE {
+        for value in 0u8..=255 {
+            bus.write(address, value);
+            expected[usize::from(address - 0xFF80)] = value;
+            for (offset, &byte) in expected.iter().enumerate() {
+                assert_eq!(
+                    bus.read(0xFF80 + offset as u16),
+                    byte,
+                    "write {value:02X} at {address:04X}, read offset {offset}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn high_ram_has_no_aliases_to_work_ram_echo_rom_or_neighbor_registers() {
+    let (mut bus, rom) = fixture();
+    for offset in 0u16..127 {
+        bus.write(0xC000 + offset, 0x35);
+        bus.write(0xFF80 + offset, 0xA6);
+        assert_eq!(
+            bus.read(0xC000 + offset),
+            0x35,
+            "HRAM write corrupted WRAM at offset {offset}"
+        );
+        assert_eq!(bus.read(0xE000 + offset), 0x35);
+        bus.write(0xE000 + offset, 0x72);
+        assert_eq!(bus.read(0xFF80 + offset), 0xA6);
+    }
+    for address in [0xFF7F, 0xFFFF] {
+        bus.write(address, 0x42);
+        assert_eq!(bus.read(address), 0xFF);
+    }
+    assert_eq!(bus.read(0xFF80), 0xA6);
+    assert_eq!(bus.read(0xFFFE), 0xA6);
+    assert_eq!(bus.cart.rom(), rom.as_slice());
 }

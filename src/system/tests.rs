@@ -13,6 +13,54 @@ fn hl_access_machine(address: u16, tail: &[u8]) -> System {
 }
 
 #[test]
+fn high_ram_store_budgets_delay_writes_until_the_write_cycle() {
+    use super::InstructionStep;
+    for address in [0xFF80u16, 0xFFFE] {
+        for prefix in 0u64..=3 {
+            let mut system = hl_access_machine(address, &[0x36, 0x5A, 0x7E, 0xD3]);
+            system.memory.write(address, 0x27);
+            let outcome = system.step_instruction(prefix).unwrap();
+            if prefix == 3 {
+                assert!(matches!(
+                    outcome,
+                    InstructionStep::Complete {
+                        mcycles: 3,
+                        ticks: 12
+                    }
+                ));
+            } else {
+                assert!(
+                    matches!(outcome, InstructionStep::BudgetExhausted { mcycles, ticks } if mcycles == prefix && ticks == prefix * 4)
+                );
+            }
+            assert_eq!(
+                system.memory.read(address),
+                if prefix == 3 { 0x5A } else { 0x27 }
+            );
+            let snapshot = system.cpu_snapshot();
+            let tick = system.elapsed_ticks();
+            assert!(matches!(
+                system.step_instruction(0).unwrap(),
+                InstructionStep::BudgetExhausted {
+                    mcycles: 0,
+                    ticks: 0
+                }
+            ));
+            assert_eq!(system.cpu_snapshot(), snapshot);
+            assert_eq!(system.elapsed_ticks(), tick);
+            if prefix < 3 {
+                assert!(
+                    matches!(system.step_instruction(100).unwrap(), InstructionStep::Complete { mcycles, ticks } if mcycles == 3 - prefix && ticks == (3 - prefix) * 4)
+                );
+            }
+            assert_eq!(system.memory.read(address), 0x5A);
+            assert_eq!(system.memory.read(0xC000 + (address - 0xFF80)), 0);
+            assert_eq!(system.elapsed_ticks(), 32);
+        }
+    }
+}
+
+#[test]
 fn memory_accumulator_reads_follow_bus_mapping_without_writes() {
     for (opcode, add) in [(0x86, true), (0x96, false), (0xBE, false)] {
         for address in [
@@ -153,7 +201,7 @@ fn memory_modifications_obey_bus_boundaries_even_when_writes_are_ignored() {
             assert_eq!(system.cpu_snapshot(), expected);
             assert_eq!(
                 system.memory.read(address),
-                if (0xC000..=0xFDFF).contains(&address) {
+                if matches!(address, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
                     value
                 } else {
                     old
@@ -253,7 +301,7 @@ fn cpu_memory_accesses_respect_wram_echo_rom_and_unimplemented_boundaries() {
             system.step_instruction(3).expect("store");
             let expected = match address {
                 0x0000..=0x7FFF => original,
-                0xC000..=0xFDFF => 0x42,
+                0xC000..=0xFDFF | 0xFF80..=0xFFFE => 0x42,
                 _ => 0xFF,
             };
             assert_eq!(system.memory.read(address), expected);
