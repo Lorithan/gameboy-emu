@@ -3,6 +3,7 @@ use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, R
 
 mod adc_sbc;
 mod byte_transfers;
+mod compare;
 mod memory_inc_dec;
 mod operand_add_sub;
 mod register_add_sub;

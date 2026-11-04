@@ -38,6 +38,9 @@ pub(super) enum DecodedOpcode {
     SubImmediateCarry,
     AddHLCarry,
     SubHLCarry,
+    Compare(RegisterValue),
+    CompareHL,
+    CompareImmediate,
     Unknown,
 }
 
@@ -365,10 +368,19 @@ impl From<u8> for DecodedOpcode {
             0x9D => DecodedOpcode::SubRegisterCarry(RegisterValue::L),
             0x9E => DecodedOpcode::SubHLCarry,
             0x9F => DecodedOpcode::SubRegisterCarry(RegisterValue::A),
+            0xB8 => DecodedOpcode::Compare(RegisterValue::B),
+            0xB9 => DecodedOpcode::Compare(RegisterValue::C),
+            0xBA => DecodedOpcode::Compare(RegisterValue::D),
+            0xBB => DecodedOpcode::Compare(RegisterValue::E),
+            0xBC => DecodedOpcode::Compare(RegisterValue::H),
+            0xBD => DecodedOpcode::Compare(RegisterValue::L),
+            0xBE => DecodedOpcode::CompareHL,
+            0xBF => DecodedOpcode::Compare(RegisterValue::A),
             0xC6 => DecodedOpcode::AddImmediate,
             0xCE => DecodedOpcode::AddImmediateCarry,
             0xD6 => DecodedOpcode::SubImmediate,
             0xDE => DecodedOpcode::SubImmediateCarry,
+            0xFE => DecodedOpcode::CompareImmediate,
             _ => DecodedOpcode::Unknown,
         }
     }

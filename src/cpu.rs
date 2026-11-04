@@ -29,6 +29,7 @@ enum AccumulatorOperation {
     Sub,
     AddC(bool),
     SubC(bool),
+    Compare,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -240,6 +241,9 @@ impl CPU {
                         let result = self.sub(a, b, carry);
                         self.store_register(RegisterValue::A, result);
                     }
+                    AccumulatorOperation::Compare => {
+                        self.sub(a, b, false);
+                    }
                 }
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -275,6 +279,9 @@ impl CPU {
                         let result = self.sub(a, b, carry);
                         self.store_register(RegisterValue::A, result);
                     }
+                    AccumulatorOperation::Compare => {
+                        self.sub(a, b, false);
+                    }
                 }
 
                 self.state = FetchOpcode;
@@ -298,9 +305,11 @@ impl CPU {
             }
         };
 
+        let op_addr = self.registers.pc;
+        self.registers.pc = self.registers.pc.wrapping_add(1);
+
         match opcode {
             DecodedOpcode::Nop => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
@@ -312,24 +321,20 @@ impl CPU {
 
                 self.store_register(destination, value);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
             DecodedOpcode::LoadImmediate { destination } => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediate8 {
                     destination: Destination::Register(destination),
                 };
                 Ok(false)
             }
             DecodedOpcode::LoadImmediateWord { destination } => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediate16Low { destination };
                 Ok(false)
             }
             DecodedOpcode::LoadFromHL { destination } => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadMemory {
                     addr: self.registers.hl(),
                     destination,
@@ -337,8 +342,6 @@ impl CPU {
                 Ok(false)
             }
             DecodedOpcode::StoreToHL { source } => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
                 let value = self.register(source);
 
                 self.state = ExecutionState::WriteMemory {
@@ -348,7 +351,6 @@ impl CPU {
                 Ok(false)
             }
             DecodedOpcode::StoreImmediateHL => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediate8 {
                     destination: Destination::Memory(self.registers.hl()),
                 };
@@ -360,7 +362,6 @@ impl CPU {
                 value = self.increment(value);
                 self.store_register(register, value);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
@@ -369,12 +370,10 @@ impl CPU {
                 value = self.decrement(value);
                 self.store_register(register, value);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
             DecodedOpcode::IncrementHL => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadOperation {
                     addr: self.registers.hl(),
                     operation: UnaryOperation::Increment,
@@ -382,7 +381,6 @@ impl CPU {
                 Ok(false)
             }
             DecodedOpcode::DecrementHL => {
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadOperation {
                     addr: self.registers.hl(),
                     operation: UnaryOperation::Decrement,
@@ -396,7 +394,6 @@ impl CPU {
                 let result = self.add(a, b, false);
                 self.store_register(RegisterValue::A, result);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
@@ -407,7 +404,6 @@ impl CPU {
                 let result = self.add(a, b, self.registers.get_flag(registers::FlagValue::C));
                 self.store_register(RegisterValue::A, result);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
@@ -418,7 +414,6 @@ impl CPU {
                 let result = self.sub(a, b, false);
                 self.store_register(RegisterValue::A, result);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
@@ -429,13 +424,11 @@ impl CPU {
                 let result = self.sub(a, b, self.registers.get_flag(registers::FlagValue::C));
                 self.store_register(RegisterValue::A, result);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
                 Ok(true)
             }
             DecodedOpcode::AddHL => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadMemoryAccumulator {
                     addr: self.registers.hl(),
                     value,
@@ -445,7 +438,6 @@ impl CPU {
             }
             DecodedOpcode::AddHLCarry => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadMemoryAccumulator {
                     addr: self.registers.hl(),
                     value,
@@ -457,7 +449,6 @@ impl CPU {
             }
             DecodedOpcode::SubHL => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadMemoryAccumulator {
                     addr: self.registers.hl(),
                     value,
@@ -467,7 +458,6 @@ impl CPU {
             }
             DecodedOpcode::SubHLCarry => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadMemoryAccumulator {
                     addr: self.registers.hl(),
                     value,
@@ -479,7 +469,6 @@ impl CPU {
             }
             DecodedOpcode::AddImmediate => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediateAccumulator {
                     value,
                     operation: AccumulatorOperation::Add,
@@ -488,7 +477,6 @@ impl CPU {
             }
             DecodedOpcode::AddImmediateCarry => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediateAccumulator {
                     value,
                     operation: AccumulatorOperation::AddC(
@@ -499,7 +487,6 @@ impl CPU {
             }
             DecodedOpcode::SubImmediate => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediateAccumulator {
                     value,
                     operation: AccumulatorOperation::Sub,
@@ -508,7 +495,6 @@ impl CPU {
             }
             DecodedOpcode::SubImmediateCarry => {
                 let value = self.register(RegisterValue::A);
-                self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediateAccumulator {
                     value,
                     operation: AccumulatorOperation::SubC(
@@ -517,11 +503,40 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::Compare(register) => {
+                let a = self.register(RegisterValue::A);
+                let b = self.register(register);
+                self.sub(a, b, false);
+
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::CompareHL => {
+                let value = self.register(RegisterValue::A);
+                self.state = ReadMemoryAccumulator {
+                    addr: self.registers.hl(),
+                    value,
+                    operation: AccumulatorOperation::Compare,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::CompareImmediate => {
+                let value = self.register(RegisterValue::A);
+                self.state = ReadImmediateAccumulator {
+                    value,
+                    operation: AccumulatorOperation::Compare,
+                };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
-                let addr = self.registers.pc;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-                self.state = ExecutionState::Faulted { opcode: byte, addr };
-                Err(CpuError::UnsupportedOpcode(CpuFault { opcode: byte, addr }))
+                self.state = ExecutionState::Faulted {
+                    opcode: byte,
+                    addr: op_addr,
+                };
+                Err(CpuError::UnsupportedOpcode(CpuFault {
+                    opcode: byte,
+                    addr: op_addr,
+                }))
             }
         }
     }

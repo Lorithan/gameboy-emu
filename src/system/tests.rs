@@ -14,7 +14,7 @@ fn hl_access_machine(address: u16, tail: &[u8]) -> System {
 
 #[test]
 fn memory_accumulator_reads_follow_bus_mapping_without_writes() {
-    for (opcode, add) in [(0x86, true), (0x96, false)] {
+    for (opcode, add) in [(0x86, true), (0x96, false), (0xBE, false)] {
         for address in [
             0u16, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF, 0xFE00,
             0xFF80, 0xFFFF,
@@ -34,7 +34,11 @@ fn memory_accumulator_reads_follow_bus_mapping_without_writes() {
                 | if add { 0 } else { 0x40 }
                 | if !(0..16).contains(&low) { 0x20 } else { 0 }
                 | if !(0..256).contains(&full) { 0x10 } else { 0 };
-            expected.af = value << 8 | flags;
+            expected.af = if opcode == 0xBE {
+                0x4200 | flags
+            } else {
+                value << 8 | flags
+            };
             expected.pc += 1;
             assert!(matches!(
                 system.step_instruction(100),
