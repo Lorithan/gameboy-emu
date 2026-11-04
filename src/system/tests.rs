@@ -1,6 +1,101 @@
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 
+#[test]
+fn stack_cycles_obey_bus_mapping_and_preserve_other_memory_at_every_pause() {
+    for (pair, push, pop) in [
+        (0, 0xC5, 0xC1),
+        (1, 0xD5, 0xD1),
+        (2, 0xE5, 0xE1),
+        (3, 0xF5, 0xF1),
+    ] {
+        for sp in [0u16, 1, 0x8000, 0xC002, 0xE002, 0xFF80, 0xFFFE, 0xFFFF] {
+            for budget in 0u64..=4 {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                rom[0x0100..0x0106].copy_from_slice(&[
+                    0x31,
+                    sp as u8,
+                    (sp / 256) as u8,
+                    push,
+                    pop,
+                    0xD3,
+                ]);
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                system.step_instruction(3).unwrap();
+                let initial = system.cpu_snapshot();
+                let value = match pair {
+                    0 => initial.bc,
+                    1 => initial.de,
+                    2 => initial.hl,
+                    _ => initial.af,
+                };
+                let before: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                let mut expected_memory = before.clone();
+                let writes = [
+                    (sp.wrapping_sub(1), (value / 256) as u8),
+                    (sp.wrapping_sub(2), value as u8),
+                ];
+                for (index, (addr, byte)) in writes.into_iter().enumerate() {
+                    if budget < 3 + index as u64 {
+                        continue;
+                    }
+                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+                        expected_memory[usize::from(addr)] = byte;
+                        if (0xC000..=0xDDFF).contains(&addr) {
+                            expected_memory[usize::from(addr + 0x2000)] = byte;
+                        }
+                        if (0xE000..=0xFDFF).contains(&addr) {
+                            expected_memory[usize::from(addr - 0x2000)] = byte;
+                        }
+                    }
+                }
+                for addr in 0u16..=65535 {
+                    assert_eq!(
+                        system.memory.read(addr),
+                        expected_memory[usize::from(addr)],
+                        "pair {pair}, SP {sp:04X}, budget {budget}, addr {addr:04X}"
+                    );
+                }
+                if budget < 4 {
+                    system.step_instruction(100).unwrap();
+                }
+                let stack = sp.wrapping_sub(2);
+                let word = u16::from(system.memory.read(stack))
+                    | (u16::from(system.memory.read(stack.wrapping_add(1))) << 8);
+                let memory_before_pop: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                assert!(matches!(
+                    system.step_instruction(100).unwrap(),
+                    super::InstructionStep::Complete {
+                        mcycles: 3,
+                        ticks: 12
+                    }
+                ));
+                let mut expected = initial;
+                expected.pc = 0x0105;
+                match pair {
+                    0 => expected.bc = word,
+                    1 => expected.de = word,
+                    2 => expected.hl = word,
+                    _ => expected.af = word & 0xFFF0,
+                }
+                assert_eq!(system.cpu_snapshot(), expected);
+                for addr in 0u16..=65535 {
+                    assert_eq!(
+                        system.memory.read(addr),
+                        memory_before_pop[usize::from(addr)]
+                    );
+                }
+            }
+        }
+    }
+}
+
 fn hl_access_machine(address: u16, tail: &[u8]) -> System {
     let mut rom = vec![0; 32_768];
     rom[0x014D] = 0xE7;

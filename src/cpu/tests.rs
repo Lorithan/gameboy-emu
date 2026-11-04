@@ -10,6 +10,7 @@ mod operand_add_sub;
 mod register_add_sub;
 mod register_inc_dec;
 mod relative_jumps;
+mod stack_push_pop;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {

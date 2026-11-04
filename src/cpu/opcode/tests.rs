@@ -63,6 +63,9 @@ fn word_loads_decode_to_word_destinations() {
 #[test]
 fn every_other_byte_remains_explicitly_unknown() {
     for byte in 0u8..=u8::MAX {
+        if [0xC1, 0xC5, 0xD1, 0xD5, 0xE1, 0xE5, 0xF1, 0xF5].contains(&byte) {
+            continue;
+        }
         if [0xC2, 0xC3, 0xCA, 0xD2, 0xDA, 0xE9].contains(&byte) {
             continue;
         }

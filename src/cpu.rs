@@ -61,6 +61,28 @@ enum ExecutionState {
         addr: u16,
         value: u8,
     },
+    Push {
+        addr: u16,
+        value: u16,
+    },
+    PushHigh {
+        addr: u16,
+        high: u8,
+        low: u8,
+    },
+    PushLow {
+        addr: u16,
+        low: u8,
+    },
+    PopLow {
+        addr: u16,
+        target: PushOperand,
+    },
+    PopHigh {
+        addr: u16,
+        low: u8,
+        target: PushOperand,
+    },
     Faulted(CpuFault),
 }
 
@@ -133,10 +155,14 @@ impl CPU {
                 addr: self.registers.pc,
             }),
             ReadMemory { addr, .. }
+            | PopLow { addr, .. }
+            | PopHigh { addr, .. }
             | ReadOperation { addr, .. }
             | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
-            ApplyJump { .. } => Ok(CycleAction::Idle),
+            PushHigh { addr, high, .. } => Ok(CycleAction::Write { addr, value: high }),
+            PushLow { addr, low } => Ok(CycleAction::Write { addr, value: low }),
+            Push { .. } | ApplyJump { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -300,6 +326,62 @@ impl CPU {
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
+            Push { addr, value } => {
+                let high = (value >> 8) as u8;
+                let low = (value & 0xFF) as u8;
+                self.state = PushHigh { addr, high, low };
+                Ok(false)
+            }
+            PushHigh { addr, low, .. } => {
+                self.registers.set_sp(addr);
+                self.state = PushLow {
+                    addr: self.registers.sp.wrapping_sub(1),
+                    low,
+                };
+                Ok(false)
+            }
+            PushLow { addr, .. } => {
+                self.registers.set_sp(addr);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            PopLow { addr, target } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+
+                self.registers.sp = addr.wrapping_add(1);
+                self.state = PopHigh {
+                    addr: self.registers.sp,
+                    low,
+                    target,
+                };
+                Ok(false)
+            }
+            PopHigh { addr, low, target } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+
+                let value = (high as u16) << 8 | low as u16;
+
+                match target {
+                    PushOperand::BC => self.registers.set_bc(value),
+                    PushOperand::DE => self.registers.set_de(value),
+                    PushOperand::HL => self.registers.set_hl(value),
+                    PushOperand::AF => self.registers.set_af(value),
+                }
+
+                self.registers.sp = addr.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -327,11 +409,11 @@ impl CPU {
                 source,
             } => match source {
                 Target::Register(register) => {
-                    let value = self.register(register);
+                    let value = self.get_register(register);
 
                     match destination {
                         Target::Register(register) => {
-                            self.store_register(register, value);
+                            self.set_register(register, value);
                             Ok(true)
                         }
                         Target::IndirectHL => {
@@ -371,12 +453,12 @@ impl CPU {
             }
             DecodedOpcode::Unary { operation, target } => match target {
                 Target::Register(register) => {
-                    let mut value = self.register(register);
+                    let mut value = self.get_register(register);
                     value = match operation {
                         UnaryOperation::Increment => self.increment(value),
                         UnaryOperation::Decrement => self.decrement(value),
                     };
-                    self.store_register(register, value);
+                    self.set_register(register, value);
 
                     self.state = FetchOpcode;
                     Ok(true)
@@ -402,8 +484,8 @@ impl CPU {
 
                 match operand {
                     Operand::Target(Target::Register(register)) => {
-                        let left = self.register(Register::A);
-                        let right = self.register(register);
+                        let left = self.get_register(Register::A);
+                        let right = self.get_register(register);
 
                         self.execute_accumulator(operation, left, right);
 
@@ -411,7 +493,7 @@ impl CPU {
                         Ok(true)
                     }
                     Operand::Target(Target::IndirectHL) => {
-                        let value = self.register(Register::A);
+                        let value = self.get_register(Register::A);
                         self.state = ReadMemoryAccumulator {
                             addr: self.registers.hl(),
                             value,
@@ -420,7 +502,7 @@ impl CPU {
                         Ok(false)
                     }
                     Operand::Immediate => {
-                        let value = self.register(Register::A);
+                        let value = self.get_register(Register::A);
                         self.state = ReadImmediateAccumulator { value, operation };
                         Ok(false)
                     }
@@ -441,6 +523,26 @@ impl CPU {
             DecodedOpcode::JumpHL => {
                 self.registers.set_pc(self.registers.hl());
                 Ok(true)
+            }
+            DecodedOpcode::Push { operand } => {
+                let addr = self.registers.sp.wrapping_sub(1);
+                let value = match operand {
+                    PushOperand::BC => self.registers.bc(),
+                    PushOperand::DE => self.registers.de(),
+                    PushOperand::HL => self.registers.hl(),
+                    PushOperand::AF => self.registers.af(),
+                };
+
+                self.state = Push { addr, value };
+                Ok(false)
+            }
+            DecodedOpcode::Pop { operand } => {
+                let addr = self.registers.sp;
+                self.state = PopLow {
+                    addr,
+                    target: operand,
+                };
+                Ok(false)
             }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
@@ -467,7 +569,7 @@ impl CPU {
             }
         };
 
-        self.store_register(register, value);
+        self.set_register(register, value);
 
         self.state = ExecutionState::FetchOpcode;
         self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -488,14 +590,14 @@ impl CPU {
             }
         };
 
-        self.store_register(destination, value);
+        self.set_register(destination, value);
 
         self.state = ExecutionState::FetchOpcode;
 
         Ok(true)
     }
 
-    fn store_register(&mut self, destination: Register, value: u8) {
+    fn set_register(&mut self, destination: Register, value: u8) {
         match destination {
             Register::A => self.registers.a = value,
             Register::B => self.registers.b = value,
@@ -507,7 +609,7 @@ impl CPU {
         }
     }
 
-    fn register(&self, register: Register) -> u8 {
+    fn get_register(&self, register: Register) -> u8 {
         match register {
             Register::A => self.registers.a,
             Register::B => self.registers.b,
@@ -615,11 +717,11 @@ impl CPU {
         match operation {
             ArithmeticKind::Add { carry } => {
                 let result = self.add(left, right, carry);
-                self.store_register(Register::A, result);
+                self.set_register(Register::A, result);
             }
             ArithmeticKind::Sub { carry } => {
                 let result = self.sub(left, right, carry);
-                self.store_register(Register::A, result);
+                self.set_register(Register::A, result);
             }
             ArithmeticKind::Compare => {
                 self.sub(left, right, false);

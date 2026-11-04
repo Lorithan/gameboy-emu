@@ -69,6 +69,14 @@ impl JumpCondition {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PushOperand {
+    BC,
+    DE,
+    HL,
+    AF,
+}
+
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -96,6 +104,12 @@ pub(super) enum DecodedOpcode {
         condition: JumpCondition,
     },
     JumpHL,
+    Push {
+        operand: PushOperand,
+    },
+    Pop {
+        operand: PushOperand,
+    },
     Unknown,
 }
 
@@ -239,11 +253,17 @@ impl From<u8> for DecodedOpcode {
                     operand: Operand::Target(Target::from_bits(value)),
                 }
             }
+            0xC1 => DecodedOpcode::Pop {
+                operand: PushOperand::BC,
+            },
             0xC2 => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NZ,
             },
             0xC3 => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Always,
+            },
+            0xC5 => DecodedOpcode::Push {
+                operand: PushOperand::BC,
             },
             0xC6 => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: false },
@@ -256,8 +276,14 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Add { carry: true },
                 operand: Operand::Immediate,
             },
+            0xD1 => DecodedOpcode::Pop {
+                operand: PushOperand::DE,
+            },
             0xD2 => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NC,
+            },
+            0xD5 => DecodedOpcode::Push {
+                operand: PushOperand::DE,
             },
             0xD6 => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: false },
@@ -270,7 +296,19 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Sub { carry: true },
                 operand: Operand::Immediate,
             },
+            0xE1 => DecodedOpcode::Pop {
+                operand: PushOperand::HL,
+            },
+            0xE5 => DecodedOpcode::Push {
+                operand: PushOperand::HL,
+            },
             0xE9 => DecodedOpcode::JumpHL,
+            0xF1 => DecodedOpcode::Pop {
+                operand: PushOperand::AF,
+            },
+            0xF5 => DecodedOpcode::Push {
+                operand: PushOperand::AF,
+            },
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,
