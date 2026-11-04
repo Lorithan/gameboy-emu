@@ -44,3 +44,11 @@ Missing opcode/operand data leaves PC, registers, flags, and pending decision/lo
 ## Implementation sequence
 
 Begin with unconditional C3 and its low/high operand states, reusing ApplyJump. Then add the four conditions and E9. User writes implementation; assistant writes tests and reviews. CALL, RET, RST, interrupts, stack operations, and other instruction families remain separate tasks.
+
+## Completion review — 2026-11-04
+
+All six opcodes are implemented correctly. The immediate path captures its condition, retains the low byte across reads, and reuses ApplyJump only when taken. JP HL assigns the register value during opcode completion. Shared condition evaluation and merged request arms preserve prior behavior. Flags storage is visible within the CPU module while its raw field and mutators remain encapsulated; its masking invariant is retained. No correctness findings remain.
+
+All 169 tests pass (121 unit, 48 integration). New coverage includes every immediate target for all five immediate opcodes with both all-clear/all-set flags (655,360 cases), every HL target with every flag combination (1,048,576 cases), and all condition/flag combinations at boundary PCs with missing-read retries and captured decisions/low bytes/targets. Independent opcode mappings and all-byte rejection checks pass.
+
+Public tests verify exact traces and completion phases, both conditional outcomes, all instruction-budget pause points, bounded self-loops, direct HL jumps into representative bus regions without extra accesses, and a mixed JR/JP/JP HL program that skips unsupported sentinels. The mixed program completes in 48 ticks. Existing arithmetic, bus, fault, and JR regressions pass. Formatting passes; Clippy reports only existing unused set_af. The assistant changed tests and documentation only. Complete locally, not yet committed or pushed.

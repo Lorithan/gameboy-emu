@@ -33,6 +33,13 @@ enum ExecutionState {
         destination: Register16,
         low: u8,
     },
+    ReadJumpLow {
+        taken: bool,
+    },
+    ReadJumpHigh {
+        taken: bool,
+        low: u8,
+    },
     ReadMemory {
         addr: u16,
         destination: Register,
@@ -115,29 +122,21 @@ impl CPU {
 
     pub fn request_cycle(&self) -> Result<CycleAction, CpuError> {
         match self.state {
-            FetchOpcode => Ok(CycleAction::Read {
+            FetchOpcode
+            | ReadDisplacement { .. }
+            | ReadImmediate8 { .. }
+            | ReadImmediate16Low { .. }
+            | ReadJumpLow { .. }
+            | ReadJumpHigh { .. }
+            | ReadImmediate16High { .. }
+            | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
-            ReadDisplacement { .. } => Ok(CycleAction::Read {
-                addr: self.registers.pc,
-            }),
-            ApplyJump { .. } => Ok(CycleAction::Idle),
-            ReadImmediate8 { .. } => Ok(CycleAction::Read {
-                addr: self.registers.pc,
-            }),
-            ReadImmediate16Low { .. } => Ok(CycleAction::Read {
-                addr: self.registers.pc,
-            }),
-            ReadImmediate16High { .. } => Ok(CycleAction::Read {
-                addr: self.registers.pc,
-            }),
-            ReadMemory { addr, .. } => Ok(CycleAction::Read { addr }),
-            ReadOperation { addr, .. } => Ok(CycleAction::Read { addr }),
-            ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
-                addr: self.registers.pc,
-            }),
-            ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
+            ReadMemory { addr, .. }
+            | ReadOperation { addr, .. }
+            | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
+            ApplyJump { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -208,6 +207,42 @@ impl CPU {
             }
             ReadImmediate16High { destination, low } => {
                 self.store_immediate_word(destination, low, read_value)
+            }
+            ReadJumpLow { taken } => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadJumpHigh { taken, low: value };
+                Ok(false)
+            }
+            ReadJumpHigh { taken, low } => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                if taken {
+                    self.state = ApplyJump {
+                        target: ((value as u16) << 8) | low as u16,
+                    };
+                    Ok(false)
+                } else {
+                    self.state = FetchOpcode;
+                    Ok(true)
+                }
             }
             ReadMemory { destination, addr } => self.store_fetched(destination, addr, read_value),
             ReadOperation { addr, operation } => {
@@ -392,16 +427,20 @@ impl CPU {
                 }
             }
             DecodedOpcode::RelativeJump { condition } => {
-                let taken = match condition {
-                    JumpCondition::Always => true,
-                    JumpCondition::Z => self.registers.get_flag(Flag::Z),
-                    JumpCondition::NZ => !self.registers.get_flag(Flag::Z),
-                    JumpCondition::C => self.registers.get_flag(Flag::C),
-                    JumpCondition::NC => !self.registers.get_flag(Flag::C),
-                };
+                let taken = condition.jump(self.registers.f);
 
                 self.state = ReadDisplacement { taken };
                 Ok(false)
+            }
+            DecodedOpcode::AbsoluteJump { condition } => {
+                let taken = condition.jump(self.registers.f);
+
+                self.state = ReadJumpLow { taken };
+                Ok(false)
+            }
+            DecodedOpcode::JumpHL => {
+                self.registers.set_pc(self.registers.hl());
+                Ok(true)
             }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {

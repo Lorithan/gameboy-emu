@@ -1,4 +1,7 @@
-use crate::cpu::{Register, registers::Register16};
+use crate::cpu::{
+    Register,
+    registers::{Flag, Flags, Register16},
+};
 
 #[cfg(test)]
 mod tests;
@@ -54,6 +57,18 @@ pub(super) enum JumpCondition {
     NC,
 }
 
+impl JumpCondition {
+    pub(super) fn jump(&self, flag: Flags) -> bool {
+        match self {
+            JumpCondition::Always => true,
+            JumpCondition::Z => flag.get(Flag::Z),
+            JumpCondition::NZ => !flag.get(Flag::Z),
+            JumpCondition::C => flag.get(Flag::C),
+            JumpCondition::NC => !flag.get(Flag::C),
+        }
+    }
+}
+
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -77,6 +92,10 @@ pub(super) enum DecodedOpcode {
     RelativeJump {
         condition: JumpCondition,
     },
+    AbsoluteJump {
+        condition: JumpCondition,
+    },
+    JumpHL,
     Unknown,
 }
 
@@ -220,22 +239,38 @@ impl From<u8> for DecodedOpcode {
                     operand: Operand::Target(Target::from_bits(value)),
                 }
             }
+            0xC2 => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::NZ,
+            },
+            0xC3 => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::Always,
+            },
             0xC6 => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: false },
                 operand: Operand::Immediate,
+            },
+            0xCA => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::Z,
             },
             0xCE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: true },
                 operand: Operand::Immediate,
             },
+            0xD2 => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::NC,
+            },
             0xD6 => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: false },
                 operand: Operand::Immediate,
+            },
+            0xDA => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::C,
             },
             0xDE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: true },
                 operand: Operand::Immediate,
             },
+            0xE9 => DecodedOpcode::JumpHL,
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,

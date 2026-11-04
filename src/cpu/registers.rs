@@ -21,14 +21,14 @@ impl Flag {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Flags(u8);
+pub(super) struct Flags(u8);
 
 impl Flags {
     fn new(val: u8) -> Self {
         Flags(val & 0xF0)
     }
 
-    fn get(self, flag: Flag) -> bool {
+    pub(super) fn get(self, flag: Flag) -> bool {
         self.0 & flag.mask() != 0
     }
 
@@ -67,7 +67,7 @@ pub struct Registers {
     pub(super) c: u8,
     pub(super) d: u8,
     pub(super) e: u8,
-    f: Flags,
+    pub(super) f: Flags,
     pub(super) h: u8,
     pub(super) l: u8,
     /// Program counter
