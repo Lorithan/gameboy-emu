@@ -1,6 +1,7 @@
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers, opcode::DecodedOpcode,
-    registers::RegisterValue,
+    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    opcode::{DecodedOpcode, Target},
+    registers::Register,
 };
 
 // Independent reference matrix: rows are destinations, columns are sources,
@@ -69,14 +70,14 @@ fn with_byte(mut snapshot: CpuSnapShot, index: usize, value: u8) -> CpuSnapShot 
 #[test]
 fn explicit_transfer_matrix_decodes_every_direction_and_excludes_halt() {
     let registers = [
-        Some(RegisterValue::B),
-        Some(RegisterValue::C),
-        Some(RegisterValue::D),
-        Some(RegisterValue::E),
-        Some(RegisterValue::H),
-        Some(RegisterValue::L),
+        Some(Register::B),
+        Some(Register::C),
+        Some(Register::D),
+        Some(Register::E),
+        Some(Register::H),
+        Some(Register::L),
         None,
-        Some(RegisterValue::A),
+        Some(Register::A),
     ];
     for (destination, row) in OPCODES.iter().enumerate() {
         for (source, &opcode) in row.iter().enumerate() {
@@ -88,9 +89,9 @@ fn explicit_transfer_matrix_decodes_every_direction_and_excludes_halt() {
                 (
                     Some(expected_destination),
                     Some(expected_source),
-                    DecodedOpcode::LoadRegister {
-                        source,
-                        destination,
+                    DecodedOpcode::Load {
+                        source: Target::Register(source),
+                        destination: Target::Register(destination),
                     },
                 ) => {
                     assert_eq!(
@@ -99,10 +100,24 @@ fn explicit_transfer_matrix_decodes_every_direction_and_excludes_halt() {
                         "opcode {opcode:02X}"
                     );
                 }
-                (Some(expected), None, DecodedOpcode::LoadFromHL { destination }) => {
+                (
+                    Some(expected),
+                    None,
+                    DecodedOpcode::Load {
+                        destination: Target::Register(destination),
+                        source: Target::IndirectHL,
+                    },
+                ) => {
                     assert_eq!(destination, expected)
                 }
-                (None, Some(expected), DecodedOpcode::StoreToHL { source: from }) => {
+                (
+                    None,
+                    Some(expected),
+                    DecodedOpcode::Load {
+                        destination: Target::IndirectHL,
+                        source: Target::Register(from),
+                    },
+                ) => {
                     assert_eq!(from, expected)
                 }
                 (None, None, DecodedOpcode::Unknown) => assert_eq!(opcode, 0x76),

@@ -1,4 +1,7 @@
-use crate::cpu::{CPU, CpuError, CpuSnapShot, CycleAction, Registers, opcode::DecodedOpcode};
+use crate::cpu::{
+    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
+};
 
 const CASES: [(u8, bool, bool); 4] = [
     (0x86, true, false),
@@ -33,15 +36,33 @@ fn reference(mut snapshot: CpuSnapShot, left: u8, right: u8, add: bool) -> CpuSn
 
 #[test]
 fn operand_source_mappings_are_explicit() {
-    assert!(matches!(DecodedOpcode::from(0x86), DecodedOpcode::AddHL));
-    assert!(matches!(DecodedOpcode::from(0x96), DecodedOpcode::SubHL));
+    assert!(matches!(
+        DecodedOpcode::from(0x86),
+        DecodedOpcode::Arithmetic {
+            kind: ArithmeticKind::Add { carry: false },
+            operand: Operand::Target(Target::IndirectHL)
+        }
+    ));
+    assert!(matches!(
+        DecodedOpcode::from(0x96),
+        DecodedOpcode::Arithmetic {
+            kind: ArithmeticKind::Sub { carry: false },
+            operand: Operand::Target(Target::IndirectHL)
+        }
+    ));
     assert!(matches!(
         DecodedOpcode::from(0xC6),
-        DecodedOpcode::AddImmediate
+        DecodedOpcode::Arithmetic {
+            kind: ArithmeticKind::Add { carry: false },
+            operand: Operand::Immediate
+        }
     ));
     assert!(matches!(
         DecodedOpcode::from(0xD6),
-        DecodedOpcode::SubImmediate
+        DecodedOpcode::Arithmetic {
+            kind: ArithmeticKind::Sub { carry: false },
+            operand: Operand::Immediate
+        }
     ));
 }
 

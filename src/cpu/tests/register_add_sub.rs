@@ -1,19 +1,20 @@
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers, opcode::DecodedOpcode,
-    registers::RegisterValue,
+    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
+    registers::Register,
 };
 
-const CASES: [(u8, u8, RegisterValue); 7] = [
-    (0x80, 0x90, RegisterValue::B),
-    (0x81, 0x91, RegisterValue::C),
-    (0x82, 0x92, RegisterValue::D),
-    (0x83, 0x93, RegisterValue::E),
-    (0x84, 0x94, RegisterValue::H),
-    (0x85, 0x95, RegisterValue::L),
-    (0x87, 0x97, RegisterValue::A),
+const CASES: [(u8, u8, Register); 7] = [
+    (0x80, 0x90, Register::B),
+    (0x81, 0x91, Register::C),
+    (0x82, 0x92, Register::D),
+    (0x83, 0x93, Register::E),
+    (0x84, 0x94, Register::H),
+    (0x85, 0x95, Register::L),
+    (0x87, 0x97, Register::A),
 ];
 
-fn machine(left: u8, right: u8, source: RegisterValue, flags: u8, pc: u16) -> CPU {
+fn machine(left: u8, right: u8, source: Register, flags: u8, pc: u16) -> CPU {
     let mut registers = Registers::dmg_post_boot(1);
     registers.set_af(u16::from(left) << 8 | u16::from(flags));
     registers.set_bc(0x1234);
@@ -22,13 +23,13 @@ fn machine(left: u8, right: u8, source: RegisterValue, flags: u8, pc: u16) -> CP
     registers.pc = pc;
     registers.sp = 0xDEF0;
     match source {
-        RegisterValue::B => registers.b = right,
-        RegisterValue::C => registers.c = right,
-        RegisterValue::D => registers.d = right,
-        RegisterValue::E => registers.e = right,
-        RegisterValue::H => registers.h = right,
-        RegisterValue::L => registers.l = right,
-        RegisterValue::A => assert_eq!(left, right, "self-source inputs must alias"),
+        Register::B => registers.b = right,
+        Register::C => registers.c = right,
+        Register::D => registers.d = right,
+        Register::E => registers.e = right,
+        Register::H => registers.h = right,
+        Register::L => registers.l = right,
+        Register::A => assert_eq!(left, right, "self-source inputs must alias"),
     }
     CPU::from_registers(registers)
 }
@@ -53,10 +54,10 @@ fn reference(mut snapshot: CpuSnapShot, left: u8, right: u8, add: bool) -> CpuSn
 fn add_sub_register_mappings_and_exclusions_are_explicit() {
     for (add, sub, source) in CASES {
         assert!(
-            matches!(DecodedOpcode::from(add), DecodedOpcode::AddRegister(actual) if actual == source)
+            matches!(DecodedOpcode::from(add), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
         );
         assert!(
-            matches!(DecodedOpcode::from(sub), DecodedOpcode::SubRegister(actual) if actual == source)
+            matches!(DecodedOpcode::from(sub), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
         );
     }
     for byte in [0xA0, 0xA8, 0x76] {
@@ -67,7 +68,7 @@ fn add_sub_register_mappings_and_exclusions_are_explicit() {
 fn check_all_pairs(add: bool) {
     for (add_opcode, sub_opcode, source) in CASES
         .into_iter()
-        .filter(|(_, _, source)| *source != RegisterValue::A)
+        .filter(|(_, _, source)| *source != Register::A)
     {
         let opcode = if add { add_opcode } else { sub_opcode };
         for left in 0u8..=255 {
@@ -102,7 +103,7 @@ fn self_source_reads_original_a_twice_and_overwrites_all_initial_flags() {
     for (opcode, add) in [(0x87, true), (0x97, false)] {
         for value in 0u8..=255 {
             for combination in 0u8..16 {
-                let mut cpu = machine(value, value, RegisterValue::A, combination << 4, 0x0100);
+                let mut cpu = machine(value, value, Register::A, combination << 4, 0x0100);
                 let expected = reference(cpu.snapshot(), value, value, add);
                 assert!(
                     cpu.complete_cycle(Some(opcode))
@@ -120,7 +121,7 @@ fn boundaries_overwrite_all_flags_and_opcode_retry_wraps_pc() {
         for (opcode, add) in [(add_opcode, true), (sub_opcode, false)] {
             for left in [0u8, 1, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF] {
                 for right in [0u8, 1, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF] {
-                    if source == RegisterValue::A && left != right {
+                    if source == Register::A && left != right {
                         continue;
                     }
                     for combination in 0u8..16 {

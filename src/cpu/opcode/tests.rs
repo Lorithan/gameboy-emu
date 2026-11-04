@@ -1,21 +1,25 @@
-use super::{DecodedOpcode, RegisterValue, WordValue};
+use super::{DecodedOpcode, Register, Target, UnaryOperation, WordValue};
 
 #[test]
 fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
     assert!(matches!(
         DecodedOpcode::from(0x36),
-        DecodedOpcode::StoreImmediateHL
+        DecodedOpcode::LoadImmediate {
+            destination: Target::IndirectHL
+        }
     ));
     assert!(matches!(
         DecodedOpcode::from(0x77),
-        DecodedOpcode::StoreToHL {
-            source: RegisterValue::A
+        DecodedOpcode::Load {
+            destination: Target::IndirectHL,
+            source: Target::Register(Register::A)
         }
     ));
     assert!(matches!(
         DecodedOpcode::from(0x7E),
-        DecodedOpcode::LoadFromHL {
-            destination: RegisterValue::A
+        DecodedOpcode::Load {
+            destination: Target::Register(Register::A),
+            source: Target::IndirectHL
         }
     ));
 }
@@ -24,16 +28,18 @@ fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
 fn known_opcode_bytes_decode_to_the_expected_operation_and_destination() {
     assert!(matches!(DecodedOpcode::from(0), DecodedOpcode::Nop));
     for (byte, expected) in [
-        (0x06, RegisterValue::B),
-        (0x0E, RegisterValue::C),
-        (0x16, RegisterValue::D),
-        (0x1E, RegisterValue::E),
-        (0x26, RegisterValue::H),
-        (0x2E, RegisterValue::L),
-        (0x3E, RegisterValue::A),
+        (0x06, Register::B),
+        (0x0E, Register::C),
+        (0x16, Register::D),
+        (0x1E, Register::E),
+        (0x26, Register::H),
+        (0x2E, Register::L),
+        (0x3E, Register::A),
     ] {
         match DecodedOpcode::from(byte) {
-            DecodedOpcode::LoadImmediate { destination } => assert_eq!(destination, expected),
+            DecodedOpcode::LoadImmediate {
+                destination: Target::Register(register),
+            } => assert_eq!(register, expected),
             _ => panic!("opcode {byte:#04X} did not decode as an immediate register load"),
         }
     }
@@ -99,10 +105,16 @@ fn every_other_byte_remains_explicitly_unknown() {
 fn memory_inc_dec_opcodes_have_the_correct_operation() {
     assert!(matches!(
         DecodedOpcode::from(0x34),
-        DecodedOpcode::IncrementHL
+        DecodedOpcode::Unary {
+            operation: UnaryOperation::Increment,
+            target: Target::IndirectHL
+        }
     ));
     assert!(matches!(
         DecodedOpcode::from(0x35),
-        DecodedOpcode::DecrementHL
+        DecodedOpcode::Unary {
+            operation: UnaryOperation::Decrement,
+            target: Target::IndirectHL
+        }
     ));
 }

@@ -1,25 +1,25 @@
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
-    opcode::DecodedOpcode,
-    registers::{FlagValue, RegisterValue},
+    opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
+    registers::{FlagValue, Register},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Source {
-    Register(RegisterValue),
+    Register(Register),
     Memory,
     Immediate,
 }
 
 const CASES: [(u8, u8, Source); 9] = [
-    (0x88, 0x98, Source::Register(RegisterValue::B)),
-    (0x89, 0x99, Source::Register(RegisterValue::C)),
-    (0x8A, 0x9A, Source::Register(RegisterValue::D)),
-    (0x8B, 0x9B, Source::Register(RegisterValue::E)),
-    (0x8C, 0x9C, Source::Register(RegisterValue::H)),
-    (0x8D, 0x9D, Source::Register(RegisterValue::L)),
+    (0x88, 0x98, Source::Register(Register::B)),
+    (0x89, 0x99, Source::Register(Register::C)),
+    (0x8A, 0x9A, Source::Register(Register::D)),
+    (0x8B, 0x9B, Source::Register(Register::E)),
+    (0x8C, 0x9C, Source::Register(Register::H)),
+    (0x8D, 0x9D, Source::Register(Register::L)),
     (0x8E, 0x9E, Source::Memory),
-    (0x8F, 0x9F, Source::Register(RegisterValue::A)),
+    (0x8F, 0x9F, Source::Register(Register::A)),
     (0xCE, 0xDE, Source::Immediate),
 ];
 
@@ -32,13 +32,13 @@ fn machine(left: u8, right: u8, source: Source, flags: u8, pc: u16) -> CPU {
     registers.pc = pc;
     registers.sp = 0xDEF0;
     match source {
-        Source::Register(RegisterValue::B) => registers.b = right,
-        Source::Register(RegisterValue::C) => registers.c = right,
-        Source::Register(RegisterValue::D) => registers.d = right,
-        Source::Register(RegisterValue::E) => registers.e = right,
-        Source::Register(RegisterValue::H) => registers.h = right,
-        Source::Register(RegisterValue::L) => registers.l = right,
-        Source::Register(RegisterValue::A) => assert_eq!(left, right),
+        Source::Register(Register::B) => registers.b = right,
+        Source::Register(Register::C) => registers.c = right,
+        Source::Register(Register::D) => registers.d = right,
+        Source::Register(Register::E) => registers.e = right,
+        Source::Register(Register::H) => registers.h = right,
+        Source::Register(Register::L) => registers.l = right,
+        Source::Register(Register::A) => assert_eq!(left, right),
         Source::Memory | Source::Immediate => {}
     }
     CPU::from_registers(registers)
@@ -77,30 +77,42 @@ fn carry_arithmetic_decodes_each_register_memory_and_immediate_source() {
         match source {
             Source::Register(register) => {
                 assert!(
-                    matches!(DecodedOpcode::from(adc), DecodedOpcode::AddRegisterCarry(actual) if actual == register)
+                    matches!(DecodedOpcode::from(adc), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
                 );
                 assert!(
-                    matches!(DecodedOpcode::from(sbc), DecodedOpcode::SubRegisterCarry(actual) if actual == register)
+                    matches!(DecodedOpcode::from(sbc), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
                 );
             }
             Source::Memory => {
                 assert!(matches!(
                     DecodedOpcode::from(adc),
-                    DecodedOpcode::AddHLCarry
+                    DecodedOpcode::Arithmetic {
+                        kind: ArithmeticKind::Add { carry: true },
+                        operand: Operand::Target(Target::IndirectHL)
+                    }
                 ));
                 assert!(matches!(
                     DecodedOpcode::from(sbc),
-                    DecodedOpcode::SubHLCarry
+                    DecodedOpcode::Arithmetic {
+                        kind: ArithmeticKind::Sub { carry: true },
+                        operand: Operand::Target(Target::IndirectHL)
+                    }
                 ));
             }
             Source::Immediate => {
                 assert!(matches!(
                     DecodedOpcode::from(adc),
-                    DecodedOpcode::AddImmediateCarry
+                    DecodedOpcode::Arithmetic {
+                        kind: ArithmeticKind::Add { carry: true },
+                        operand: Operand::Immediate
+                    }
                 ));
                 assert!(matches!(
                     DecodedOpcode::from(sbc),
-                    DecodedOpcode::SubImmediateCarry
+                    DecodedOpcode::Arithmetic {
+                        kind: ArithmeticKind::Sub { carry: true },
+                        operand: Operand::Immediate
+                    }
                 ));
             }
         }
@@ -110,7 +122,7 @@ fn carry_arithmetic_decodes_each_register_memory_and_immediate_source() {
 fn all_pairs(add: bool) {
     for (adc, sbc, source) in CASES
         .into_iter()
-        .filter(|(_, _, source)| *source != Source::Register(RegisterValue::A))
+        .filter(|(_, _, source)| *source != Source::Register(Register::A))
     {
         let opcode = if add { adc } else { sbc };
         for left in 0u8..=255 {
@@ -144,7 +156,7 @@ fn sbc_all_operand_pairs_and_carry_inputs_match_independent_reference() {
 
 #[test]
 fn self_source_uses_original_a_twice_for_every_value_and_initial_flags() {
-    let source = Source::Register(RegisterValue::A);
+    let source = Source::Register(Register::A);
     for (opcode, add) in [(0x8F, true), (0x9F, false)] {
         for value in 0u8..=255 {
             for combination in 0u8..16 {
@@ -220,7 +232,7 @@ fn carry_boundaries_ignore_stale_znh_flags_and_wrap_opcode_pc() {
         for (opcode, add) in [(adc, true), (sbc, false)] {
             for left in [0u8, 1, 0x0F, 0x10, 0xFE, 0xFF] {
                 for right in [0u8, 1, 0x0F, 0x10, 0xFE, 0xFF] {
-                    if source == Source::Register(RegisterValue::A) && left != right {
+                    if source == Source::Register(Register::A) && left != right {
                         continue;
                     }
                     for combination in 0u8..16 {

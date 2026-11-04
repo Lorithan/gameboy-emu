@@ -1,4 +1,4 @@
-use super::registers::{RegisterValue, WordValue};
+use super::registers::{Register, WordValue};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
 mod adc_sbc;
@@ -159,7 +159,7 @@ fn immediate_completion_wraps_pc() {
     registers.pc = 0xFFFF;
     let mut cpu = CPU::from_registers(registers);
     cpu.state = ExecutionState::ReadImmediate8 {
-        destination: Destination::Register(RegisterValue::A),
+        target: Destination::Register(Register::A),
     };
     assert!(
         cpu.complete_cycle(Some(0x42))
@@ -174,7 +174,7 @@ fn missing_read_value_returns_an_error_without_mutating_cpu() {
     for state in [
         ExecutionState::FetchOpcode,
         ExecutionState::ReadImmediate8 {
-            destination: Destination::Register(RegisterValue::A),
+            target: Destination::Register(Register::A),
         },
     ] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0));
@@ -389,7 +389,7 @@ fn missing_immediate_store_operand_reports_pc_and_preserves_pending_state() {
     // Isolate operand handling; public tests cover the opcode transition.
     let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
     cpu.state = ExecutionState::ReadImmediate8 {
-        destination: Destination::Memory(0x014D),
+        target: Destination::Memory(0x014D),
     };
     let pending = cpu.snapshot();
     assert!(matches!(
@@ -426,7 +426,7 @@ fn pending_memory_read_uses_its_captured_address_for_requests_and_errors() {
     // for future non-HL addressing. No current instruction changes HL here.
     cpu.state = ExecutionState::ReadMemory {
         addr: 0xC123,
-        destination: RegisterValue::A,
+        destination: Register::A,
     };
     let pending = cpu.snapshot();
     for _ in 0..2 {

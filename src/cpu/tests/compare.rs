@@ -1,24 +1,25 @@
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers, opcode::DecodedOpcode,
-    registers::RegisterValue,
+    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
+    registers::Register,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Source {
-    Register(RegisterValue),
+    Register(Register),
     Memory,
     Immediate,
 }
 
 const CASES: [(u8, Source); 9] = [
-    (0xB8, Source::Register(RegisterValue::B)),
-    (0xB9, Source::Register(RegisterValue::C)),
-    (0xBA, Source::Register(RegisterValue::D)),
-    (0xBB, Source::Register(RegisterValue::E)),
-    (0xBC, Source::Register(RegisterValue::H)),
-    (0xBD, Source::Register(RegisterValue::L)),
+    (0xB8, Source::Register(Register::B)),
+    (0xB9, Source::Register(Register::C)),
+    (0xBA, Source::Register(Register::D)),
+    (0xBB, Source::Register(Register::E)),
+    (0xBC, Source::Register(Register::H)),
+    (0xBD, Source::Register(Register::L)),
     (0xBE, Source::Memory),
-    (0xBF, Source::Register(RegisterValue::A)),
+    (0xBF, Source::Register(Register::A)),
     (0xFE, Source::Immediate),
 ];
 
@@ -31,13 +32,13 @@ fn machine(left: u8, right: u8, source: Source, flags: u8, pc: u16) -> CPU {
     registers.pc = pc;
     registers.sp = 0xDEF0;
     match source {
-        Source::Register(RegisterValue::B) => registers.b = right,
-        Source::Register(RegisterValue::C) => registers.c = right,
-        Source::Register(RegisterValue::D) => registers.d = right,
-        Source::Register(RegisterValue::E) => registers.e = right,
-        Source::Register(RegisterValue::H) => registers.h = right,
-        Source::Register(RegisterValue::L) => registers.l = right,
-        Source::Register(RegisterValue::A) => assert_eq!(left, right),
+        Source::Register(Register::B) => registers.b = right,
+        Source::Register(Register::C) => registers.c = right,
+        Source::Register(Register::D) => registers.d = right,
+        Source::Register(Register::E) => registers.e = right,
+        Source::Register(Register::H) => registers.h = right,
+        Source::Register(Register::L) => registers.l = right,
+        Source::Register(Register::A) => assert_eq!(left, right),
         Source::Memory | Source::Immediate => {}
     }
     CPU::from_registers(registers)
@@ -59,15 +60,21 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
     for (opcode, source) in CASES {
         match source {
             Source::Register(register) => assert!(
-                matches!(DecodedOpcode::from(opcode), DecodedOpcode::Compare(actual) if actual == register)
+                matches!(DecodedOpcode::from(opcode), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Compare, operand: Operand::Target(Target::Register(actual)) } if actual == register)
             ),
             Source::Memory => assert!(matches!(
                 DecodedOpcode::from(opcode),
-                DecodedOpcode::CompareHL
+                DecodedOpcode::Arithmetic {
+                    kind: ArithmeticKind::Compare,
+                    operand: Operand::Target(Target::IndirectHL)
+                }
             )),
             Source::Immediate => assert!(matches!(
                 DecodedOpcode::from(opcode),
-                DecodedOpcode::CompareImmediate
+                DecodedOpcode::Arithmetic {
+                    kind: ArithmeticKind::Compare,
+                    operand: Operand::Immediate
+                }
             )),
         }
     }
@@ -80,7 +87,7 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
 fn comparison_all_operand_pairs_change_only_flags_and_pc() {
     for (opcode, source) in CASES
         .into_iter()
-        .filter(|(_, source)| *source != Source::Register(RegisterValue::A))
+        .filter(|(_, source)| *source != Source::Register(Register::A))
     {
         for left in 0u8..=255 {
             for right in 0u8..=255 {
@@ -124,7 +131,7 @@ fn self_comparison_preserves_every_a_value_and_overwrites_all_flags() {
             let mut cpu = machine(
                 value,
                 value,
-                Source::Register(RegisterValue::A),
+                Source::Register(Register::A),
                 combination << 4,
                 0x0100,
             );
@@ -142,7 +149,7 @@ fn comparison_boundaries_ignore_carry_and_retain_reads_across_retry_and_wrap() {
     for (opcode, source) in CASES {
         for left in [0u8, 1, 0x0F, 0x10, 0x80, 0xFF] {
             for right in [0u8, 1, 0x0F, 0x10, 0x80, 0xFF] {
-                if source == Source::Register(RegisterValue::A) && left != right {
+                if source == Source::Register(Register::A) && left != right {
                     continue;
                 }
                 for combination in 0u8..16 {

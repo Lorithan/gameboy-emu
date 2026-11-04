@@ -67,7 +67,7 @@ pub enum FlagValue {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum RegisterValue {
+pub(super) enum Register {
     A,
     B,
     C,
@@ -155,11 +155,11 @@ impl Registers {
         self.h = ((hl >> 8) & 0xFF) as u8;
     }
 
-    pub fn set_pc(&mut self, pc: u16) {
+    pub(super) fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
     }
 
-    pub fn set_sp(&mut self, sp: u16) {
+    pub(super) fn set_sp(&mut self, sp: u16) {
         self.sp = sp
     }
 

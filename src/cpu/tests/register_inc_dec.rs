@@ -1,19 +1,20 @@
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers, opcode::DecodedOpcode,
-    registers::RegisterValue,
+    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    opcode::{DecodedOpcode, Target, UnaryOperation},
+    registers::Register,
 };
 
-const CASES: [(u8, u8, RegisterValue); 7] = [
-    (0x04, 0x05, RegisterValue::B),
-    (0x0C, 0x0D, RegisterValue::C),
-    (0x14, 0x15, RegisterValue::D),
-    (0x1C, 0x1D, RegisterValue::E),
-    (0x24, 0x25, RegisterValue::H),
-    (0x2C, 0x2D, RegisterValue::L),
-    (0x3C, 0x3D, RegisterValue::A),
+const CASES: [(u8, u8, Register); 7] = [
+    (0x04, 0x05, Register::B),
+    (0x0C, 0x0D, Register::C),
+    (0x14, 0x15, Register::D),
+    (0x1C, 0x1D, Register::E),
+    (0x24, 0x25, Register::H),
+    (0x2C, 0x2D, Register::L),
+    (0x3C, 0x3D, Register::A),
 ];
 
-fn machine(target: RegisterValue, value: u8, flags: u8, pc: u16) -> CPU {
+fn machine(target: Register, value: u8, flags: u8, pc: u16) -> CPU {
     let mut registers = Registers::dmg_post_boot(1);
     registers.set_af(0xA700 | u16::from(flags));
     registers.set_bc(0x1234);
@@ -22,23 +23,18 @@ fn machine(target: RegisterValue, value: u8, flags: u8, pc: u16) -> CPU {
     registers.pc = pc;
     registers.sp = 0xDEF0;
     match target {
-        RegisterValue::A => registers.a = value,
-        RegisterValue::B => registers.b = value,
-        RegisterValue::C => registers.c = value,
-        RegisterValue::D => registers.d = value,
-        RegisterValue::E => registers.e = value,
-        RegisterValue::H => registers.h = value,
-        RegisterValue::L => registers.l = value,
+        Register::A => registers.a = value,
+        Register::B => registers.b = value,
+        Register::C => registers.c = value,
+        Register::D => registers.d = value,
+        Register::E => registers.e = value,
+        Register::H => registers.h = value,
+        Register::L => registers.l = value,
     }
     CPU::from_registers(registers)
 }
 
-fn expected(
-    mut snapshot: CpuSnapShot,
-    target: RegisterValue,
-    old: u8,
-    increment: bool,
-) -> CpuSnapShot {
+fn expected(mut snapshot: CpuSnapShot, target: Register, old: u8, increment: bool) -> CpuSnapShot {
     // Widened arithmetic is an independent reference; production uses u8.
     let delta = if increment { 1i16 } else { -1 };
     let result = (i16::from(old) + delta).rem_euclid(256) as u16;
@@ -50,13 +46,13 @@ fn expected(
         | if half { 0x20 } else { 0 };
     snapshot.af = (snapshot.af & 0xFF00) | flags;
     match target {
-        RegisterValue::A => snapshot.af = result << 8 | flags,
-        RegisterValue::B => snapshot.bc = result << 8 | (snapshot.bc & 0xFF),
-        RegisterValue::C => snapshot.bc = (snapshot.bc & 0xFF00) | result,
-        RegisterValue::D => snapshot.de = result << 8 | (snapshot.de & 0xFF),
-        RegisterValue::E => snapshot.de = (snapshot.de & 0xFF00) | result,
-        RegisterValue::H => snapshot.hl = result << 8 | (snapshot.hl & 0xFF),
-        RegisterValue::L => snapshot.hl = (snapshot.hl & 0xFF00) | result,
+        Register::A => snapshot.af = result << 8 | flags,
+        Register::B => snapshot.bc = result << 8 | (snapshot.bc & 0xFF),
+        Register::C => snapshot.bc = (snapshot.bc & 0xFF00) | result,
+        Register::D => snapshot.de = result << 8 | (snapshot.de & 0xFF),
+        Register::E => snapshot.de = (snapshot.de & 0xFF00) | result,
+        Register::H => snapshot.hl = result << 8 | (snapshot.hl & 0xFF),
+        Register::L => snapshot.hl = (snapshot.hl & 0xFF00) | result,
     }
     snapshot.pc = snapshot.pc.wrapping_add(1);
     snapshot
@@ -66,10 +62,10 @@ fn expected(
 fn inc_dec_opcode_mapping_is_explicit_for_every_register() {
     for (inc, dec, target) in CASES {
         assert!(
-            matches!(DecodedOpcode::from(inc), DecodedOpcode::Increment(register) if register == target)
+            matches!(DecodedOpcode::from(inc), DecodedOpcode::Unary { operation: UnaryOperation::Increment, target: Target::Register(register) } if register == target)
         );
         assert!(
-            matches!(DecodedOpcode::from(dec), DecodedOpcode::Decrement(register) if register == target)
+            matches!(DecodedOpcode::from(dec), DecodedOpcode::Unary { operation: UnaryOperation::Decrement, target: Target::Register(register) } if register == target)
         );
     }
     for unsupported in [0x03, 0x0B, 0x76] {

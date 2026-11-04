@@ -6,37 +6,19 @@ mod tests;
 
 pub use registers::Registers;
 
-use crate::cpu::{
-    opcode::DecodedOpcode,
-    registers::{RegisterValue, WordValue},
-};
+use crate::cpu::{opcode::*, registers::*};
 
 #[derive(Debug, Clone, Copy)]
 enum Destination {
-    Register(RegisterValue),
+    Register(Register),
     Memory(u16),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UnaryOperation {
-    Increment,
-    Decrement,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AccumulatorOperation {
-    Add,
-    Sub,
-    AddC(bool),
-    SubC(bool),
-    Compare,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum ExecutionState {
     FetchOpcode,
     ReadImmediate8 {
-        destination: Destination,
+        target: Destination,
     },
     ReadImmediate16Low {
         destination: WordValue,
@@ -47,7 +29,7 @@ enum ExecutionState {
     },
     ReadMemory {
         addr: u16,
-        destination: RegisterValue,
+        destination: Register,
     },
     ReadOperation {
         addr: u16,
@@ -55,21 +37,18 @@ enum ExecutionState {
     },
     ReadImmediateAccumulator {
         value: u8,
-        operation: AccumulatorOperation,
+        operation: ArithmeticKind,
     },
     ReadMemoryAccumulator {
         addr: u16,
         value: u8,
-        operation: AccumulatorOperation,
+        operation: ArithmeticKind,
     },
     WriteMemory {
         addr: u16,
         value: u8,
     },
-    Faulted {
-        opcode: u8,
-        addr: u16,
-    },
+    Faulted(CpuFault),
 }
 
 use ExecutionState::*;
@@ -93,8 +72,8 @@ pub enum CycleAction {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CpuFault {
-    opcode: u8,
-    addr: u16,
+    pub opcode: u8,
+    pub addr: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -149,32 +128,30 @@ impl CPU {
             }),
             ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
-            Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
+            Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
 
     pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
         match self.state {
             FetchOpcode => self.read_opcode(read_value),
-            ReadImmediate8 {
-                destination: Destination::Register(register),
-            } => self.store_immediate(register, read_value),
-            ReadImmediate8 {
-                destination: Destination::Memory(addr),
-            } => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+            ReadImmediate8 { target } => match target {
+                Destination::Register(register) => self.store_immediate(register, read_value),
+                Destination::Memory(addr) => {
+                    let value = match read_value {
+                        Some(byte) => byte,
+                        None => {
+                            return Err(CpuError::MissingReadValue {
+                                addr: self.registers.pc,
+                            });
+                        }
+                    };
 
-                self.state = ExecutionState::WriteMemory { addr, value };
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-                Ok(false)
-            }
+                    self.state = ExecutionState::WriteMemory { addr, value };
+                    self.registers.pc = self.registers.pc.wrapping_add(1);
+                    Ok(false)
+                }
+            },
             ReadImmediate16Low { destination } => {
                 let value = match read_value {
                     Some(byte) => byte,
@@ -212,10 +189,10 @@ impl CPU {
                 Ok(false)
             }
             ReadImmediateAccumulator {
-                value: a,
+                value: left,
                 operation,
             } => {
-                let b = match read_value {
+                let right = match read_value {
                     Some(byte) => byte,
                     None => {
                         return Err(CpuError::MissingReadValue {
@@ -224,27 +201,7 @@ impl CPU {
                     }
                 };
 
-                match operation {
-                    AccumulatorOperation::Add => {
-                        let result = self.add(a, b, false);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::Sub => {
-                        let result = self.sub(a, b, false);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::AddC(carry) => {
-                        let result = self.add(a, b, carry);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::SubC(carry) => {
-                        let result = self.sub(a, b, carry);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::Compare => {
-                        self.sub(a, b, false);
-                    }
-                }
+                self.execute_accumulator(operation, left, right);
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = FetchOpcode;
@@ -252,37 +209,17 @@ impl CPU {
             }
             ReadMemoryAccumulator {
                 addr,
-                value: a,
+                value: left,
                 operation,
             } => {
-                let b = match read_value {
+                let right = match read_value {
                     Some(byte) => byte,
                     None => {
                         return Err(CpuError::MissingReadValue { addr });
                     }
                 };
 
-                match operation {
-                    AccumulatorOperation::Add => {
-                        let result = self.add(a, b, false);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::Sub => {
-                        let result = self.sub(a, b, false);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::AddC(carry) => {
-                        let result = self.add(a, b, carry);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::SubC(carry) => {
-                        let result = self.sub(a, b, carry);
-                        self.store_register(RegisterValue::A, result);
-                    }
-                    AccumulatorOperation::Compare => {
-                        self.sub(a, b, false);
-                    }
-                }
+                self.execute_accumulator(operation, left, right);
 
                 self.state = FetchOpcode;
                 Ok(true)
@@ -291,7 +228,7 @@ impl CPU {
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
-            Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
+            Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
 
@@ -313,237 +250,124 @@ impl CPU {
                 self.state = ExecutionState::FetchOpcode;
                 Ok(true)
             }
-            DecodedOpcode::LoadRegister {
-                source,
+            DecodedOpcode::Load {
                 destination,
-            } => {
-                let value = self.register(source);
+                source,
+            } => match source {
+                Target::Register(register) => {
+                    let value = self.register(register);
 
-                self.store_register(destination, value);
+                    match destination {
+                        Target::Register(register) => {
+                            self.store_register(register, value);
+                            Ok(true)
+                        }
+                        Target::IndirectHL => {
+                            self.state = WriteMemory {
+                                addr: self.registers.hl(),
+                                value,
+                            };
+                            Ok(false)
+                        }
+                    }
+                }
+                Target::IndirectHL => {
+                    match destination {
+                        Target::Register(register) => {
+                            self.state = ReadMemory {
+                                addr: self.registers.hl(),
+                                destination: register,
+                            };
+                            Ok(false)
+                        }
 
-                self.state = ExecutionState::FetchOpcode;
-                Ok(true)
-            }
+                        Target::IndirectHL => unreachable!(), // Instead of LD (HL),(HL) 0x76 resolves to HALT
+                    }
+                }
+            },
             DecodedOpcode::LoadImmediate { destination } => {
-                self.state = ReadImmediate8 {
-                    destination: Destination::Register(destination),
+                let target = match destination {
+                    Target::Register(register) => Destination::Register(register),
+                    Target::IndirectHL => Destination::Memory(self.registers.hl()),
                 };
+                self.state = ReadImmediate8 { target };
                 Ok(false)
             }
             DecodedOpcode::LoadImmediateWord { destination } => {
                 self.state = ReadImmediate16Low { destination };
                 Ok(false)
             }
-            DecodedOpcode::LoadFromHL { destination } => {
-                self.state = ReadMemory {
-                    addr: self.registers.hl(),
-                    destination,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::StoreToHL { source } => {
-                let value = self.register(source);
+            DecodedOpcode::Unary { operation, target } => match target {
+                Target::Register(register) => {
+                    let mut value = self.register(register);
+                    value = match operation {
+                        UnaryOperation::Increment => self.increment(value),
+                        UnaryOperation::Decrement => self.decrement(value),
+                    };
+                    self.store_register(register, value);
 
-                self.state = ExecutionState::WriteMemory {
-                    addr: self.registers.hl(),
-                    value,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::StoreImmediateHL => {
-                self.state = ReadImmediate8 {
-                    destination: Destination::Memory(self.registers.hl()),
+                    self.state = FetchOpcode;
+                    Ok(true)
+                }
+                Target::IndirectHL => {
+                    self.state = ReadOperation {
+                        addr: self.registers.hl(),
+                        operation,
+                    };
+                    Ok(false)
+                }
+            },
+            DecodedOpcode::Arithmetic { kind, operand } => {
+                let operation = match kind {
+                    ArithmeticKind::Add { carry } => ArithmeticKind::Add {
+                        carry: carry && self.registers.get_flag(FlagValue::C),
+                    },
+                    ArithmeticKind::Sub { carry } => ArithmeticKind::Sub {
+                        carry: carry && self.registers.get_flag(FlagValue::C),
+                    },
+                    _ => kind,
                 };
 
-                Ok(false)
-            }
-            DecodedOpcode::Increment(register) => {
-                let mut value = self.register(register);
-                value = self.increment(value);
-                self.store_register(register, value);
+                match operand {
+                    Operand::Target(Target::Register(register)) => {
+                        let left = self.register(Register::A);
+                        let right = self.register(register);
 
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::Decrement(register) => {
-                let mut value = self.register(register);
-                value = self.decrement(value);
-                self.store_register(register, value);
+                        self.execute_accumulator(operation, left, right);
 
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::IncrementHL => {
-                self.state = ReadOperation {
-                    addr: self.registers.hl(),
-                    operation: UnaryOperation::Increment,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::DecrementHL => {
-                self.state = ReadOperation {
-                    addr: self.registers.hl(),
-                    operation: UnaryOperation::Decrement,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::AddRegister(register) => {
-                let a = self.register(RegisterValue::A);
-                let b = self.register(register);
-
-                let result = self.add(a, b, false);
-                self.store_register(RegisterValue::A, result);
-
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::AddRegisterCarry(register) => {
-                let a = self.register(RegisterValue::A);
-                let b = self.register(register);
-
-                let result = self.add(a, b, self.registers.get_flag(registers::FlagValue::C));
-                self.store_register(RegisterValue::A, result);
-
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::SubRegister(register) => {
-                let a = self.register(RegisterValue::A);
-                let b = self.register(register);
-
-                let result = self.sub(a, b, false);
-                self.store_register(RegisterValue::A, result);
-
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::SubRegisterCarry(register) => {
-                let a = self.register(RegisterValue::A);
-                let b = self.register(register);
-
-                let result = self.sub(a, b, self.registers.get_flag(registers::FlagValue::C));
-                self.store_register(RegisterValue::A, result);
-
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::AddHL => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadMemoryAccumulator {
-                    addr: self.registers.hl(),
-                    value,
-                    operation: AccumulatorOperation::Add,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::AddHLCarry => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadMemoryAccumulator {
-                    addr: self.registers.hl(),
-                    value,
-                    operation: AccumulatorOperation::AddC(
-                        self.registers.get_flag(registers::FlagValue::C),
-                    ),
-                };
-                Ok(false)
-            }
-            DecodedOpcode::SubHL => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadMemoryAccumulator {
-                    addr: self.registers.hl(),
-                    value,
-                    operation: AccumulatorOperation::Sub,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::SubHLCarry => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadMemoryAccumulator {
-                    addr: self.registers.hl(),
-                    value,
-                    operation: AccumulatorOperation::SubC(
-                        self.registers.get_flag(registers::FlagValue::C),
-                    ),
-                };
-                Ok(false)
-            }
-            DecodedOpcode::AddImmediate => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadImmediateAccumulator {
-                    value,
-                    operation: AccumulatorOperation::Add,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::AddImmediateCarry => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadImmediateAccumulator {
-                    value,
-                    operation: AccumulatorOperation::AddC(
-                        self.registers.get_flag(registers::FlagValue::C),
-                    ),
-                };
-                Ok(false)
-            }
-            DecodedOpcode::SubImmediate => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadImmediateAccumulator {
-                    value,
-                    operation: AccumulatorOperation::Sub,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::SubImmediateCarry => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadImmediateAccumulator {
-                    value,
-                    operation: AccumulatorOperation::SubC(
-                        self.registers.get_flag(registers::FlagValue::C),
-                    ),
-                };
-                Ok(false)
-            }
-            DecodedOpcode::Compare(register) => {
-                let a = self.register(RegisterValue::A);
-                let b = self.register(register);
-                self.sub(a, b, false);
-
-                self.state = FetchOpcode;
-                Ok(true)
-            }
-            DecodedOpcode::CompareHL => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadMemoryAccumulator {
-                    addr: self.registers.hl(),
-                    value,
-                    operation: AccumulatorOperation::Compare,
-                };
-                Ok(false)
-            }
-            DecodedOpcode::CompareImmediate => {
-                let value = self.register(RegisterValue::A);
-                self.state = ReadImmediateAccumulator {
-                    value,
-                    operation: AccumulatorOperation::Compare,
-                };
-                Ok(false)
+                        self.state = FetchOpcode;
+                        Ok(true)
+                    }
+                    Operand::Target(Target::IndirectHL) => {
+                        let value = self.register(Register::A);
+                        self.state = ReadMemoryAccumulator {
+                            addr: self.registers.hl(),
+                            value,
+                            operation,
+                        };
+                        Ok(false)
+                    }
+                    Operand::Immediate => {
+                        let value = self.register(Register::A);
+                        self.state = ReadImmediateAccumulator { value, operation };
+                        Ok(false)
+                    }
+                }
             }
             DecodedOpcode::Unknown => {
-                self.state = ExecutionState::Faulted {
+                let err = CpuFault {
                     opcode: byte,
                     addr: op_addr,
                 };
-                Err(CpuError::UnsupportedOpcode(CpuFault {
-                    opcode: byte,
-                    addr: op_addr,
-                }))
+                self.state = ExecutionState::Faulted(err);
+                Err(CpuError::UnsupportedOpcode(err))
             }
         }
     }
 
     fn store_immediate(
         &mut self,
-        register: RegisterValue,
+        register: Register,
         read_value: Option<u8>,
     ) -> Result<bool, CpuError> {
         let value = match read_value {
@@ -565,7 +389,7 @@ impl CPU {
 
     fn store_fetched(
         &mut self,
-        destination: RegisterValue,
+        destination: Register,
         addr: u16,
         read_value: Option<u8>,
     ) -> Result<bool, CpuError> {
@@ -583,27 +407,27 @@ impl CPU {
         Ok(true)
     }
 
-    fn store_register(&mut self, destination: RegisterValue, value: u8) {
+    fn store_register(&mut self, destination: Register, value: u8) {
         match destination {
-            RegisterValue::A => self.registers.a = value,
-            RegisterValue::B => self.registers.b = value,
-            RegisterValue::C => self.registers.c = value,
-            RegisterValue::D => self.registers.d = value,
-            RegisterValue::E => self.registers.e = value,
-            RegisterValue::H => self.registers.h = value,
-            RegisterValue::L => self.registers.l = value,
+            Register::A => self.registers.a = value,
+            Register::B => self.registers.b = value,
+            Register::C => self.registers.c = value,
+            Register::D => self.registers.d = value,
+            Register::E => self.registers.e = value,
+            Register::H => self.registers.h = value,
+            Register::L => self.registers.l = value,
         }
     }
 
-    fn register(&self, register: RegisterValue) -> u8 {
+    fn register(&self, register: Register) -> u8 {
         match register {
-            RegisterValue::A => self.registers.a,
-            RegisterValue::B => self.registers.b,
-            RegisterValue::C => self.registers.c,
-            RegisterValue::D => self.registers.d,
-            RegisterValue::E => self.registers.e,
-            RegisterValue::H => self.registers.h,
-            RegisterValue::L => self.registers.l,
+            Register::A => self.registers.a,
+            Register::B => self.registers.b,
+            Register::C => self.registers.c,
+            Register::D => self.registers.d,
+            Register::E => self.registers.e,
+            Register::H => self.registers.h,
+            Register::L => self.registers.l,
         }
     }
 
@@ -663,15 +487,15 @@ impl CPU {
         value
     }
 
-    fn add(&mut self, a: u8, b: u8, carry: bool) -> u8 {
-        let (mut result, mut c) = a.overflowing_add(b);
+    fn add(&mut self, left: u8, right: u8, carry: bool) -> u8 {
+        let (mut result, mut c) = left.overflowing_add(right);
         if carry {
             let (result2, c2) = result.overflowing_add(1);
             result = result2;
             c = c || c2;
         }
         let z = result == 0;
-        let h = ((a ^ b ^ result) & 0x10) != 0;
+        let h = ((left ^ right ^ result) & 0x10) != 0;
 
         self.registers.set_flag(registers::FlagValue::C, c);
         self.registers.set_flag(registers::FlagValue::Z, z);
@@ -681,15 +505,15 @@ impl CPU {
         result
     }
 
-    fn sub(&mut self, a: u8, b: u8, carry: bool) -> u8 {
-        let (mut result, mut c) = a.overflowing_sub(b);
+    fn sub(&mut self, left: u8, right: u8, carry: bool) -> u8 {
+        let (mut result, mut c) = left.overflowing_sub(right);
         if carry {
             let (result2, c2) = result.overflowing_sub(1);
             result = result2;
             c = c || c2;
         }
         let z = result == 0;
-        let h = ((a ^ b ^ result) & 0x10) != 0;
+        let h = ((left ^ right ^ result) & 0x10) != 0;
 
         self.registers.set_flag(registers::FlagValue::C, c);
         self.registers.set_flag(registers::FlagValue::Z, z);
@@ -697,5 +521,21 @@ impl CPU {
         self.registers.set_flag(registers::FlagValue::H, h);
 
         result
+    }
+
+    fn execute_accumulator(&mut self, operation: ArithmeticKind, left: u8, right: u8) {
+        match operation {
+            ArithmeticKind::Add { carry } => {
+                let result = self.add(left, right, carry);
+                self.store_register(Register::A, result);
+            }
+            ArithmeticKind::Sub { carry } => {
+                let result = self.sub(left, right, carry);
+                self.store_register(Register::A, result);
+            }
+            ArithmeticKind::Compare => {
+                self.sub(left, right, false);
+            }
+        }
     }
 }
