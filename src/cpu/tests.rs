@@ -1,6 +1,7 @@
 use super::registers::{RegisterValue, WordValue};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
+mod adc_sbc;
 mod byte_transfers;
 mod memory_inc_dec;
 mod operand_add_sub;

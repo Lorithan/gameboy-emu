@@ -59,7 +59,7 @@ fn add_sub_register_mappings_and_exclusions_are_explicit() {
             matches!(DecodedOpcode::from(sub), DecodedOpcode::SubRegister(actual) if actual == source)
         );
     }
-    for byte in [0x88, 0x98, 0xB8, 0x76] {
+    for byte in [0xB8, 0xA0, 0x76] {
         assert!(matches!(DecodedOpcode::from(byte), DecodedOpcode::Unknown));
     }
 }

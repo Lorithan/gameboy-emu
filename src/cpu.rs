@@ -27,6 +27,8 @@ enum UnaryOperation {
 enum AccumulatorOperation {
     Add,
     Sub,
+    AddC(bool),
+    SubC(bool),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -223,11 +225,19 @@ impl CPU {
 
                 match operation {
                     AccumulatorOperation::Add => {
-                        let result = self.add(a, b);
+                        let result = self.add(a, b, false);
                         self.store_register(RegisterValue::A, result);
                     }
                     AccumulatorOperation::Sub => {
-                        let result = self.sub(a, b);
+                        let result = self.sub(a, b, false);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::AddC(carry) => {
+                        let result = self.add(a, b, carry);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::SubC(carry) => {
+                        let result = self.sub(a, b, carry);
                         self.store_register(RegisterValue::A, result);
                     }
                 }
@@ -250,11 +260,19 @@ impl CPU {
 
                 match operation {
                     AccumulatorOperation::Add => {
-                        let result = self.add(a, b);
+                        let result = self.add(a, b, false);
                         self.store_register(RegisterValue::A, result);
                     }
                     AccumulatorOperation::Sub => {
-                        let result = self.sub(a, b);
+                        let result = self.sub(a, b, false);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::AddC(carry) => {
+                        let result = self.add(a, b, carry);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::SubC(carry) => {
+                        let result = self.sub(a, b, carry);
                         self.store_register(RegisterValue::A, result);
                     }
                 }
@@ -375,7 +393,18 @@ impl CPU {
                 let a = self.register(RegisterValue::A);
                 let b = self.register(register);
 
-                let result = self.add(a, b);
+                let result = self.add(a, b, false);
+                self.store_register(RegisterValue::A, result);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::AddRegisterCarry(register) => {
+                let a = self.register(RegisterValue::A);
+                let b = self.register(register);
+
+                let result = self.add(a, b, self.registers.get_flag(registers::FlagValue::C));
                 self.store_register(RegisterValue::A, result);
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -386,7 +415,18 @@ impl CPU {
                 let a = self.register(RegisterValue::A);
                 let b = self.register(register);
 
-                let result = self.sub(a, b);
+                let result = self.sub(a, b, false);
+                self.store_register(RegisterValue::A, result);
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::SubRegisterCarry(register) => {
+                let a = self.register(RegisterValue::A);
+                let b = self.register(register);
+
+                let result = self.sub(a, b, self.registers.get_flag(registers::FlagValue::C));
                 self.store_register(RegisterValue::A, result);
 
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -403,6 +443,18 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::AddHLCarry => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadMemoryAccumulator {
+                    addr: self.registers.hl(),
+                    value,
+                    operation: AccumulatorOperation::AddC(
+                        self.registers.get_flag(registers::FlagValue::C),
+                    ),
+                };
+                Ok(false)
+            }
             DecodedOpcode::SubHL => {
                 let value = self.register(RegisterValue::A);
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -410,6 +462,18 @@ impl CPU {
                     addr: self.registers.hl(),
                     value,
                     operation: AccumulatorOperation::Sub,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::SubHLCarry => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadMemoryAccumulator {
+                    addr: self.registers.hl(),
+                    value,
+                    operation: AccumulatorOperation::SubC(
+                        self.registers.get_flag(registers::FlagValue::C),
+                    ),
                 };
                 Ok(false)
             }
@@ -422,12 +486,34 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::AddImmediateCarry => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediateAccumulator {
+                    value,
+                    operation: AccumulatorOperation::AddC(
+                        self.registers.get_flag(registers::FlagValue::C),
+                    ),
+                };
+                Ok(false)
+            }
             DecodedOpcode::SubImmediate => {
                 let value = self.register(RegisterValue::A);
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadImmediateAccumulator {
                     value,
                     operation: AccumulatorOperation::Sub,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::SubImmediateCarry => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediateAccumulator {
+                    value,
+                    operation: AccumulatorOperation::SubC(
+                        self.registers.get_flag(registers::FlagValue::C),
+                    ),
                 };
                 Ok(false)
             }
@@ -562,8 +648,13 @@ impl CPU {
         value
     }
 
-    fn add(&mut self, a: u8, b: u8) -> u8 {
-        let (result, c) = a.overflowing_add(b);
+    fn add(&mut self, a: u8, b: u8, carry: bool) -> u8 {
+        let (mut result, mut c) = a.overflowing_add(b);
+        if carry {
+            let (result2, c2) = result.overflowing_add(1);
+            result = result2;
+            c = c || c2;
+        }
         let z = result == 0;
         let h = ((a ^ b ^ result) & 0x10) != 0;
 
@@ -575,8 +666,13 @@ impl CPU {
         result
     }
 
-    fn sub(&mut self, a: u8, b: u8) -> u8 {
-        let (result, c) = a.overflowing_sub(b);
+    fn sub(&mut self, a: u8, b: u8, carry: bool) -> u8 {
+        let (mut result, mut c) = a.overflowing_sub(b);
+        if carry {
+            let (result2, c2) = result.overflowing_sub(1);
+            result = result2;
+            c = c || c2;
+        }
         let z = result == 0;
         let h = ((a ^ b ^ result) & 0x10) != 0;
 
