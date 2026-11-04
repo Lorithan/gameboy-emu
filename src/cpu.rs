@@ -18,9 +18,15 @@ enum Destination {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Operation {
+enum UnaryOperation {
     Increment,
     Decrement,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccumulatorOperation {
+    Add,
+    Sub,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,7 +48,16 @@ enum ExecutionState {
     },
     ReadOperation {
         addr: u16,
-        operation: Operation,
+        operation: UnaryOperation,
+    },
+    ReadImmediateAccumulator {
+        value: u8,
+        operation: AccumulatorOperation,
+    },
+    ReadMemoryAccumulator {
+        addr: u16,
+        value: u8,
+        operation: AccumulatorOperation,
     },
     WriteMemory {
         addr: u16,
@@ -82,7 +97,7 @@ pub struct CpuFault {
 #[derive(Debug, Clone, Copy)]
 pub enum CpuError {
     UnsupportedOpcode(CpuFault),
-    MissingReadValue { address: u16 },
+    MissingReadValue { addr: u16 },
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +141,10 @@ impl CPU {
             }),
             ReadMemory { addr, .. } => Ok(CycleAction::Read { addr }),
             ReadOperation { addr, .. } => Ok(CycleAction::Read { addr }),
+            ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
+                addr: self.registers.pc,
+            }),
+            ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
             Faulted { opcode, addr } => Err(CpuError::UnsupportedOpcode(CpuFault { opcode, addr })),
         }
@@ -144,7 +163,7 @@ impl CPU {
                     Some(byte) => byte,
                     None => {
                         return Err(CpuError::MissingReadValue {
-                            address: self.registers.pc,
+                            addr: self.registers.pc,
                         });
                     }
                 };
@@ -158,7 +177,7 @@ impl CPU {
                     Some(byte) => byte,
                     None => {
                         return Err(CpuError::MissingReadValue {
-                            address: self.registers.pc,
+                            addr: self.registers.pc,
                         });
                     }
                 };
@@ -178,16 +197,70 @@ impl CPU {
                 let mut value = match read_value {
                     Some(byte) => byte,
                     None => {
-                        return Err(CpuError::MissingReadValue { address: addr });
+                        return Err(CpuError::MissingReadValue { addr });
                     }
                 };
                 value = match operation {
-                    Operation::Increment => self.increment(value),
-                    Operation::Decrement => self.decrement(value),
+                    UnaryOperation::Increment => self.increment(value),
+                    UnaryOperation::Decrement => self.decrement(value),
                 };
 
                 self.state = WriteMemory { addr, value };
                 Ok(false)
+            }
+            ReadImmediateAccumulator {
+                value: a,
+                operation,
+            } => {
+                let b = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+
+                match operation {
+                    AccumulatorOperation::Add => {
+                        let result = self.add(a, b);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::Sub => {
+                        let result = self.sub(a, b);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                }
+
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            ReadMemoryAccumulator {
+                addr,
+                value: a,
+                operation,
+            } => {
+                let b = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+
+                match operation {
+                    AccumulatorOperation::Add => {
+                        let result = self.add(a, b);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                    AccumulatorOperation::Sub => {
+                        let result = self.sub(a, b);
+                        self.store_register(RegisterValue::A, result);
+                    }
+                }
+
+                self.state = FetchOpcode;
+                Ok(true)
             }
             WriteMemory { .. } => {
                 self.state = ExecutionState::FetchOpcode;
@@ -202,7 +275,7 @@ impl CPU {
             Some(byte) => (DecodedOpcode::from(byte), byte),
             None => {
                 return Err(CpuError::MissingReadValue {
-                    address: self.registers.pc,
+                    addr: self.registers.pc,
                 });
             }
         };
@@ -286,7 +359,7 @@ impl CPU {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadOperation {
                     addr: self.registers.hl(),
-                    operation: Operation::Increment,
+                    operation: UnaryOperation::Increment,
                 };
                 Ok(false)
             }
@@ -294,7 +367,7 @@ impl CPU {
                 self.registers.pc = self.registers.pc.wrapping_add(1);
                 self.state = ReadOperation {
                     addr: self.registers.hl(),
-                    operation: Operation::Decrement,
+                    operation: UnaryOperation::Decrement,
                 };
                 Ok(false)
             }
@@ -320,6 +393,44 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            DecodedOpcode::AddHL => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadMemoryAccumulator {
+                    addr: self.registers.hl(),
+                    value,
+                    operation: AccumulatorOperation::Add,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::SubHL => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadMemoryAccumulator {
+                    addr: self.registers.hl(),
+                    value,
+                    operation: AccumulatorOperation::Sub,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::AddImmediate => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediateAccumulator {
+                    value,
+                    operation: AccumulatorOperation::Add,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::SubImmediate => {
+                let value = self.register(RegisterValue::A);
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.state = ReadImmediateAccumulator {
+                    value,
+                    operation: AccumulatorOperation::Sub,
+                };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let addr = self.registers.pc;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
@@ -338,7 +449,7 @@ impl CPU {
             Some(byte) => byte,
             None => {
                 return Err(CpuError::MissingReadValue {
-                    address: self.registers.pc,
+                    addr: self.registers.pc,
                 });
             }
         };
@@ -360,7 +471,7 @@ impl CPU {
         let value = match read_value {
             Some(byte) => byte,
             None => {
-                return Err(CpuError::MissingReadValue { address: addr });
+                return Err(CpuError::MissingReadValue { addr });
             }
         };
 
@@ -405,7 +516,7 @@ impl CPU {
             Some(byte) => byte,
             None => {
                 return Err(CpuError::MissingReadValue {
-                    address: self.registers.pc,
+                    addr: self.registers.pc,
                 });
             }
         };

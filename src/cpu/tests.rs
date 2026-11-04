@@ -3,13 +3,14 @@ use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, R
 
 mod byte_transfers;
 mod memory_inc_dec;
+mod operand_add_sub;
 mod register_add_sub;
 mod register_inc_dec;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {
         CpuError::UnsupportedOpcode(fault) => fault,
-        CpuError::MissingReadValue { address } => {
+        CpuError::MissingReadValue { addr: address } => {
             panic!("expected unsupported opcode, got missing read data at {address:#06X}")
         }
     }
@@ -179,7 +180,7 @@ fn missing_read_value_returns_an_error_without_mutating_cpu() {
         let original = cpu.snapshot();
         assert!(matches!(
             cpu.complete_cycle(None),
-            Err(CpuError::MissingReadValue { address: 0x0100 })
+            Err(CpuError::MissingReadValue { addr: 0x0100 })
         ));
         assert_eq!(cpu.snapshot(), original);
         assert_eq!(
@@ -216,7 +217,7 @@ fn all_immediate_register_loads_wrap_pc_and_retain_destination_after_missing_dat
         let pending = cpu.snapshot();
         assert!(matches!(
             cpu.complete_cycle(None),
-            Err(CpuError::MissingReadValue { address: 0 })
+            Err(CpuError::MissingReadValue { addr: 0 })
         ));
         assert_eq!(cpu.snapshot(), pending);
         assert!(matches!(
@@ -235,7 +236,7 @@ fn missing_operand_can_be_retried_without_consuming_or_skipping_data() {
     let pending = cpu.snapshot();
     assert!(matches!(
         cpu.complete_cycle(None),
-        Err(CpuError::MissingReadValue { address: 0x0101 })
+        Err(CpuError::MissingReadValue { addr: 0x0101 })
     ));
     assert_eq!(cpu.snapshot(), pending);
     assert!(
@@ -301,7 +302,7 @@ fn word_operand_states_preserve_pending_data_on_missing_reads_and_wrap_pc() {
                 for byte in [0x34, 0x12] {
                     let pending = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == pending.pc)
+                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pending.pc)
                     );
                     assert_eq!(cpu.snapshot(), pending);
                     assert!(
@@ -335,7 +336,7 @@ fn word_loads_wrap_at_each_fetch_stage_and_retry_without_losing_data() {
             for (index, byte) in [opcode, 0x34, 0x12].into_iter().enumerate() {
                 let pending = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == pending.pc)
+                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pending.pc)
                 );
                 assert_eq!(cpu.snapshot(), pending);
                 assert!(
@@ -372,7 +373,7 @@ fn missing_data_memory_read_reports_the_requested_address_and_can_be_retried() {
     ));
     assert!(matches!(
         cpu.complete_cycle(None),
-        Err(CpuError::MissingReadValue { address: 0x014D })
+        Err(CpuError::MissingReadValue { addr: 0x014D })
     ));
     assert_eq!(cpu.snapshot(), pending);
     assert!(cpu.complete_cycle(Some(0x42)).expect("retry data read"));
@@ -395,7 +396,7 @@ fn missing_immediate_store_operand_reports_pc_and_preserves_pending_state() {
     ));
     assert!(matches!(
         cpu.complete_cycle(None),
-        Err(CpuError::MissingReadValue { address: 0x0100 })
+        Err(CpuError::MissingReadValue { addr: 0x0100 })
     ));
     assert_eq!(cpu.snapshot(), pending);
     assert!(!cpu.complete_cycle(Some(0x42)).expect("retry immediate"));
@@ -433,7 +434,7 @@ fn pending_memory_read_uses_its_captured_address_for_requests_and_errors() {
         ));
         assert!(matches!(
             cpu.complete_cycle(None),
-            Err(CpuError::MissingReadValue { address: 0xC123 })
+            Err(CpuError::MissingReadValue { addr: 0xC123 })
         ));
         assert_eq!(cpu.snapshot(), pending);
     }
@@ -455,7 +456,7 @@ fn hl_loads_preserve_flags_and_unrelated_registers_across_wraps_and_read_retries
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == start)
+                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == start)
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
@@ -468,7 +469,7 @@ fn hl_loads_preserve_flags_and_unrelated_registers_across_wraps_and_read_retries
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == read_address)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { address }) if address == read_address)
+                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == read_address)
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }

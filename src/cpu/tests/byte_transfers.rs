@@ -200,7 +200,7 @@ fn all_transfers_preserve_flags_wrap_pc_and_retry_missing_reads() {
                 let mut cpu = machine(expected);
                 assert!(matches!(
                     cpu.complete_cycle(None),
-                    Err(CpuError::MissingReadValue { address: 0xFFFF })
+                    Err(CpuError::MissingReadValue { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), expected);
                 let complete = cpu.complete_cycle(Some(opcode)).expect("retry opcode");
@@ -214,7 +214,7 @@ fn all_transfers_preserve_flags_wrap_pc_and_retry_missing_reads() {
                         ));
                         assert!(matches!(
                             cpu.complete_cycle(None),
-                            Err(CpuError::MissingReadValue { address: 0xC123 })
+                            Err(CpuError::MissingReadValue { addr: 0xC123 })
                         ));
                         assert_eq!(cpu.snapshot(), expected);
                     }

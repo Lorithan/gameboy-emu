@@ -67,7 +67,7 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
         let before = cpu.snapshot();
         assert!(matches!(
             cpu.complete_cycle(None),
-            Err(CpuError::MissingReadValue { address: 0xFFFF })
+            Err(CpuError::MissingReadValue { addr: 0xFFFF })
         ));
         assert_eq!(cpu.snapshot(), before);
         assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
@@ -83,7 +83,7 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
             ));
             assert!(matches!(
                 cpu.complete_cycle(None),
-                Err(CpuError::MissingReadValue { address: 0xC123 })
+                Err(CpuError::MissingReadValue { addr: 0xC123 })
             ));
             assert_eq!(cpu.snapshot(), expected);
         }

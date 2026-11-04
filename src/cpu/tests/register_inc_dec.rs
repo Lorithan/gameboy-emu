@@ -130,7 +130,7 @@ fn inc_dec_opcode_reads_can_be_retried_at_the_pc_wrap_boundary() {
                 ));
                 assert!(matches!(
                     cpu.complete_cycle(None),
-                    Err(CpuError::MissingReadValue { address: 0xFFFF })
+                    Err(CpuError::MissingReadValue { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
             }

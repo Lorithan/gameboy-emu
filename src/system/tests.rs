@@ -13,6 +13,49 @@ fn hl_access_machine(address: u16, tail: &[u8]) -> System {
 }
 
 #[test]
+fn memory_accumulator_reads_follow_bus_mapping_without_writes() {
+    for (opcode, add) in [(0x86, true), (0x96, false)] {
+        for address in [
+            0u16, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF, 0xFE00,
+            0xFF80, 0xFFFF,
+        ] {
+            let mut system = hl_access_machine(address, &[opcode, 0xD3]);
+            system.memory.write(address, 0x0F);
+            let operand = system.memory.read(address);
+            let memory_before: Vec<_> = (0u16..=u16::MAX)
+                .map(|addr| system.memory.read(addr))
+                .collect();
+            let mut expected = system.cpu_snapshot();
+            let sign = if add { 1i16 } else { -1 };
+            let full = 0x42i16 + sign * i16::from(operand);
+            let low = 2i16 + sign * i16::from(operand % 16);
+            let value = full.rem_euclid(256) as u16;
+            let flags = if value == 0 { 0x80 } else { 0 }
+                | if add { 0 } else { 0x40 }
+                | if !(0..16).contains(&low) { 0x20 } else { 0 }
+                | if !(0..256).contains(&full) { 0x10 } else { 0 };
+            expected.af = value << 8 | flags;
+            expected.pc += 1;
+            assert!(matches!(
+                system.step_instruction(100),
+                Ok(super::InstructionStep::Complete {
+                    mcycles: 2,
+                    ticks: 8
+                })
+            ));
+            assert_eq!(system.cpu_snapshot(), expected);
+            for (addr, before) in memory_before.into_iter().enumerate() {
+                assert_eq!(
+                    system.memory.read(addr as u16),
+                    before,
+                    "opcode {opcode:02X}, memory at {addr:04X}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
     use super::InstructionStep;
     for (opcode, old, value, flags) in [(0x34, 0x0F, 0x10, 0x30u16), (0x35, 0x10, 0x0F, 0x70)] {
