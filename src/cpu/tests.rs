@@ -8,6 +8,7 @@ mod memory_inc_dec;
 mod operand_add_sub;
 mod register_add_sub;
 mod register_inc_dec;
+mod relative_jumps;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {
     match error {

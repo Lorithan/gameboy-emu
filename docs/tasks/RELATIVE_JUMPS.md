@@ -39,3 +39,17 @@ The assistant writes and maintains the tests; the user implements the emulator.
 ## Implementation sequence
 
 Start with unconditional JR and its displacement-read/internal-cycle states. Review and test that path before adding the four condition mappings. JP, CALL, RET, stack operations, interrupts, and HALT are separate tasks.
+
+## Unconditional checkpoint review — 2026-11-04
+
+The revised ReadDisplacement carries a resolved taken boolean; ApplyJump carries a computed target. Untaken displacement completion returns directly to FetchOpcode with no extra PC increment. Taken completion uses Idle and assigns the captured target. No correctness findings remain for the implemented unconditional path.
+
+All 158 tests pass (115 unit, 43 integration), including all 256 displacements across six PC boundary locations and all 16 flag combinations, missing-read retry, repeated requests, target capture, public Read/Read/Idle traces, and self-loop budget resumes. A private pending-state test verifies the resolved false path including operand-PC wrap. Formatting passes; Clippy reports unused conditional variants and set_af. The assistant adapted tests only.
+
+Only opcode 0x18 is decoded so far. Next add 0x20/0x28/0x30/0x38; their condition truth tables, captured flag decisions, public untaken traces, and finite loop acceptance remain to be tested. Issue #17 stays open; changes are uncommitted.
+
+## Completion review — 2026-11-04
+
+All five JR opcodes are now mapped correctly. All 162 tests pass (117 unit, 45 integration). Conditional coverage checks every displacement at six PC boundaries for every flag combination and all four opcodes (98,304 cases), with independent condition/target oracles, missing-read retries, test-only flag changes after capture, and preservation of all other snapshot state. Unconditional coverage remains green.
+
+Public conditional tests verify exact Read/Read versus Read/Read/Idle traces, target commitment, both outcomes of each condition, zero/partial/exact/excess budgets, and resume without extra instruction fetches. A finite LD B,3 / DEC B / JR NZ loop terminates after 13 M-cycles (52 ticks), stopping before an unsupported sentinel. Existing bus, arithmetic, and sticky-fault regressions pass. Formatting passes; Clippy reports only the existing unused set_af method. No correctness findings remain. The assistant changed tests and documentation only; implementation remains user-owned. Complete locally, not yet committed or pushed.

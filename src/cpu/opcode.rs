@@ -45,6 +45,15 @@ pub(super) enum UnaryOperation {
     Decrement,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum JumpCondition {
+    Always,
+    Z,
+    NZ,
+    C,
+    NC,
+}
+
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -54,7 +63,7 @@ pub(super) enum DecodedOpcode {
     LoadImmediate {
         destination: Target,
     },
-    LoadImmediateWord {
+    LoadImmediate16 {
         destination: Register16,
     },
     Unary {
@@ -65,6 +74,9 @@ pub(super) enum DecodedOpcode {
         kind: ArithmeticKind,
         operand: Operand,
     },
+    RelativeJump {
+        condition: JumpCondition,
+    },
     Unknown,
 }
 
@@ -72,7 +84,7 @@ impl From<u8> for DecodedOpcode {
     fn from(value: u8) -> Self {
         match value {
             0x00 => DecodedOpcode::Nop,
-            0x01 => DecodedOpcode::LoadImmediateWord {
+            0x01 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::BC,
             },
             0x04 => DecodedOpcode::Unary {
@@ -97,7 +109,7 @@ impl From<u8> for DecodedOpcode {
             0x0E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::C),
             },
-            0x11 => DecodedOpcode::LoadImmediateWord {
+            0x11 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
             },
             0x14 => DecodedOpcode::Unary {
@@ -111,6 +123,9 @@ impl From<u8> for DecodedOpcode {
             0x16 => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::D),
             },
+            0x18 => DecodedOpcode::RelativeJump {
+                condition: JumpCondition::Always,
+            },
             0x1C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::E),
@@ -122,7 +137,10 @@ impl From<u8> for DecodedOpcode {
             0x1E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::E),
             },
-            0x21 => DecodedOpcode::LoadImmediateWord {
+            0x20 => DecodedOpcode::RelativeJump {
+                condition: JumpCondition::NZ,
+            },
+            0x21 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::HL,
             },
             0x24 => DecodedOpcode::Unary {
@@ -136,6 +154,9 @@ impl From<u8> for DecodedOpcode {
             0x26 => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::H),
             },
+            0x28 => DecodedOpcode::RelativeJump {
+                condition: JumpCondition::Z,
+            },
             0x2C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::L),
@@ -147,7 +168,10 @@ impl From<u8> for DecodedOpcode {
             0x2E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::L),
             },
-            0x31 => DecodedOpcode::LoadImmediateWord {
+            0x30 => DecodedOpcode::RelativeJump {
+                condition: JumpCondition::NC,
+            },
+            0x31 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::SP,
             },
             0x34 => DecodedOpcode::Unary {
@@ -160,6 +184,9 @@ impl From<u8> for DecodedOpcode {
             },
             0x36 => DecodedOpcode::LoadImmediate {
                 destination: Target::IndirectHL,
+            },
+            0x38 => DecodedOpcode::RelativeJump {
+                condition: JumpCondition::C,
             },
             0x3C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,

@@ -17,6 +17,12 @@ enum Destination {
 #[derive(Debug, Clone, Copy)]
 enum ExecutionState {
     FetchOpcode,
+    ReadDisplacement {
+        taken: bool,
+    },
+    ApplyJump {
+        target: u16,
+    },
     ReadImmediate8 {
         target: Destination,
     },
@@ -112,6 +118,10 @@ impl CPU {
             FetchOpcode => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
+            ReadDisplacement { .. } => Ok(CycleAction::Read {
+                addr: self.registers.pc,
+            }),
+            ApplyJump { .. } => Ok(CycleAction::Idle),
             ReadImmediate8 { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
@@ -135,6 +145,33 @@ impl CPU {
     pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
         match self.state {
             FetchOpcode => self.read_opcode(read_value),
+            ReadDisplacement { taken } => {
+                let value = match read_value {
+                    Some(byte) => byte as i8,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                if taken {
+                    self.state = ApplyJump {
+                        target: self.registers.pc.wrapping_add_signed(value as i16),
+                    };
+                    Ok(false)
+                } else {
+                    self.state = FetchOpcode;
+                    Ok(true)
+                }
+            }
+            ApplyJump { target } => {
+                self.registers.set_pc(target);
+
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             ReadImmediate8 { target } => match target {
                 Destination::Register(register) => self.store_immediate(register, read_value),
                 Destination::Memory(addr) => {
@@ -293,7 +330,7 @@ impl CPU {
                 self.state = ReadImmediate8 { target };
                 Ok(false)
             }
-            DecodedOpcode::LoadImmediateWord { destination } => {
+            DecodedOpcode::LoadImmediate16 { destination } => {
                 self.state = ReadImmediate16Low { destination };
                 Ok(false)
             }
@@ -353,6 +390,18 @@ impl CPU {
                         Ok(false)
                     }
                 }
+            }
+            DecodedOpcode::RelativeJump { condition } => {
+                let taken = match condition {
+                    JumpCondition::Always => true,
+                    JumpCondition::Z => self.registers.get_flag(Flag::Z),
+                    JumpCondition::NZ => !self.registers.get_flag(Flag::Z),
+                    JumpCondition::C => self.registers.get_flag(Flag::C),
+                    JumpCondition::NC => !self.registers.get_flag(Flag::C),
+                };
+
+                self.state = ReadDisplacement { taken };
+                Ok(false)
             }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
