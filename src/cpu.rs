@@ -751,6 +751,18 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::Restart { target } => {
+                let return_addr = self.registers.pc;
+                let return_addr_high = (return_addr >> 8) as u8;
+                let return_addr_low = (return_addr & 0xFF) as u8;
+                self.state = Call {
+                    jump_addr: target,
+                    stack_addr: self.registers.sp.wrapping_sub(1),
+                    return_addr_high,
+                    return_addr_low,
+                };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,

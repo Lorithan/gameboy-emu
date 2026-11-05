@@ -27,9 +27,7 @@ fn conditional_return_mappings_are_independent_and_leave_c9_unchanged() {
         }
     }
     assert!(matches!(DecodedOpcode::from(0xC9), DecodedOpcode::Return));
-    for byte in [0xC7, 0xD9] {
-        assert!(matches!(DecodedOpcode::from(byte), DecodedOpcode::Unknown));
-    }
+    assert!(matches!(DecodedOpcode::from(0xD9), DecodedOpcode::Unknown));
 }
 
 #[test]

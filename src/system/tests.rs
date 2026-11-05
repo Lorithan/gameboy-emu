@@ -2,6 +2,79 @@ use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 
 #[test]
+fn restarts_write_only_the_return_word_across_bus_boundaries_and_pauses() {
+    for (byte, vector) in [
+        (0xC7, 0u16),
+        (0xCF, 8),
+        (0xD7, 0x10),
+        (0xDF, 0x18),
+        (0xE7, 0x20),
+        (0xEF, 0x28),
+        (0xF7, 0x30),
+        (0xFF, 0x38),
+    ] {
+        for sp in [0u16, 1, 0x8000, 0xC002, 0xE002, 0xFF80, 0xFFFE, 0xFFFF] {
+            for budget in 0u64..=4 {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                rom[0x0100..0x0105].copy_from_slice(&[
+                    0x31,
+                    sp as u8,
+                    (sp / 256) as u8,
+                    byte,
+                    0xD3,
+                ]);
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                system.step_instruction(100).unwrap();
+                let mut expected = system.cpu_snapshot();
+                let mut memory: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                for (phase, addr, value) in
+                    [(3u64, sp.wrapping_sub(1), 1u8), (4, sp.wrapping_sub(2), 4)]
+                {
+                    if budget < phase {
+                        continue;
+                    }
+                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+                        memory[usize::from(addr)] = value;
+                        if (0xC000..=0xDDFF).contains(&addr) {
+                            memory[usize::from(addr + 0x2000)] = value;
+                        }
+                        if (0xE000..=0xFDFF).contains(&addr) {
+                            memory[usize::from(addr - 0x2000)] = value;
+                        }
+                    }
+                }
+                for addr in 0u16..=65535 {
+                    assert_eq!(system.memory.read(addr), memory[usize::from(addr)]);
+                }
+                expected.pc = match budget {
+                    0 => 0x0103,
+                    1..=3 => 0x0104,
+                    _ => vector,
+                };
+                expected.sp = match budget {
+                    0..=2 => sp,
+                    3 => sp.wrapping_sub(1),
+                    _ => sp.wrapping_sub(2),
+                };
+                assert_eq!(system.cpu_snapshot(), expected);
+                assert_eq!(system.elapsed_ticks(), 12 + budget * 4);
+                if budget < 4 {
+                    system.step_instruction(100).unwrap();
+                }
+                expected.pc = vector;
+                expected.sp = sp.wrapping_sub(2);
+                assert_eq!(system.cpu_snapshot(), expected);
+                assert_eq!(system.elapsed_ticks(), 28);
+            }
+        }
+    }
+}
+
+#[test]
 fn conditional_returns_preserve_all_memory_and_obey_stack_bus_boundaries() {
     for byte in [0xC0, 0xC8, 0xD0, 0xD8] {
         for equal in [false, true] {

@@ -117,12 +117,15 @@ pub(super) enum DecodedOpcode {
     ConditionalReturn {
         condition: JumpCondition,
     },
+    Restart {
+        target: u16,
+    },
     Unknown,
 }
 
 impl From<u8> for DecodedOpcode {
-    fn from(value: u8) -> Self {
-        match value {
+    fn from(byte: u8) -> Self {
+        match byte {
             0x00 => DecodedOpcode::Nop,
             0x01 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::BC,
@@ -242,11 +245,11 @@ impl From<u8> for DecodedOpcode {
 
             0x76 => DecodedOpcode::Unknown, // HALT currently unimplemented
             0x40..=0x7F => DecodedOpcode::Load {
-                destination: Target::from_bits(value >> 3),
-                source: Target::from_bits(value),
+                destination: Target::from_bits(byte >> 3),
+                source: Target::from_bits(byte),
             },
             0x80..=0xBF => {
-                let kind = match (value >> 3) & 0b111 {
+                let kind = match (byte >> 3) & 0b111 {
                     0 => ArithmeticKind::Add { carry: false },
                     1 => ArithmeticKind::Add { carry: true },
                     2 => ArithmeticKind::Sub { carry: false },
@@ -257,7 +260,7 @@ impl From<u8> for DecodedOpcode {
 
                 DecodedOpcode::Arithmetic {
                     kind,
-                    operand: Operand::Target(Target::from_bits(value)),
+                    operand: Operand::Target(Target::from_bits(byte)),
                 }
             }
             0xC0 => DecodedOpcode::ConditionalReturn {
@@ -282,6 +285,10 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Add { carry: false },
                 operand: Operand::Immediate,
             },
+            0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
+                let target = (byte & 0x38) as u16;
+                DecodedOpcode::Restart { target }
+            }
             0xC8 => DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::Z,
             },
