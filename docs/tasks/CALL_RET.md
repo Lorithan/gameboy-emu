@@ -60,3 +60,35 @@ All requests remain immutable and repeatable. Missing opcode/operand/stack-read 
 ## First slice and exclusions
 
 Implement CD CALL a16 first and review its complete six-cycle path, then add C9 RET and nested-call tests. Conditional CALL/RET, RST, RETI, interrupts, and other instruction families are separate tasks. The user writes emulator implementation; the assistant owns tests and architecture review.
+
+## CALL first review and scope update — 2026-11-04
+
+The user also added conditional CALL mappings C4/CC/D4/DC. Include those in this issue's CALL acceptance: they use the existing captured condition convention, always consume both target bytes, and complete in three M-cycles when untaken or six when taken. Conditional RET, RST and RETI remain excluded. This update supersedes the earlier exclusion of conditional CALL and the requirement that other CALL forms remain unsupported.
+
+Distinct caller-write states are a reasonable small alternative to the proposed shared PUSH completion selector; sharing that code is not an acceptance prerequisite. Keep addresses and return/target data captured. The current return address is correctly captured after the high operand byte, but the cycle order is opcode/low/high/write/write/Idle. Required order is opcode/low/high/Idle/write/write. Queue an Idle step before the writes; the final low-byte write must assign the captured target and complete directly, without ApplyJump.
+
+Assistant added independent five-opcode mappings, exhaustive-target and boundary/flag/retry/capture checks, public traces, and all budgets. At review 136/138 unit tests pass; the two CALL timing/capture tests fail on the missing pre-write Idle. Both new public CALL tests fail on that phase error (write and SP update one cycle early). Formatting passes. RET is not implemented and issue #21 remains open. Assistant changed tests/docs only.
+
+Second review: CallReadHigh was changed to request Idle while its completion still requires the high operand byte, so System supplies None and CALL reports MissingReadValue. Keep that state requesting a read and queue a separate Idle state only after successful high-byte completion, retaining target/return/stack payloads. Initial SP capture was also removed; restore it in opcode completion and carry it through operand states. The final caller low-write now sets PC and FetchOpcode but returns false; it must report true to stop instruction stepping at the boundary. At this checkpoint 136/138 unit tests pass, formatting/Clippy pass, and public CALL tests fail with MissingReadValue. Implementation remains user-owned.
+
+Third review: the new Call Idle state and final-write completion are correct. Every unconditional target and both public conditional trace/budget tests pass. Formatting and Clippy pass. One of 138 unit tests still fails (137 pass): stack_addr is derived from live SP in CallReadHigh rather than captured at opcode completion. The test deliberately perturbs live SP during pending operand reads to check the agreed payload invariant; ordinary execution does not change SP in those cycles. Restore stack_addr in both operand states to meet that contract. No other findings at this checkpoint; RET remains pending.
+
+## CALL checkpoint accepted — 2026-11-04
+
+Initial stack address is now captured during opcode completion and carried through both operand states. No correctness findings remain in the implemented CALL paths. All 197 tests pass (138 unit, 59 integration); formatting and Clippy pass without warnings. Evidence includes every unconditional target, independent mappings for all five CALL forms, all flag combinations at PC/SP boundaries, captured condition/stack/return/target through missing-read retries and test-only live-state changes, exact taken/untaken public traces, and all budget pause/resume points including self-calls. Existing regressions remain green.
+
+Changes are uncommitted. Next implement C9 RET with captured stack addresses, buffered low byte, SP increments after successful reads, and existing ApplyJump for the final Idle. Ordinary POP timing must stay unchanged. RET targets, nested real CALL/RET round trips, and full CALL memory-preservation acceptance remain to be added/verified, so issue #21 stays open. Assistant changed tests/docs only.
+
+## RET first review — 2026-11-04
+
+C9 maps correctly and its high-byte completion queues ApplyJump as intended. Both return states currently request PC-based reads, increment PC instead of SP, and report PC for missing stack data. Add captured addr payloads (initial SP at opcode completion, then S+1) as with POP; retain the low byte, advance SP only on successful reads, and leave sequential PC unchanged until final ApplyJump. The extracted increment_pc helper uses wrapping arithmetic and is consistent with existing fetch semantics.
+
+Assistant added RET mapping, exhaustive-target state checks, captured-address/missing-read/byte/target tests, a real HRAM/WRAM CALL/RET trace, and budget resumes. At review 139/141 unit tests pass; the two new RET protocol tests fail. Public RET tests also expose stack addressing/SP errors; CALL tests remain green. Formatting passes. Issue #21 remains open, changes uncommitted, and the assistant changed tests/docs only.
+
+## Completion review — 2026-11-04
+
+All five CALL forms and unconditional RET are complete locally, pending commit/push. RET reads captured stack addresses, advances SP after successful reads, reports the requested address on missing data and commits the target during final Idle. CALL retains its correct six/three-cycle paths. No correctness findings remain.
+
+All 205 tests pass (143 unit, 62 integration); formatting and Clippy pass without warnings. Existing exhaustive CALL/RET targets, condition/flag boundaries, PC/SP wrapping, captured payload/retry tests and public exact traces/budget resumes pass. Nested subroutines in HRAM and WRAM restore SP and return to each caller continuation in LIFO order, completing the synthetic program in 104 ticks while skipping unsupported sentinels.
+
+A full-address-space oracle checks all five CALL forms, both branch outcomes, stack boundaries and every budget pause: only the two permitted mapped writes and their echo aliases change, and no write occurs before its specified cycle. RET reads follow ordinary ROM/WRAM/echo/HRAM/unimplemented bus rules, restore SP appropriately, and leave every memory location unchanged. Separate cases verify RET without any prior CALL. All prior regressions pass. User wrote implementation; assistant changed tests/docs only. Conditional RET, RST and interrupts/RETI remain separate work.

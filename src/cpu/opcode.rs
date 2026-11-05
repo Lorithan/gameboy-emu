@@ -110,6 +110,10 @@ pub(super) enum DecodedOpcode {
     Pop {
         operand: PushOperand,
     },
+    Call {
+        condition: JumpCondition,
+    },
+    Return,
     Unknown,
 }
 
@@ -262,6 +266,9 @@ impl From<u8> for DecodedOpcode {
             0xC3 => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Always,
             },
+            0xC4 => DecodedOpcode::Call {
+                condition: JumpCondition::NZ,
+            },
             0xC5 => DecodedOpcode::Push {
                 operand: PushOperand::BC,
             },
@@ -269,8 +276,15 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Add { carry: false },
                 operand: Operand::Immediate,
             },
+            0xC9 => DecodedOpcode::Return,
             0xCA => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Z,
+            },
+            0xCC => DecodedOpcode::Call {
+                condition: JumpCondition::Z,
+            },
+            0xCD => DecodedOpcode::Call {
+                condition: JumpCondition::Always,
             },
             0xCE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: true },
@@ -282,6 +296,9 @@ impl From<u8> for DecodedOpcode {
             0xD2 => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NC,
             },
+            0xD4 => DecodedOpcode::Call {
+                condition: JumpCondition::NC,
+            },
             0xD5 => DecodedOpcode::Push {
                 operand: PushOperand::DE,
             },
@@ -290,6 +307,9 @@ impl From<u8> for DecodedOpcode {
                 operand: Operand::Immediate,
             },
             0xDA => DecodedOpcode::AbsoluteJump {
+                condition: JumpCondition::C,
+            },
+            0xDC => DecodedOpcode::Call {
                 condition: JumpCondition::C,
             },
             0xDE => DecodedOpcode::Arithmetic {

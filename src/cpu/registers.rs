@@ -138,11 +138,15 @@ impl Registers {
         self.sp = sp
     }
 
-    pub fn get_flag(&self, flag: Flag) -> bool {
+    pub(super) fn get_flag(&self, flag: Flag) -> bool {
         self.f.get(flag)
     }
 
-    pub fn set_flag(&mut self, flag: Flag, val: bool) {
+    pub(super) fn set_flag(&mut self, flag: Flag, val: bool) {
         self.f.set(flag, val);
+    }
+
+    pub(super) fn increment_pc(&mut self) {
+        self.pc = self.pc.wrapping_add(1);
     }
 }

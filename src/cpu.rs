@@ -83,6 +83,39 @@ enum ExecutionState {
         low: u8,
         target: PushOperand,
     },
+    ReadCallLow {
+        taken: bool,
+        stack_addr: u16,
+    },
+    ReadCallHigh {
+        taken: bool,
+        low: u8,
+        stack_addr: u16,
+    },
+    Call {
+        jump_addr: u16,
+        stack_addr: u16,
+        return_addr_high: u8,
+        return_addr_low: u8,
+    },
+    PushCallerHigh {
+        jump_addr: u16,
+        stack_addr: u16,
+        return_addr_high: u8,
+        return_addr_low: u8,
+    },
+    PushCallerLow {
+        jump_addr: u16,
+        stack_addr: u16,
+        return_addr_low: u8,
+    },
+    ReadReturnLow {
+        addr: u16,
+    },
+    ReadReturnHigh {
+        addr: u16,
+        low: u8,
+    },
     Faulted(CpuFault),
 }
 
@@ -150,6 +183,8 @@ impl CPU {
             | ReadImmediate16Low { .. }
             | ReadJumpLow { .. }
             | ReadJumpHigh { .. }
+            | ReadCallLow { .. }
+            | ReadCallHigh { .. }
             | ReadImmediate16High { .. }
             | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
@@ -157,12 +192,30 @@ impl CPU {
             ReadMemory { addr, .. }
             | PopLow { addr, .. }
             | PopHigh { addr, .. }
+            | ReadReturnLow { addr }
+            | ReadReturnHigh { addr, .. }
             | ReadOperation { addr, .. }
             | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
             PushHigh { addr, high, .. } => Ok(CycleAction::Write { addr, value: high }),
             PushLow { addr, low } => Ok(CycleAction::Write { addr, value: low }),
-            Push { .. } | ApplyJump { .. } => Ok(CycleAction::Idle),
+            PushCallerHigh {
+                stack_addr,
+                return_addr_high,
+                ..
+            } => Ok(CycleAction::Write {
+                addr: stack_addr,
+                value: return_addr_high,
+            }),
+            PushCallerLow {
+                stack_addr,
+                return_addr_low,
+                ..
+            } => Ok(CycleAction::Write {
+                addr: stack_addr,
+                value: return_addr_low,
+            }),
+            Push { .. } | ApplyJump { .. } | Call { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -179,8 +232,7 @@ impl CPU {
                         });
                     }
                 };
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
+                self.registers.increment_pc();
                 if taken {
                     self.state = ApplyJump {
                         target: self.registers.pc.wrapping_add_signed(value as i16),
@@ -210,7 +262,7 @@ impl CPU {
                     };
 
                     self.state = ExecutionState::WriteMemory { addr, value };
-                    self.registers.pc = self.registers.pc.wrapping_add(1);
+                    self.registers.increment_pc();
                     Ok(false)
                 }
             },
@@ -224,7 +276,7 @@ impl CPU {
                     }
                 };
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.registers.increment_pc();
                 self.state = ReadImmediate16High {
                     destination,
                     low: value,
@@ -244,7 +296,7 @@ impl CPU {
                     }
                 };
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.registers.increment_pc();
                 self.state = ReadJumpHigh { taken, low: value };
                 Ok(false)
             }
@@ -258,7 +310,7 @@ impl CPU {
                     }
                 };
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.registers.increment_pc();
 
                 if taken {
                     self.state = ApplyJump {
@@ -301,7 +353,7 @@ impl CPU {
 
                 self.execute_accumulator(operation, left, right);
 
-                self.registers.pc = self.registers.pc.wrapping_add(1);
+                self.registers.increment_pc();
                 self.state = FetchOpcode;
                 Ok(true)
             }
@@ -382,6 +434,124 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            ReadCallLow { taken, stack_addr } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+
+                self.registers.increment_pc();
+                self.state = ReadCallHigh {
+                    taken,
+                    low,
+                    stack_addr,
+                };
+                Ok(false)
+            }
+            ReadCallHigh {
+                taken,
+                low,
+                stack_addr,
+            } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.increment_pc();
+
+                let jump_addr = (high as u16) << 8 | low as u16;
+
+                if taken {
+                    let return_addr = self.registers.pc;
+
+                    self.state = Call {
+                        jump_addr,
+                        stack_addr,
+                        return_addr_high: (return_addr >> 8) as u8,
+                        return_addr_low: (return_addr & 0xFF) as u8,
+                    };
+
+                    Ok(false)
+                } else {
+                    self.state = FetchOpcode;
+                    Ok(true)
+                }
+            }
+            Call {
+                jump_addr,
+                stack_addr,
+                return_addr_high,
+                return_addr_low,
+            } => {
+                self.state = PushCallerHigh {
+                    jump_addr,
+                    stack_addr,
+                    return_addr_high,
+                    return_addr_low,
+                };
+                Ok(false)
+            }
+            PushCallerHigh {
+                jump_addr,
+                stack_addr,
+                return_addr_low,
+                ..
+            } => {
+                self.registers.set_sp(stack_addr);
+                self.state = PushCallerLow {
+                    jump_addr,
+                    stack_addr: self.registers.sp.wrapping_sub(1),
+                    return_addr_low,
+                };
+                Ok(false)
+            }
+            PushCallerLow {
+                jump_addr,
+                stack_addr,
+                ..
+            } => {
+                self.registers.set_sp(stack_addr);
+                self.registers.set_pc(jump_addr);
+
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            ReadReturnLow { addr } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+                self.registers.set_sp(addr.wrapping_add(1));
+
+                self.state = ReadReturnHigh {
+                    addr: addr.wrapping_add(1),
+                    low,
+                };
+                Ok(false)
+            }
+            ReadReturnHigh { addr, low } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+                self.registers.set_sp(addr.wrapping_add(1));
+
+                let jump_addr = (high as u16) << 8 | low as u16;
+                self.state = ApplyJump { target: jump_addr };
+                Ok(false)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -397,7 +567,7 @@ impl CPU {
         };
 
         let op_addr = self.registers.pc;
-        self.registers.pc = self.registers.pc.wrapping_add(1);
+        self.registers.increment_pc();
 
         match opcode {
             DecodedOpcode::Nop => {
@@ -544,6 +714,19 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::Call { condition } => {
+                let taken = condition.jump(self.registers.f);
+                let stack_addr = self.registers.sp.wrapping_sub(1);
+
+                self.state = ReadCallLow { taken, stack_addr };
+                Ok(false)
+            }
+            DecodedOpcode::Return => {
+                self.state = ReadReturnLow {
+                    addr: self.registers.sp,
+                };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,
@@ -572,8 +755,7 @@ impl CPU {
         self.set_register(register, value);
 
         self.state = ExecutionState::FetchOpcode;
-        self.registers.pc = self.registers.pc.wrapping_add(1);
-
+        self.registers.increment_pc();
         Ok(true)
     }
 
@@ -646,8 +828,7 @@ impl CPU {
         }
 
         self.state = ExecutionState::FetchOpcode;
-        self.registers.pc = self.registers.pc.wrapping_add(1);
-
+        self.registers.increment_pc();
         Ok(true)
     }
 

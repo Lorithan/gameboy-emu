@@ -2,6 +2,139 @@ use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 
 #[test]
+fn call_writes_only_return_bytes_at_the_correct_pause_and_ret_preserves_memory() {
+    for byte in [0xCD, 0xC4, 0xCC, 0xD4, 0xDC] {
+        for equal in [false, true] {
+            let taken = match byte {
+                0xCD => true,
+                0xC4 | 0xDC => !equal,
+                _ => equal,
+            };
+            let cycles = if taken { 6u64 } else { 3 };
+            for sp in [0u16, 1, 0x8000, 0xC002, 0xE002, 0xFF80, 0xFFFE, 0xFFFF] {
+                for budget in 0u64..=6 {
+                    let mut rom = vec![0; 32768];
+                    rom[0x014D] = 0xE7;
+                    rom[0x0100..0x010B].copy_from_slice(&[
+                        0x31,
+                        sp as u8,
+                        (sp / 256) as u8,
+                        0x3E,
+                        u8::from(equal),
+                        0xFE,
+                        1,
+                        byte,
+                        0,
+                        2,
+                        0xD3,
+                    ]);
+                    rom[0x0200] = 0xC9;
+                    let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                    for _ in 0..3 {
+                        system.step_instruction(100).unwrap();
+                    }
+                    let initial = system.cpu_snapshot();
+                    let mut expected_memory: Vec<_> = (0u16..=65535)
+                        .map(|addr| system.memory.read(addr))
+                        .collect();
+                    system.step_instruction(budget).unwrap();
+                    for (phase, addr, value) in [
+                        (5u64, sp.wrapping_sub(1), 1u8),
+                        (6, sp.wrapping_sub(2), 0x0A),
+                    ] {
+                        if !taken || budget < phase {
+                            continue;
+                        }
+                        if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+                            expected_memory[usize::from(addr)] = value;
+                            if (0xC000..=0xDDFF).contains(&addr) {
+                                expected_memory[usize::from(addr + 0x2000)] = value;
+                            }
+                            if (0xE000..=0xFDFF).contains(&addr) {
+                                expected_memory[usize::from(addr - 0x2000)] = value;
+                            }
+                        }
+                    }
+                    for addr in 0u16..=65535 {
+                        assert_eq!(
+                            system.memory.read(addr),
+                            expected_memory[usize::from(addr)],
+                            "CALL {byte:02X}, equal {equal}, SP {sp:04X}, budget {budget}, memory {addr:04X}"
+                        );
+                    }
+                    if budget < cycles {
+                        system.step_instruction(100).unwrap();
+                    }
+                    let mut expected = initial;
+                    expected.pc = if taken { 0x0200 } else { 0x010A };
+                    if taken {
+                        expected.sp = sp.wrapping_sub(2);
+                    }
+                    assert_eq!(system.cpu_snapshot(), expected);
+                    assert_eq!(system.elapsed_ticks(), 28 + cycles * 4);
+                    if taken {
+                        let low_addr = sp.wrapping_sub(2);
+                        let word = u16::from(system.memory.read(low_addr))
+                            | (u16::from(system.memory.read(low_addr.wrapping_add(1))) << 8);
+                        let memory_before: Vec<_> = (0u16..=65535)
+                            .map(|addr| system.memory.read(addr))
+                            .collect();
+                        assert!(matches!(
+                            system.step_instruction(100).unwrap(),
+                            super::InstructionStep::Complete {
+                                mcycles: 4,
+                                ticks: 16
+                            }
+                        ));
+                        expected.pc = word;
+                        expected.sp = sp;
+                        assert_eq!(system.cpu_snapshot(), expected);
+                        for addr in 0u16..=65535 {
+                            assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ret_without_a_prior_call_reads_ordinary_bus_data_and_never_writes() {
+    for sp in [
+        0u16, 0x7FFF, 0x8000, 0xC000, 0xE000, 0xFF7F, 0xFF80, 0xFFFE, 0xFFFF,
+    ] {
+        let mut rom = vec![0; 32768];
+        rom[0x014D] = 0xE7;
+        rom[0x0100..0x0105].copy_from_slice(&[0x31, sp as u8, (sp / 256) as u8, 0xC9, 0xD3]);
+        let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+        system.step_instruction(100).unwrap();
+        system.memory.write(sp, 0x34);
+        system.memory.write(sp.wrapping_add(1), 0x12);
+        let word = u16::from(system.memory.read(sp))
+            | (u16::from(system.memory.read(sp.wrapping_add(1))) << 8);
+        let memory_before: Vec<_> = (0u16..=65535)
+            .map(|addr| system.memory.read(addr))
+            .collect();
+        let mut expected = system.cpu_snapshot();
+        assert!(matches!(
+            system.step_instruction(100).unwrap(),
+            super::InstructionStep::Complete {
+                mcycles: 4,
+                ticks: 16
+            }
+        ));
+        expected.sp = sp.wrapping_add(2);
+        expected.pc = word;
+        assert_eq!(system.cpu_snapshot(), expected);
+        assert_eq!(system.elapsed_ticks(), 28);
+        for addr in 0u16..=65535 {
+            assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+        }
+    }
+}
+
+#[test]
 fn stack_cycles_obey_bus_mapping_and_preserve_other_memory_at_every_pause() {
     for (pair, push, pop) in [
         (0, 0xC5, 0xC1),

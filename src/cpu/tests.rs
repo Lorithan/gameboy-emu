@@ -4,6 +4,7 @@ use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, R
 mod absolute_jumps;
 mod adc_sbc;
 mod byte_transfers;
+mod call_ret;
 mod compare;
 mod memory_inc_dec;
 mod operand_add_sub;
