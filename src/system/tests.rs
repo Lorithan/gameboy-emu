@@ -2,6 +2,66 @@ use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 
 #[test]
+fn conditional_returns_preserve_all_memory_and_obey_stack_bus_boundaries() {
+    for byte in [0xC0, 0xC8, 0xD0, 0xD8] {
+        for equal in [false, true] {
+            let taken = match byte {
+                0xC0 | 0xD8 => !equal,
+                _ => equal,
+            };
+            let cycles = if taken { 5u64 } else { 2 };
+            for sp in [
+                0u16, 0x7FFF, 0x8000, 0xC000, 0xE000, 0xFF7F, 0xFF80, 0xFFFE, 0xFFFF,
+            ] {
+                for budget in 0u64..=5 {
+                    let mut rom = vec![0; 32768];
+                    rom[0x014D] = 0xE7;
+                    rom[0x0100..0x0109].copy_from_slice(&[
+                        0x31,
+                        sp as u8,
+                        (sp / 256) as u8,
+                        0x3E,
+                        u8::from(equal),
+                        0xFE,
+                        1,
+                        byte,
+                        0xD3,
+                    ]);
+                    let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                    for _ in 0..3 {
+                        system.step_instruction(100).unwrap();
+                    }
+                    system.memory.write(sp, 0x34);
+                    system.memory.write(sp.wrapping_add(1), 0x12);
+                    let target = u16::from(system.memory.read(sp))
+                        | (u16::from(system.memory.read(sp.wrapping_add(1))) << 8);
+                    let memory_before: Vec<_> = (0u16..=65535)
+                        .map(|addr| system.memory.read(addr))
+                        .collect();
+                    let mut expected = system.cpu_snapshot();
+                    system.step_instruction(budget).unwrap();
+                    for addr in 0u16..=65535 {
+                        assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                    }
+                    if budget < cycles {
+                        system.step_instruction(100).unwrap();
+                    }
+                    expected.pc = if taken { target } else { 0x0108 };
+                    if taken {
+                        expected.sp = sp.wrapping_add(2);
+                    }
+                    assert_eq!(system.cpu_snapshot(), expected);
+                    assert_eq!(system.elapsed_ticks(), 28 + cycles * 4);
+                    for addr in 0u16..=65535 {
+                        assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn call_writes_only_return_bytes_at_the_correct_pause_and_ret_preserves_memory() {
     for byte in [0xCD, 0xC4, 0xCC, 0xD4, 0xDC] {
         for equal in [false, true] {

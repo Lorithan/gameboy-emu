@@ -114,6 +114,9 @@ pub(super) enum DecodedOpcode {
         condition: JumpCondition,
     },
     Return,
+    ConditionalReturn {
+        condition: JumpCondition,
+    },
     Unknown,
 }
 
@@ -257,6 +260,9 @@ impl From<u8> for DecodedOpcode {
                     operand: Operand::Target(Target::from_bits(value)),
                 }
             }
+            0xC0 => DecodedOpcode::ConditionalReturn {
+                condition: JumpCondition::NZ,
+            },
             0xC1 => DecodedOpcode::Pop {
                 operand: PushOperand::BC,
             },
@@ -276,6 +282,9 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Add { carry: false },
                 operand: Operand::Immediate,
             },
+            0xC8 => DecodedOpcode::ConditionalReturn {
+                condition: JumpCondition::Z,
+            },
             0xC9 => DecodedOpcode::Return,
             0xCA => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Z,
@@ -289,6 +298,9 @@ impl From<u8> for DecodedOpcode {
             0xCE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: true },
                 operand: Operand::Immediate,
+            },
+            0xD0 => DecodedOpcode::ConditionalReturn {
+                condition: JumpCondition::NC,
             },
             0xD1 => DecodedOpcode::Pop {
                 operand: PushOperand::DE,
@@ -305,6 +317,9 @@ impl From<u8> for DecodedOpcode {
             0xD6 => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: false },
                 operand: Operand::Immediate,
+            },
+            0xD8 => DecodedOpcode::ConditionalReturn {
+                condition: JumpCondition::C,
             },
             0xDA => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::C,

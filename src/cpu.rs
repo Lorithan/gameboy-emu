@@ -116,6 +116,10 @@ enum ExecutionState {
         addr: u16,
         low: u8,
     },
+    ReturnConditional {
+        taken: bool,
+        addr: u16,
+    },
     Faulted(CpuFault),
 }
 
@@ -215,7 +219,9 @@ impl CPU {
                 addr: stack_addr,
                 value: return_addr_low,
             }),
-            Push { .. } | ApplyJump { .. } | Call { .. } => Ok(CycleAction::Idle),
+            Push { .. } | ApplyJump { .. } | Call { .. } | ReturnConditional { .. } => {
+                Ok(CycleAction::Idle)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -552,6 +558,15 @@ impl CPU {
                 self.state = ApplyJump { target: jump_addr };
                 Ok(false)
             }
+            ReturnConditional { taken, addr } => {
+                if taken {
+                    self.state = ReadReturnLow { addr };
+                    Ok(false)
+                } else {
+                    self.state = FetchOpcode;
+                    Ok(true)
+                }
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -723,6 +738,15 @@ impl CPU {
             }
             DecodedOpcode::Return => {
                 self.state = ReadReturnLow {
+                    addr: self.registers.sp,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::ConditionalReturn { condition } => {
+                let taken = condition.jump(self.registers.f);
+
+                self.state = ReturnConditional {
+                    taken,
                     addr: self.registers.sp,
                 };
                 Ok(false)

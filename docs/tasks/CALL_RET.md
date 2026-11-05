@@ -87,7 +87,7 @@ Assistant added RET mapping, exhaustive-target state checks, captured-address/mi
 
 ## Completion review — 2026-11-04
 
-All five CALL forms and unconditional RET are complete locally, pending commit/push. RET reads captured stack addresses, advances SP after successful reads, reports the requested address on missing data and commits the target during final Idle. CALL retains its correct six/three-cycle paths. No correctness findings remain.
+All five CALL forms and unconditional RET are complete and committed locally as 49fbe24; not yet pushed. RET reads captured stack addresses, advances SP after successful reads, reports the requested address on missing data and commits the target during final Idle. CALL retains its correct six/three-cycle paths. No correctness findings remain.
 
 All 205 tests pass (143 unit, 62 integration); formatting and Clippy pass without warnings. Existing exhaustive CALL/RET targets, condition/flag boundaries, PC/SP wrapping, captured payload/retry tests and public exact traces/budget resumes pass. Nested subroutines in HRAM and WRAM restore SP and return to each caller continuation in LIFO order, completing the synthetic program in 104 ticks while skipping unsupported sentinels.
 
