@@ -2,6 +2,7 @@ use super::registers::{Register, Register16};
 use super::{CPU, CpuError, CpuFault, CycleAction, Destination, ExecutionState, Registers};
 
 mod absolute_jumps;
+mod accumulator_logic;
 mod adc_sbc;
 mod byte_transfers;
 mod call_ret;

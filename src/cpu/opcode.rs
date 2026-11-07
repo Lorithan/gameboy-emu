@@ -39,6 +39,9 @@ pub(super) enum Operand {
 pub(super) enum ArithmeticKind {
     Add { carry: bool },
     Sub { carry: bool },
+    And,
+    Xor,
+    Or,
     Compare,
 }
 
@@ -254,6 +257,9 @@ impl From<u8> for DecodedOpcode {
                     1 => ArithmeticKind::Add { carry: true },
                     2 => ArithmeticKind::Sub { carry: false },
                     3 => ArithmeticKind::Sub { carry: true },
+                    4 => ArithmeticKind::And,
+                    5 => ArithmeticKind::Xor,
+                    6 => ArithmeticKind::Or,
                     7 => ArithmeticKind::Compare,
                     _ => return DecodedOpcode::Unknown,
                 };
@@ -344,12 +350,24 @@ impl From<u8> for DecodedOpcode {
             0xE5 => DecodedOpcode::Push {
                 operand: PushOperand::HL,
             },
+            0xE6 => DecodedOpcode::Arithmetic {
+                kind: ArithmeticKind::And,
+                operand: Operand::Immediate,
+            },
             0xE9 => DecodedOpcode::JumpHL,
+            0xEE => DecodedOpcode::Arithmetic {
+                kind: ArithmeticKind::Xor,
+                operand: Operand::Immediate,
+            },
             0xF1 => DecodedOpcode::Pop {
                 operand: PushOperand::AF,
             },
             0xF5 => DecodedOpcode::Push {
                 operand: PushOperand::AF,
+            },
+            0xF6 => DecodedOpcode::Arithmetic {
+                kind: ArithmeticKind::Or,
+                operand: Operand::Immediate,
             },
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,

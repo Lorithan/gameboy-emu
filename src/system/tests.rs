@@ -850,3 +850,47 @@ fn failing_read_retains_its_byte_and_tick_span_in_the_error_trace() {
     }
     assert_eq!(system.elapsed_ticks(), 4);
 }
+
+#[test]
+fn logic_preserves_the_entire_bus_through_every_budget_pause() {
+    for (base, immediate) in [(0xA0u8, 0xE6u8), (0xA8, 0xEE), (0xB0, 0xF6)] {
+        for source in 0..9 {
+            for budget in 0..=2 {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                rom[0x0100] = if source == 8 {
+                    immediate
+                } else {
+                    base + source
+                };
+                rom[0x0101] = 0x69;
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                for addr in 0xC000..=0xDFFF {
+                    system.memory.write(addr, (addr % 251) as u8);
+                }
+                for addr in 0xFF80..=0xFFFE {
+                    system.memory.write(addr, (addr % 127) as u8);
+                }
+                let memory: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                for addr in 0u16..=65535 {
+                    assert_eq!(
+                        system.memory.read(addr),
+                        memory[usize::from(addr)],
+                        "opcode {:02X} budget {budget} addr {addr:04X}",
+                        rom[0x0100]
+                    );
+                }
+                let cycles = if source == 6 || source == 8 { 2 } else { 1 };
+                if budget < cycles {
+                    system.step_instruction(100).unwrap();
+                    for addr in 0u16..=65535 {
+                        assert_eq!(system.memory.read(addr), memory[usize::from(addr)]);
+                    }
+                }
+            }
+        }
+    }
+}

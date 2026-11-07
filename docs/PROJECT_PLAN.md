@@ -141,6 +141,16 @@ Acceptance criteria:
 - Describe how a headless run stops, exposes results, and reports unsupported behavior.
 - Identify focused tests for the first cartridge/bus issue.
 
+## Current checkpoint - 2026-11-06
+
+This checkpoint supersedes historical next-task/unpushed statements below. See [the project review](REVIEW_2026-11-06.md).
+
+Local and live GitHub main are 8a2c2f5 (RST). Fresh checks pass 217 tests (151 unit, 66 integration), formatting and strict Clippy. No external ROM suite was run. No correctness defect was identified in reviewed paths; M2 remains incomplete.
+
+Recovery decision: the later logic work is on an inaccessible crashed PC. The user has chosen to redo it from published RST checkpoint 8a2c2f5. Next: [AND/XOR/OR](tasks/ACCUMULATOR_LOGIC.md) under reopened #24, then CPL/SCF/CCF under #25. Historical 224-test evidence belongs to the inaccessible work; fresh acceptance evidence is required. No need to wait for recovery.
+
+AND/XOR/OR redo is now complete: 226 tests pass (158 unit, 68 integration), formatting and strict Clippy pass, with no correctness findings. See [acceptance evidence](tasks/ACCUMULATOR_LOGIC.md). Next active task: #25 CPL/SCF/CCF, beginning with CPL; preserve Z/C and set N/H for CPL. Retain CPU/System/Bus boundaries. Specify interrupt sampling, device event ordering and startup before peripheral work. SDL2 remains deferred to M4.
+
 ## Current implementation task
 
 Current CALL/RET checkpoint: all five CALL forms and C9 RET under [#21](https://github.com/Lorithan/gameboy-emu/issues/21) are complete and committed locally as 49fbe24 (not yet pushed). All 205 tests pass (143 unit, 62 integration); formatting and Clippy pass without warnings. Exact taken/untaken cycle paths, exhaustive targets, captures, wrapping, retries, budgets, nested HRAM/WRAM subroutines and full-address-space memory preservation pass. No correctness findings remain. See [CALL_RET.md](tasks/CALL_RET.md). [#22 — Conditional returns](https://github.com/Lorithan/gameboy-emu/issues/22) is complete locally, pending commit, with evidence in [CONDITIONAL_RETURNS.md](tasks/CONDITIONAL_RETURNS.md). All 211 tests pass (147 unit, 64 integration), formatting/Clippy pass without warnings, and no correctness findings remain. All four conditions, captures, exact five/two-cycle timing, retries, budgets, nested calls and full memory preservation are verified; C9 remains four cycles. Next specify RST; interrupts/RETI follow separately. The following checkpoints are historical.

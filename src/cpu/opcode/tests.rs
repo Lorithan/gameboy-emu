@@ -81,7 +81,7 @@ fn every_other_byte_remains_explicitly_unknown() {
         if [0xC2, 0xC3, 0xCA, 0xD2, 0xDA, 0xE9].contains(&byte) {
             continue;
         }
-        if (0xB8..=0xBF).contains(&byte) || byte == 0xFE {
+        if (0xA0..=0xBF).contains(&byte) || [0xE6, 0xEE, 0xF6, 0xFE].contains(&byte) {
             continue;
         }
         if (0x88..=0x8F).contains(&byte)

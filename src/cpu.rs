@@ -940,6 +940,30 @@ impl CPU {
                 let result = self.sub(left, right, carry);
                 self.set_register(Register::A, result);
             }
+            ArithmeticKind::And => {
+                let result = left & right;
+                self.set_register(Register::A, result);
+                self.registers.set_flag(registers::Flag::Z, result == 0);
+                self.registers.set_flag(registers::Flag::N, false);
+                self.registers.set_flag(registers::Flag::H, true);
+                self.registers.set_flag(registers::Flag::C, false);
+            }
+            ArithmeticKind::Xor => {
+                let result = left ^ right;
+                self.set_register(Register::A, result);
+                self.registers.set_flag(registers::Flag::Z, result == 0);
+                self.registers.set_flag(registers::Flag::N, false);
+                self.registers.set_flag(registers::Flag::H, false);
+                self.registers.set_flag(registers::Flag::C, false);
+            }
+            ArithmeticKind::Or => {
+                let result = left | right;
+                self.set_register(Register::A, result);
+                self.registers.set_flag(registers::Flag::Z, result == 0);
+                self.registers.set_flag(registers::Flag::N, false);
+                self.registers.set_flag(registers::Flag::H, false);
+                self.registers.set_flag(registers::Flag::C, false);
+            }
             ArithmeticKind::Compare => {
                 self.sub(left, right, false);
             }

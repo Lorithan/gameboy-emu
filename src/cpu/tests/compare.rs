@@ -78,9 +78,7 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
             )),
         }
     }
-    for byte in [0xA0, 0xA8, 0xB0, 0x76] {
-        assert!(matches!(DecodedOpcode::from(byte), DecodedOpcode::Unknown));
-    }
+    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Unknown));
 }
 
 #[test]
