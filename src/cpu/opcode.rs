@@ -100,6 +100,9 @@ pub(super) enum DecodedOpcode {
         kind: ArithmeticKind,
         operand: Operand,
     },
+    Cpl,
+    Scf,
+    Ccf,
     RelativeJump {
         condition: JumpCondition,
     },
@@ -214,6 +217,7 @@ impl From<u8> for DecodedOpcode {
             0x2E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::L),
             },
+            0x2F => DecodedOpcode::Cpl,
             0x30 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::NC,
             },
@@ -231,6 +235,7 @@ impl From<u8> for DecodedOpcode {
             0x36 => DecodedOpcode::LoadImmediate {
                 destination: Target::IndirectHL,
             },
+            0x37 => DecodedOpcode::Scf,
             0x38 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::C,
             },
@@ -245,7 +250,7 @@ impl From<u8> for DecodedOpcode {
             0x3E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::A),
             },
-
+            0x3F => DecodedOpcode::Ccf,
             0x76 => DecodedOpcode::Unknown, // HALT currently unimplemented
             0x40..=0x7F => DecodedOpcode::Load {
                 destination: Target::from_bits(byte >> 3),

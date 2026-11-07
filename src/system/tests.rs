@@ -894,3 +894,28 @@ fn logic_preserves_the_entire_bus_through_every_budget_pause() {
         }
     }
 }
+
+#[test]
+fn complement_carry_preserve_all_memory_and_mapped_aliases() {
+    for opcode in [0x2F, 0x37, 0x3F] {
+        let mut rom = vec![0; 32768];
+        rom[0x014D] = 0xE7;
+        rom[0x0100] = opcode;
+        let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+        for addr in 0xC000..=0xDFFF {
+            system.memory.write(addr, (addr % 251) as u8);
+        }
+        for addr in 0xFF80..=0xFFFE {
+            system.memory.write(addr, (addr % 127) as u8);
+        }
+        let before: Vec<_> = (0u16..=65535)
+            .map(|addr| system.memory.read(addr))
+            .collect();
+        for budget in [0, 1] {
+            system.step_instruction(budget).unwrap();
+            for addr in 0u16..=65535 {
+                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+            }
+        }
+    }
+}

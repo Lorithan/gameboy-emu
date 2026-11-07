@@ -149,7 +149,7 @@ Local and live GitHub main are 8a2c2f5 (RST). Fresh checks pass 217 tests (151 u
 
 Recovery decision: the later logic work is on an inaccessible crashed PC. The user has chosen to redo it from published RST checkpoint 8a2c2f5. Next: [AND/XOR/OR](tasks/ACCUMULATOR_LOGIC.md) under reopened #24, then CPL/SCF/CCF under #25. Historical 224-test evidence belongs to the inaccessible work; fresh acceptance evidence is required. No need to wait for recovery.
 
-AND/XOR/OR redo is now complete: 226 tests pass (158 unit, 68 integration), formatting and strict Clippy pass, with no correctness findings. See [acceptance evidence](tasks/ACCUMULATOR_LOGIC.md). Next active task: #25 CPL/SCF/CCF, beginning with CPL; preserve Z/C and set N/H for CPL. Retain CPU/System/Bus boundaries. Specify interrupt sampling, device event ordering and startup before peripheral work. SDL2 remains deferred to M4.
+AND/XOR/OR redo is now complete: 226 tests pass (158 unit, 68 integration), formatting and strict Clippy pass, with no correctness findings. See [acceptance evidence](tasks/ACCUMULATOR_LOGIC.md). #25 CPL/SCF/CCF is complete locally: all 231 tests pass (161 unit, 70 integration), formatting and strict Clippy pass. Enum naming cleanup was approved by the user. See [completion evidence](tasks/COMPLEMENT_CARRY.md). Next implementation slice should be specified separately before coding; accumulator rotates are a suitable small follow-up, with CB operations and DAA kept separate. Retain CPU/System/Bus boundaries. Specify interrupt sampling, device event ordering and startup before peripheral work. SDL2 remains deferred to M4.
 
 ## Current implementation task
 

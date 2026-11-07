@@ -693,6 +693,26 @@ impl CPU {
                     }
                 }
             }
+            DecodedOpcode::Cpl => {
+                let value = !self.get_register(Register::A);
+                self.set_register(Register::A, value);
+                self.registers.set_flag(Flag::N, true);
+                self.registers.set_flag(Flag::H, true);
+                Ok(true)
+            }
+            DecodedOpcode::Scf => {
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers.set_flag(Flag::C, true);
+                Ok(true)
+            }
+            DecodedOpcode::Ccf => {
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers
+                    .set_flag(Flag::C, !self.registers.get_flag(Flag::C));
+                Ok(true)
+            }
             DecodedOpcode::RelativeJump { condition } => {
                 let taken = condition.jump(self.registers.f);
 
