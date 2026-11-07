@@ -6,7 +6,7 @@ use crate::cpu::{
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Target {
     Register(Register),
     IndirectHL,
@@ -29,7 +29,7 @@ impl Target {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Operand {
     Target(Target),
     Immediate,
@@ -80,6 +80,14 @@ pub(super) enum PushOperand {
     AF,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RotationDirection {
+    Right { through_carry: bool },
+    Left { through_carry: bool },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -103,6 +111,9 @@ pub(super) enum DecodedOpcode {
     Cpl,
     Scf,
     Ccf,
+    Rotate {
+        direction: RotationDirection,
+    },
     RelativeJump {
         condition: JumpCondition,
     },
@@ -147,6 +158,11 @@ impl From<u8> for DecodedOpcode {
             0x06 => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::B),
             },
+            0x07 => DecodedOpcode::Rotate {
+                direction: RotationDirection::Left {
+                    through_carry: false,
+                },
+            },
             0x0C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::C),
@@ -158,6 +174,11 @@ impl From<u8> for DecodedOpcode {
             0x0E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::C),
             },
+            0x0F => DecodedOpcode::Rotate {
+                direction: RotationDirection::Right {
+                    through_carry: false,
+                },
+            },
             0x11 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
             },
@@ -168,6 +189,11 @@ impl From<u8> for DecodedOpcode {
             0x15 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::D),
+            },
+            0x17 => DecodedOpcode::Rotate {
+                direction: RotationDirection::Left {
+                    through_carry: true,
+                },
             },
             0x16 => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::D),
@@ -185,6 +211,11 @@ impl From<u8> for DecodedOpcode {
             },
             0x1E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::E),
+            },
+            0x1F => DecodedOpcode::Rotate {
+                direction: RotationDirection::Right {
+                    through_carry: true,
+                },
             },
             0x20 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::NZ,

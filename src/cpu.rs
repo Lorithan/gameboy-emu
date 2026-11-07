@@ -713,6 +713,44 @@ impl CPU {
                     .set_flag(Flag::C, !self.registers.get_flag(Flag::C));
                 Ok(true)
             }
+            DecodedOpcode::Rotate { direction } => {
+                let a = self.get_register(Register::A);
+                let carry_in = self.registers.get_flag(Flag::C);
+
+                let (result, carry_out) = match direction {
+                    RotationDirection::Right { through_carry } => {
+                        let bit0 = a & 1;
+                        let new_a = if through_carry {
+                            if carry_in {
+                                (a >> 1) | (1 << 7)
+                            } else {
+                                a >> 1
+                            }
+                        } else {
+                            (a >> 1) | (bit0 << 7)
+                        };
+
+                        (new_a, bit0 == 1)
+                    }
+                    RotationDirection::Left { through_carry } => {
+                        let bit7 = (a >> 7) & 1;
+                        let new_a = if through_carry {
+                            if carry_in { (a << 1) | 1 } else { a << 1 }
+                        } else {
+                            (a << 1) | bit7
+                        };
+
+                        (new_a, bit7 == 1)
+                    }
+                };
+
+                self.set_register(Register::A, result);
+                self.registers.set_flag(Flag::C, carry_out);
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers.set_flag(Flag::Z, false);
+                Ok(true)
+            }
             DecodedOpcode::RelativeJump { condition } => {
                 let taken = condition.jump(self.registers.f);
 
