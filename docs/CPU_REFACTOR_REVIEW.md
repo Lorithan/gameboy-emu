@@ -35,3 +35,15 @@ Retain the current enum for now. Its payloads enforce the data available in each
 ## References
 
 [Rust From documentation](https://doc.rust-lang.org/std/convert/trait.From.html) and [TryFrom documentation](https://doc.rust-lang.org/std/convert/trait.TryFrom.html), consulted 2026-11-03. From is intended for infallible conversions; choosing whether unsupported classification is represented as a variant or a decode error is an API decision here.
+
+## Proposed follow-up: return cycle transitions - 2026-11-08
+
+The user identified a real omission hazard after Unary16 reported instruction completion but stayed in its pending Idle state. Current handlers separately mutate ExecutionState and return a boolean; these can disagree.
+
+Proposal for a separate user-owned refactor: internal handlers return an explicit transition outcome, such as Continue(next_state) or InstructionComplete, and a central coordinator assigns execution state and derives the existing completion boolean. InstructionComplete supplies FetchOpcode centrally and cannot carry an arbitrary next state. Merely returning (next_state, complete) would retain the contradictory combinations. Keep the existing externally observable cycle API while refactoring internals. This is a proposal, not an implementation decision or an instruction to refactor now; the user suggested revisiting after opcode work.
+
+Handlers can still mutate registers after validated reads; returning a transition does not require cloning the entire CPU or staging every register write. Validate read responses before any mutation. MissingReadValue must leave registers and pending state unchanged for retry. UnsupportedOpcode must still latch the original opcode/address in Faulted and remain sticky; generic error propagation must not accidentally remove that state transition. The central outcome/error contract must express both behaviors explicitly before implementation.
+
+This reduces forgotten-transition bugs and makes all successful paths choose an outcome. It does not prove valid adjacency: Continue can still contain the wrong state. Retain exact cycle, next-opcode, retry, fault, timing and budget tests. No typestate hierarchy, general micro-operation queue, new dependencies or Bus/System rewrite is justified for this fix. Keep the refactor separate from adding instructions; choose a checkpoint when the user is ready.
+
+Acceptance evidence: behavior-equivalent snapshots, traces/timing, budgets/resume, missing-read atomicity, sticky original faults, and an explicit regression for completion followed by a different instruction. Existing instruction tests plus meaningful transition-invariant checks should cover the change; no need to mirror every enum arm in new tests.

@@ -104,6 +104,10 @@ pub(super) enum DecodedOpcode {
         operation: UnaryOperation,
         target: Target,
     },
+    Unary16 {
+        operation: UnaryOperation,
+        target: Register16,
+    },
     Arithmetic {
         kind: ArithmeticKind,
         operand: Operand,
@@ -148,6 +152,10 @@ impl From<u8> for DecodedOpcode {
             0x01 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::BC,
             },
+            0x03 => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Increment,
+                target: Register16::BC,
+            },
             0x04 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::B),
@@ -163,6 +171,10 @@ impl From<u8> for DecodedOpcode {
                 direction: RotationDirection::Left {
                     through_carry: false,
                 },
+            },
+            0x0B => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Decrement,
+                target: Register16::BC,
             },
             0x0C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -183,6 +195,10 @@ impl From<u8> for DecodedOpcode {
             0x11 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
             },
+            0x13 => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Increment,
+                target: Register16::DE,
+            },
             0x14 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::D),
@@ -201,6 +217,10 @@ impl From<u8> for DecodedOpcode {
             },
             0x18 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Always,
+            },
+            0x1B => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Decrement,
+                target: Register16::DE,
             },
             0x1C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -224,6 +244,10 @@ impl From<u8> for DecodedOpcode {
             0x21 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::HL,
             },
+            0x23 => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Increment,
+                target: Register16::HL,
+            },
             0x24 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::H),
@@ -238,6 +262,10 @@ impl From<u8> for DecodedOpcode {
             0x27 => DecodedOpcode::DecimalAdjust,
             0x28 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Z,
+            },
+            0x2B => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Decrement,
+                target: Register16::HL,
             },
             0x2C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
@@ -257,6 +285,10 @@ impl From<u8> for DecodedOpcode {
             0x31 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::SP,
             },
+            0x33 => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Increment,
+                target: Register16::SP,
+            },
             0x34 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::IndirectHL,
@@ -271,6 +303,10 @@ impl From<u8> for DecodedOpcode {
             0x37 => DecodedOpcode::Scf,
             0x38 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::C,
+            },
+            0x3B => DecodedOpcode::Unary16 {
+                operation: UnaryOperation::Decrement,
+                target: Register16::SP,
             },
             0x3C => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,

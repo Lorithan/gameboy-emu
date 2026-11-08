@@ -120,6 +120,10 @@ enum ExecutionState {
         taken: bool,
         addr: u16,
     },
+    Unary16 {
+        target: Register16,
+        value: u16,
+    },
     Faulted(CpuFault),
 }
 
@@ -219,9 +223,11 @@ impl CPU {
                 addr: stack_addr,
                 value: return_addr_low,
             }),
-            Push { .. } | ApplyJump { .. } | Call { .. } | ReturnConditional { .. } => {
-                Ok(CycleAction::Idle)
-            }
+            Push { .. }
+            | ApplyJump { .. }
+            | Call { .. }
+            | ReturnConditional { .. }
+            | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -567,6 +573,17 @@ impl CPU {
                     Ok(true)
                 }
             }
+            Unary16 { target, value } => {
+                match target {
+                    Register16::BC => self.registers.set_bc(value),
+                    Register16::DE => self.registers.set_de(value),
+                    Register16::HL => self.registers.set_hl(value),
+                    Register16::SP => self.registers.set_sp(value),
+                }
+
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -656,6 +673,22 @@ impl CPU {
                     Ok(false)
                 }
             },
+            DecodedOpcode::Unary16 { operation, target } => {
+                let mut value = match target {
+                    Register16::BC => self.registers.bc(),
+                    Register16::DE => self.registers.de(),
+                    Register16::HL => self.registers.hl(),
+                    Register16::SP => self.registers.sp,
+                };
+
+                value = match operation {
+                    UnaryOperation::Increment => value.wrapping_add(1),
+                    UnaryOperation::Decrement => value.wrapping_sub(1),
+                };
+
+                self.state = Unary16 { target, value };
+                Ok(false)
+            }
             DecodedOpcode::Arithmetic { kind, operand } => {
                 let operation = match kind {
                     ArithmeticKind::Add { carry } => ArithmeticKind::Add {

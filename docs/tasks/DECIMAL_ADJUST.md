@@ -35,3 +35,5 @@ User replaced every correction operation with explicit wrapping_add/wrapping_sub
 Evidence: all 8,192 A/flag/PC input cases and 80,000 valid BCD arithmetic combinations pass with overflow checks enabled; independent decimal arithmetic verifies ADD/ADC/SUB/SBC sequences. Exact public opcode-fetch traces and one-cycle timing, zero/exact/excess budgets with no extra fetch, full-address-space preservation in both adjustment modes, and a 72-tick program using DAA flags for ADC and conditional branches pass. Existing regressions remain green. No external ROM suite was run.
 
 Assistant changed tests/docs only; emulator behavior remains user-authored. Complete locally, publication pending.
+
+Publication verified 2026-11-08: local and live GitHub main both resolve to af8b12bcd6b168ff2cd81c54ec9c3537b9369aab.

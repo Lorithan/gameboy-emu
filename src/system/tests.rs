@@ -976,3 +976,34 @@ fn decimal_adjust_preserves_every_memory_location_in_both_modes() {
         }
     }
 }
+
+#[test]
+fn word_inc_dec_preserve_all_memory_through_budget_pauses() {
+    for opcode in [0x03, 0x0B, 0x13, 0x1B, 0x23, 0x2B, 0x33, 0x3B] {
+        for budget in 0..=2 {
+            let mut rom = vec![0; 32768];
+            rom[0x014D] = 0xE7;
+            rom[0x0100] = opcode;
+            let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+            for addr in 0xC000..=0xDFFF {
+                system.memory.write(addr, (addr % 251) as u8);
+            }
+            for addr in 0xFF80..=0xFFFE {
+                system.memory.write(addr, (addr % 127) as u8);
+            }
+            let before: Vec<_> = (0u16..=65535)
+                .map(|addr| system.memory.read(addr))
+                .collect();
+            system.step_instruction(budget).unwrap();
+            for addr in 0u16..=65535 {
+                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+            }
+            if budget < 2 {
+                system.step_instruction(100).unwrap();
+                for addr in 0u16..=65535 {
+                    assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                }
+            }
+        }
+    }
+}
