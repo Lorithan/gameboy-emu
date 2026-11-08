@@ -821,6 +821,32 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::DecimalAdjust => {
+                let mut a = self.get_register(Register::A);
+                if self.registers.get_flag(Flag::N) {
+                    // after subtraction
+                    if self.registers.get_flag(Flag::C) {
+                        a = a.wrapping_sub(0x60);
+                    }
+                    if self.registers.get_flag(Flag::H) {
+                        a = a.wrapping_sub(0x6);
+                    }
+                } else {
+                    // after addition
+                    if self.registers.get_flag(Flag::C) || a > 0x99 {
+                        a = a.wrapping_add(0x60);
+                        self.registers.set_flag(Flag::C, true);
+                    }
+                    if self.registers.get_flag(Flag::H) || (a & 0x0F > 0x09) {
+                        a = a.wrapping_add(0x6);
+                    }
+                }
+
+                self.set_register(Register::A, a);
+                self.registers.set_flag(Flag::Z, a == 0);
+                self.registers.set_flag(Flag::H, false);
+                Ok(true)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,

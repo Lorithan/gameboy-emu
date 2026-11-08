@@ -10,6 +10,7 @@ mod call_ret;
 mod compare;
 mod complement_carry;
 mod conditional_returns;
+mod decimal_adjust;
 mod memory_inc_dec;
 mod operand_add_sub;
 mod register_add_sub;

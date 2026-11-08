@@ -944,3 +944,35 @@ fn accumulator_rotates_leave_all_memory_unchanged() {
         }
     }
 }
+
+#[test]
+fn decimal_adjust_preserves_every_memory_location_in_both_modes() {
+    for (a, operation, operand) in [
+        (0x09, 0xC6, 1),
+        (0x99, 0xC6, 1),
+        (0x10, 0xD6, 1),
+        (0, 0xD6, 1),
+    ] {
+        let mut rom = vec![0; 32768];
+        rom[0x014D] = 0xE7;
+        rom[0x0100..0x0106].copy_from_slice(&[0x3E, a, operation, operand, 0x27, 0xD3]);
+        let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+        system.step_instruction(100).unwrap();
+        system.step_instruction(100).unwrap();
+        for addr in 0xC000..=0xDFFF {
+            system.memory.write(addr, (addr % 251) as u8);
+        }
+        for addr in 0xFF80..=0xFFFE {
+            system.memory.write(addr, (addr % 127) as u8);
+        }
+        let before: Vec<_> = (0u16..=65535)
+            .map(|addr| system.memory.read(addr))
+            .collect();
+        for budget in [0, 1] {
+            system.step_instruction(budget).unwrap();
+            for addr in 0u16..=65535 {
+                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+            }
+        }
+    }
+}

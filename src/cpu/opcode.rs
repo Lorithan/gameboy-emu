@@ -137,6 +137,7 @@ pub(super) enum DecodedOpcode {
     Restart {
         target: u16,
     },
+    DecimalAdjust,
     Unknown,
 }
 
@@ -234,6 +235,7 @@ impl From<u8> for DecodedOpcode {
             0x26 => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::H),
             },
+            0x27 => DecodedOpcode::DecimalAdjust,
             0x28 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Z,
             },
