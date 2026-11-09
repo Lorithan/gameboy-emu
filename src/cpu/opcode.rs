@@ -112,9 +112,12 @@ pub(super) enum DecodedOpcode {
         kind: ArithmeticKind,
         operand: Operand,
     },
-    Cpl,
-    Scf,
-    Ccf,
+    AddHL {
+        target: Register16,
+    },
+    ComplementAccumulator,
+    SetCarry,
+    ComplementCarry,
     Rotate {
         direction: RotationDirection,
     },
@@ -172,6 +175,9 @@ impl From<u8> for DecodedOpcode {
                     through_carry: false,
                 },
             },
+            0x09 => DecodedOpcode::AddHL {
+                target: Register16::BC,
+            },
             0x0B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::BC,
@@ -207,16 +213,19 @@ impl From<u8> for DecodedOpcode {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::D),
             },
+            0x16 => DecodedOpcode::LoadImmediate {
+                destination: Target::Register(Register::D),
+            },
             0x17 => DecodedOpcode::Rotate {
                 direction: RotationDirection::Left {
                     through_carry: true,
                 },
             },
-            0x16 => DecodedOpcode::LoadImmediate {
-                destination: Target::Register(Register::D),
-            },
             0x18 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Always,
+            },
+            0x19 => DecodedOpcode::AddHL {
+                target: Register16::DE,
             },
             0x1B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
@@ -263,6 +272,9 @@ impl From<u8> for DecodedOpcode {
             0x28 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Z,
             },
+            0x29 => DecodedOpcode::AddHL {
+                target: Register16::HL,
+            },
             0x2B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::HL,
@@ -278,7 +290,7 @@ impl From<u8> for DecodedOpcode {
             0x2E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::L),
             },
-            0x2F => DecodedOpcode::Cpl,
+            0x2F => DecodedOpcode::ComplementAccumulator,
             0x30 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::NC,
             },
@@ -300,9 +312,12 @@ impl From<u8> for DecodedOpcode {
             0x36 => DecodedOpcode::LoadImmediate {
                 destination: Target::IndirectHL,
             },
-            0x37 => DecodedOpcode::Scf,
+            0x37 => DecodedOpcode::SetCarry,
             0x38 => DecodedOpcode::RelativeJump {
                 condition: JumpCondition::C,
+            },
+            0x39 => DecodedOpcode::AddHL {
+                target: Register16::SP,
             },
             0x3B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
@@ -319,7 +334,7 @@ impl From<u8> for DecodedOpcode {
             0x3E => DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::A),
             },
-            0x3F => DecodedOpcode::Ccf,
+            0x3F => DecodedOpcode::ComplementCarry,
             0x76 => DecodedOpcode::Unknown, // HALT currently unimplemented
             0x40..=0x7F => DecodedOpcode::Load {
                 destination: Target::from_bits(byte >> 3),

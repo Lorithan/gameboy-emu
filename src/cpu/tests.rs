@@ -18,6 +18,7 @@ mod register_inc_dec;
 mod relative_jumps;
 mod restarts;
 mod stack_push_pop;
+mod word_add;
 mod word_inc_dec;
 
 fn unsupported_fault(error: CpuError) -> CpuFault {

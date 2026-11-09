@@ -124,6 +124,10 @@ enum ExecutionState {
         target: Register16,
         value: u16,
     },
+    Addition16 {
+        lhs: u16,
+        rhs: u16,
+    },
     Faulted(CpuFault),
 }
 
@@ -227,6 +231,7 @@ impl CPU {
             | ApplyJump { .. }
             | Call { .. }
             | ReturnConditional { .. }
+            | Addition16 { .. }
             | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
@@ -584,6 +589,20 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            Addition16 { lhs, rhs } => {
+                let (result, c) = lhs.overflowing_add(rhs);
+
+                let h = ((lhs ^ rhs ^ result) & 0x1000) != 0;
+
+                self.registers.set_flag(registers::Flag::C, c);
+                self.registers.set_flag(registers::Flag::N, false);
+                self.registers.set_flag(registers::Flag::H, h);
+
+                self.registers.set_hl(result);
+
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -726,20 +745,32 @@ impl CPU {
                     }
                 }
             }
-            DecodedOpcode::Cpl => {
+            DecodedOpcode::AddHL { target } => {
+                let lhs = self.registers.hl();
+                let rhs = match target {
+                    Register16::BC => self.registers.bc(),
+                    Register16::DE => self.registers.de(),
+                    Register16::HL => self.registers.hl(),
+                    Register16::SP => self.registers.sp,
+                };
+
+                self.state = Addition16 { lhs, rhs };
+                Ok(false)
+            }
+            DecodedOpcode::ComplementAccumulator => {
                 let value = !self.get_register(Register::A);
                 self.set_register(Register::A, value);
                 self.registers.set_flag(Flag::N, true);
                 self.registers.set_flag(Flag::H, true);
                 Ok(true)
             }
-            DecodedOpcode::Scf => {
+            DecodedOpcode::SetCarry => {
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, false);
                 self.registers.set_flag(Flag::C, true);
                 Ok(true)
             }
-            DecodedOpcode::Ccf => {
+            DecodedOpcode::ComplementCarry => {
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, false);
                 self.registers
