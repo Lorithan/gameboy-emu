@@ -145,6 +145,8 @@ pub(super) enum DecodedOpcode {
         target: u16,
     },
     DecimalAdjust,
+    LoadHlFromSpOffset,
+    AddSignedOffsetToSp,
     Unknown,
 }
 
@@ -443,6 +445,7 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::And,
                 operand: Operand::Immediate,
             },
+            0xE8 => DecodedOpcode::AddSignedOffsetToSp,
             0xE9 => DecodedOpcode::JumpHL,
             0xEE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Xor,
@@ -458,6 +461,7 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Or,
                 operand: Operand::Immediate,
             },
+            0xF8 => DecodedOpcode::LoadHlFromSpOffset,
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,

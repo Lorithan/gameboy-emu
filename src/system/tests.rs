@@ -1038,3 +1038,36 @@ fn word_add_preserves_all_memory_across_every_pause() {
         }
     }
 }
+
+#[test]
+fn signed_sp_operations_preserve_all_memory_at_every_pause() {
+    for (opcode, cycles) in [(0xF8, 3u64), (0xE8, 4)] {
+        for raw in [0u8, 1, 0x7F, 0x80, 0xFF] {
+            for budget in 0..=cycles {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                rom[0x0100..0x0103].copy_from_slice(&[opcode, raw, 0xD3]);
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                for addr in 0xC000..=0xDFFF {
+                    system.memory.write(addr, (addr % 251) as u8);
+                }
+                for addr in 0xFF80..=0xFFFE {
+                    system.memory.write(addr, (addr % 127) as u8);
+                }
+                let before: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                for addr in 0u16..=65535 {
+                    assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                }
+                if budget < cycles {
+                    system.step_instruction(100).unwrap();
+                    for addr in 0u16..=65535 {
+                        assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                    }
+                }
+            }
+        }
+    }
+}

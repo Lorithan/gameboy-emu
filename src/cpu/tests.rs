@@ -17,6 +17,7 @@ mod register_add_sub;
 mod register_inc_dec;
 mod relative_jumps;
 mod restarts;
+mod signed_sp_offsets;
 mod stack_push_pop;
 mod word_add;
 mod word_inc_dec;

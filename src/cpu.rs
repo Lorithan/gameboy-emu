@@ -128,6 +128,20 @@ enum ExecutionState {
         lhs: u16,
         rhs: u16,
     },
+    ReadSpOffset {
+        sp: u16,
+        hl: bool,
+    },
+    DelaySpOffset {
+        sp: u16,
+        offset: i8,
+        hl: bool,
+    },
+    ApplySpOffset {
+        sp: u16,
+        offset: i8,
+        hl: bool,
+    },
     Faulted(CpuFault),
 }
 
@@ -198,6 +212,7 @@ impl CPU {
             | ReadCallLow { .. }
             | ReadCallHigh { .. }
             | ReadImmediate16High { .. }
+            | ReadSpOffset { .. }
             | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
@@ -232,6 +247,8 @@ impl CPU {
             | Call { .. }
             | ReturnConditional { .. }
             | Addition16 { .. }
+            | DelaySpOffset { .. }
+            | ApplySpOffset { .. }
             | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
@@ -603,6 +620,50 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            ReadSpOffset { sp, hl } => {
+                let offset = match read_value {
+                    Some(byte) => byte as i8,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                if hl {
+                    self.state = ApplySpOffset { sp, offset, hl };
+                    Ok(false)
+                } else {
+                    self.state = DelaySpOffset { sp, offset, hl };
+                    Ok(false)
+                }
+            }
+            DelaySpOffset { sp, offset, hl } => {
+                self.state = ApplySpOffset { sp, offset, hl };
+                Ok(false)
+            }
+            ApplySpOffset { sp, offset, hl } => {
+                let result = sp.wrapping_add_signed(offset as i16);
+
+                // flags
+                self.registers.set_flag(Flag::Z, false);
+                self.registers.set_flag(Flag::N, false);
+
+                let raw_offset = u16::from(offset as u8);
+                let h = (sp & 0x0F) + (raw_offset & 0x0F) > 0x0F;
+                let c = (sp & 0xFF) + raw_offset > 0xFF;
+                self.registers.set_flag(Flag::H, h);
+                self.registers.set_flag(Flag::C, c);
+
+                if hl {
+                    self.registers.set_hl(result);
+                } else {
+                    self.registers.set_sp(result);
+                }
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -910,6 +971,20 @@ impl CPU {
                 self.registers.set_flag(Flag::Z, a == 0);
                 self.registers.set_flag(Flag::H, false);
                 Ok(true)
+            }
+            DecodedOpcode::LoadHlFromSpOffset => {
+                self.state = ReadSpOffset {
+                    sp: self.registers.sp,
+                    hl: true,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::AddSignedOffsetToSp => {
+                self.state = ReadSpOffset {
+                    sp: self.registers.sp,
+                    hl: false,
+                };
+                Ok(false)
             }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
