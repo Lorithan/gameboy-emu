@@ -26,3 +26,7 @@ F8 and E8 now pass acceptance tests. Current implementation: 223/244 non-prefix 
 ## After BC/DE memory transfers - 2026-11-10
 
 02/0A/12/1A now pass acceptance tests. Current implementation: 227 base instructions and zero CB instructions. Remaining: 17 base (12 loads, five interrupt/control) plus 256 CB = 273 instruction encodings; CB dispatch remains separate.
+
+## After HL auto-update transfers - 2026-11-10
+
+22/2A/32/3A now pass acceptance tests. Current implementation: 231 base instructions and zero CB instructions. Remaining: 13 base (eight loads, five interrupt/control) plus 256 CB = 269 instruction encodings; CB dispatch remains separate.

@@ -158,6 +158,12 @@ pub(super) enum DecodedOpcode {
     StoreAToIndirect {
         destination: IndirectPair,
     },
+    LoadAFromHL {
+        operation: UnaryOperation,
+    },
+    StoreAToHL {
+        operation: UnaryOperation,
+    },
     Unknown,
 }
 
@@ -282,6 +288,9 @@ impl From<u8> for DecodedOpcode {
                 operation: UnaryOperation::Increment,
                 target: Register16::HL,
             },
+            0x22 => DecodedOpcode::StoreAToHL {
+                operation: UnaryOperation::Increment,
+            },
             0x24 => DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::H),
@@ -299,6 +308,9 @@ impl From<u8> for DecodedOpcode {
             },
             0x29 => DecodedOpcode::AddHL {
                 target: Register16::HL,
+            },
+            0x2A => DecodedOpcode::LoadAFromHL {
+                operation: UnaryOperation::Increment,
             },
             0x2B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
@@ -322,6 +334,9 @@ impl From<u8> for DecodedOpcode {
             0x31 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::SP,
             },
+            0x32 => DecodedOpcode::StoreAToHL {
+                operation: UnaryOperation::Decrement,
+            },
             0x33 => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
                 target: Register16::SP,
@@ -343,6 +358,9 @@ impl From<u8> for DecodedOpcode {
             },
             0x39 => DecodedOpcode::AddHL {
                 target: Register16::SP,
+            },
+            0x3A => DecodedOpcode::LoadAFromHL {
+                operation: UnaryOperation::Decrement,
             },
             0x3B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,

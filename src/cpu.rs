@@ -44,6 +44,10 @@ enum ExecutionState {
         addr: u16,
         destination: Register,
     },
+    ReadMemoryAndUpdateHL {
+        addr: u16,
+        operation: UnaryOperation,
+    },
     ReadOperation {
         addr: u16,
         operation: UnaryOperation,
@@ -60,6 +64,11 @@ enum ExecutionState {
     WriteMemory {
         addr: u16,
         value: u8,
+    },
+    WriteMemoryAndUpdateHL {
+        addr: u16,
+        value: u8,
+        operation: UnaryOperation,
     },
     Push {
         addr: u16,
@@ -217,13 +226,16 @@ impl CPU {
                 addr: self.registers.pc,
             }),
             ReadMemory { addr, .. }
+            | ReadMemoryAndUpdateHL { addr, .. }
             | PopLow { addr, .. }
             | PopHigh { addr, .. }
             | ReadReturnLow { addr }
             | ReadReturnHigh { addr, .. }
             | ReadOperation { addr, .. }
             | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
-            WriteMemory { addr, value } => Ok(CycleAction::Write { addr, value }),
+            WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
+                Ok(CycleAction::Write { addr, value })
+            }
             PushHigh { addr, high, .. } => Ok(CycleAction::Write { addr, value: high }),
             PushLow { addr, low } => Ok(CycleAction::Write { addr, value: low }),
             PushCallerHigh {
@@ -357,6 +369,17 @@ impl CPU {
                 }
             }
             ReadMemory { destination, addr } => self.store_fetched(destination, addr, read_value),
+            ReadMemoryAndUpdateHL { addr, operation } => {
+                self.store_fetched(Register::A, addr, read_value)?;
+                let hl = match operation {
+                    UnaryOperation::Increment => addr.wrapping_add(1),
+                    UnaryOperation::Decrement => addr.wrapping_sub(1),
+                };
+
+                self.registers.set_hl(hl);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             ReadOperation { addr, operation } => {
                 let mut value = match read_value {
                     Some(byte) => byte,
@@ -410,6 +433,18 @@ impl CPU {
             }
             WriteMemory { .. } => {
                 self.state = ExecutionState::FetchOpcode;
+                Ok(true)
+            }
+            WriteMemoryAndUpdateHL {
+                addr, operation, ..
+            } => {
+                let hl = match operation {
+                    UnaryOperation::Increment => addr.wrapping_add(1),
+                    UnaryOperation::Decrement => addr.wrapping_sub(1),
+                };
+
+                self.registers.set_hl(hl);
+                self.state = FetchOpcode;
                 Ok(true)
             }
             Push { addr, value } => {
@@ -1007,6 +1042,23 @@ impl CPU {
                 };
 
                 self.state = WriteMemory { addr, value };
+                Ok(false)
+            }
+            DecodedOpcode::LoadAFromHL { operation } => {
+                let addr = self.registers.hl();
+
+                self.state = ReadMemoryAndUpdateHL { addr, operation };
+                Ok(false)
+            }
+            DecodedOpcode::StoreAToHL { operation } => {
+                let value = self.registers.a;
+                let addr = self.registers.hl();
+
+                self.state = WriteMemoryAndUpdateHL {
+                    addr,
+                    value,
+                    operation,
+                };
                 Ok(false)
             }
             DecodedOpcode::Unknown => {
