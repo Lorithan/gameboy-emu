@@ -986,7 +986,7 @@ impl CPU {
                 };
                 Ok(false)
             }
-            DecodedOpcode::LoadFromIndirect { source } => {
+            DecodedOpcode::LoadAFromIndirect { source } => {
                 let addr = match source {
                     IndirectPair::BC => self.registers.bc(),
                     IndirectPair::DE => self.registers.de(),

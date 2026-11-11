@@ -152,7 +152,7 @@ pub(super) enum DecodedOpcode {
     DecimalAdjust,
     LoadHlFromSpOffset,
     AddSignedOffsetToSp,
-    LoadFromIndirect {
+    LoadAFromIndirect {
         source: IndirectPair,
     },
     StoreAToIndirect {
@@ -194,7 +194,7 @@ impl From<u8> for DecodedOpcode {
             0x09 => DecodedOpcode::AddHL {
                 target: Register16::BC,
             },
-            0x0A => DecodedOpcode::LoadFromIndirect {
+            0x0A => DecodedOpcode::LoadAFromIndirect {
                 source: IndirectPair::BC,
             },
             0x0B => DecodedOpcode::Unary16 {
@@ -249,7 +249,7 @@ impl From<u8> for DecodedOpcode {
             0x19 => DecodedOpcode::AddHL {
                 target: Register16::DE,
             },
-            0x1A => DecodedOpcode::LoadFromIndirect {
+            0x1A => DecodedOpcode::LoadAFromIndirect {
                 source: IndirectPair::DE,
             },
             0x1B => DecodedOpcode::Unary16 {

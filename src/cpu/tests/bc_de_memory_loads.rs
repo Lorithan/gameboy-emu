@@ -30,7 +30,7 @@ fn indirect_pair_mappings_are_explicit() {
             if store {
                 DecodedOpcode::StoreAToIndirect { destination: pair }
             } else {
-                DecodedOpcode::LoadFromIndirect { source: pair }
+                DecodedOpcode::LoadAFromIndirect { source: pair }
             }
         );
     }
