@@ -151,6 +151,17 @@ enum ExecutionState {
         offset: i8,
         hl: bool,
     },
+    ReadAbsoluteLow,
+    ReadAbsoluteHigh {
+        low: u8,
+    },
+    StoreAToAbsoluteLow {
+        value: u8,
+    },
+    StoreAToAbsoluteHigh {
+        value: u8,
+        low: u8,
+    },
     Faulted(CpuFault),
 }
 
@@ -213,6 +224,10 @@ impl CPU {
     pub fn request_cycle(&self) -> Result<CycleAction, CpuError> {
         match self.state {
             FetchOpcode
+            | ReadAbsoluteLow
+            | ReadAbsoluteHigh { .. }
+            | StoreAToAbsoluteLow { .. }
+            | StoreAToAbsoluteHigh { .. }
             | ReadDisplacement { .. }
             | ReadImmediate8 { .. }
             | ReadImmediate16Low { .. }
@@ -678,6 +693,69 @@ impl CPU {
                 self.state = ApplySpOffset { sp, offset, hl };
                 Ok(false)
             }
+            ReadAbsoluteLow => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                self.state = ReadAbsoluteHigh { low };
+                Ok(false)
+            }
+            ReadAbsoluteHigh { low } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                let addr = ((high as u16) << 8) | low as u16;
+
+                self.state = ReadMemory {
+                    addr,
+                    destination: Register::A,
+                };
+                Ok(false)
+            }
+            StoreAToAbsoluteLow { value } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                self.state = StoreAToAbsoluteHigh { value, low };
+                Ok(false)
+            }
+            StoreAToAbsoluteHigh { value, low } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                let addr = ((high as u16) << 8) | low as u16;
+
+                self.state = WriteMemory { addr, value };
+                Ok(false)
+            }
             ApplySpOffset { sp, offset, hl } => {
                 let result = sp.wrapping_add_signed(offset as i16);
 
@@ -1059,6 +1137,16 @@ impl CPU {
                     value,
                     operation,
                 };
+                Ok(false)
+            }
+            DecodedOpcode::LoadAFromAbsolute => {
+                self.state = ReadAbsoluteLow;
+                Ok(false)
+            }
+            DecodedOpcode::StoreAToAbsolute => {
+                let value = self.registers.a;
+
+                self.state = StoreAToAbsoluteLow { value };
                 Ok(false)
             }
             DecodedOpcode::Unknown => {

@@ -164,6 +164,8 @@ pub(super) enum DecodedOpcode {
     StoreAToHL {
         operation: UnaryOperation,
     },
+    LoadAFromAbsolute,
+    StoreAToAbsolute,
     Unknown,
 }
 
@@ -488,6 +490,7 @@ impl From<u8> for DecodedOpcode {
             },
             0xE8 => DecodedOpcode::AddSignedOffsetToSp,
             0xE9 => DecodedOpcode::JumpHL,
+            0xEA => DecodedOpcode::StoreAToAbsolute,
             0xEE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Xor,
                 operand: Operand::Immediate,
@@ -503,6 +506,7 @@ impl From<u8> for DecodedOpcode {
                 operand: Operand::Immediate,
             },
             0xF8 => DecodedOpcode::LoadHlFromSpOffset,
+            0xFA => DecodedOpcode::LoadAFromAbsolute,
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,

@@ -1184,3 +1184,55 @@ fn hl_auto_update_preserves_memory_except_permitted_store_and_echo_bytes() {
         }
     }
 }
+
+#[test]
+fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
+    for (opcode, store) in [(0xEA, true), (0xFA, false)] {
+        for addr in [
+            0u16, 0x0103, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF,
+            0xFE00, 0xFF7F, 0xFF80, 0xFFFE, 0xFFFF,
+        ] {
+            for budget in 0..=4 {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                rom[0x0100..0x0106].copy_from_slice(&[
+                    0x3E,
+                    0x5A,
+                    opcode,
+                    addr as u8,
+                    (addr / 256) as u8,
+                    0,
+                ]);
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                system.step_instruction(100).unwrap();
+                for address in 0xC000..=0xDFFF {
+                    system.memory.write(address, (address % 251) as u8);
+                }
+                for address in 0xFF80..=0xFFFE {
+                    system.memory.write(address, (address % 127) as u8);
+                }
+                let mut expected: Vec<_> = (0u16..=65535)
+                    .map(|address| system.memory.read(address))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                for phase in [budget, 4] {
+                    if store && phase == 4 && matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+                        expected[usize::from(addr)] = 0x5A;
+                        if (0xC000..=0xDDFF).contains(&addr) {
+                            expected[usize::from(addr + 0x2000)] = 0x5A;
+                        }
+                        if (0xE000..=0xFDFF).contains(&addr) {
+                            expected[usize::from(addr - 0x2000)] = 0x5A;
+                        }
+                    }
+                    for address in 0u16..=65535 {
+                        assert_eq!(system.memory.read(address), expected[usize::from(address)]);
+                    }
+                    if phase < 4 {
+                        system.step_instruction(100).unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
