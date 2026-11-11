@@ -87,7 +87,12 @@ pub(super) enum RotationDirection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum IndirectPair {
+    BC,
+    DE,
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -147,6 +152,12 @@ pub(super) enum DecodedOpcode {
     DecimalAdjust,
     LoadHlFromSpOffset,
     AddSignedOffsetToSp,
+    LoadFromIndirect {
+        source: IndirectPair,
+    },
+    StoreAToIndirect {
+        destination: IndirectPair,
+    },
     Unknown,
 }
 
@@ -156,6 +167,9 @@ impl From<u8> for DecodedOpcode {
             0x00 => DecodedOpcode::Nop,
             0x01 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::BC,
+            },
+            0x02 => DecodedOpcode::StoreAToIndirect {
+                destination: IndirectPair::BC,
             },
             0x03 => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
@@ -180,6 +194,9 @@ impl From<u8> for DecodedOpcode {
             0x09 => DecodedOpcode::AddHL {
                 target: Register16::BC,
             },
+            0x0A => DecodedOpcode::LoadFromIndirect {
+                source: IndirectPair::BC,
+            },
             0x0B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::BC,
@@ -202,6 +219,9 @@ impl From<u8> for DecodedOpcode {
             },
             0x11 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
+            },
+            0x12 => DecodedOpcode::StoreAToIndirect {
+                destination: IndirectPair::DE,
             },
             0x13 => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
@@ -228,6 +248,9 @@ impl From<u8> for DecodedOpcode {
             },
             0x19 => DecodedOpcode::AddHL {
                 target: Register16::DE,
+            },
+            0x1A => DecodedOpcode::LoadFromIndirect {
+                source: IndirectPair::DE,
             },
             0x1B => DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,

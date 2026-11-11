@@ -986,6 +986,29 @@ impl CPU {
                 };
                 Ok(false)
             }
+            DecodedOpcode::LoadFromIndirect { source } => {
+                let addr = match source {
+                    IndirectPair::BC => self.registers.bc(),
+                    IndirectPair::DE => self.registers.de(),
+                };
+
+                self.state = ReadMemory {
+                    addr,
+                    destination: Register::A,
+                };
+                Ok(false)
+            }
+            DecodedOpcode::StoreAToIndirect { destination } => {
+                let value = self.registers.a;
+
+                let addr = match destination {
+                    IndirectPair::BC => self.registers.bc(),
+                    IndirectPair::DE => self.registers.de(),
+                };
+
+                self.state = WriteMemory { addr, value };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,

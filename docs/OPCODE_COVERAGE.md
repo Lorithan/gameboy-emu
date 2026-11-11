@@ -23,3 +23,6 @@ Reference retrieved 2026-11-08: [gbdev opcode data](https://raw.githubuserconten
 ## Update - 2026-11-10
 
 F8 and E8 now pass acceptance tests. Current implementation: 223/244 non-prefix base instructions, 0/256 CB instructions. Remaining: 21 base instructions (16 loads, five interrupt/control) plus 256 CB instructions = 277. CB dispatch is still missing and counted separately. The initial audit above is retained as the pre-task checkpoint.
+## After BC/DE memory transfers - 2026-11-10
+
+02/0A/12/1A now pass acceptance tests. Current implementation: 227 base instructions and zero CB instructions. Remaining: 17 base (12 loads, five interrupt/control) plus 256 CB = 273 instruction encodings; CB dispatch remains separate.

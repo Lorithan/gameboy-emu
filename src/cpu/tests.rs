@@ -5,6 +5,7 @@ mod absolute_jumps;
 mod accumulator_logic;
 mod accumulator_rotates;
 mod adc_sbc;
+mod bc_de_memory_loads;
 mod byte_transfers;
 mod call_ret;
 mod compare;
