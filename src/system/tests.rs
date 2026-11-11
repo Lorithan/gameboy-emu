@@ -1316,3 +1316,62 @@ fn load_sp_from_hl_preserves_all_memory_at_every_pause() {
         }
     }
 }
+
+#[test]
+fn store_sp_absolute_changes_only_each_completed_mapped_byte_and_aliases() {
+    for target in [
+        0u16, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xDDFF, 0xDE00, 0xDFFF, 0xE000, 0xFDFF, 0xFF7F,
+        0xFF80, 0xFFFE, 0xFFFF,
+    ] {
+        for budget in 0..=5u64 {
+            let mut rom = vec![0; 32768];
+            rom[0x014D] = 0xE7;
+            rom[0x0100..0x0107].copy_from_slice(&[
+                0x31,
+                0xA5,
+                0x5A,
+                0x08,
+                target as u8,
+                (target / 256) as u8,
+                0,
+            ]);
+            let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+            system.step_instruction(100).unwrap();
+            for addr in 0xC000..=0xDFFF {
+                system.memory.write(addr, (addr % 251) as u8);
+            }
+            for addr in 0xFF80..=0xFFFE {
+                system.memory.write(addr, (addr % 127) as u8);
+            }
+            let original: Vec<_> = (0u16..=65535)
+                .map(|addr| system.memory.read(addr))
+                .collect();
+            system.step_instruction(budget).unwrap();
+            for phase in [budget, 5] {
+                let mut expected = original.clone();
+                for (completion, addr, value) in
+                    [(4, target, 0xA5), (5, target.wrapping_add(1), 0x5A)]
+                {
+                    if phase < completion {
+                        continue;
+                    }
+                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+                        expected[usize::from(addr)] = value;
+                        if (0xC000..=0xDDFF).contains(&addr) {
+                            expected[usize::from(addr + 0x2000)] = value;
+                        }
+                        if (0xE000..=0xFDFF).contains(&addr) {
+                            expected[usize::from(addr - 0x2000)] = value;
+                        }
+                    }
+                }
+                for addr in 0u16..=65535 {
+                    assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                }
+                if phase < 5 {
+                    system.step_instruction(100).unwrap();
+                }
+            }
+        }
+    }
+}

@@ -168,6 +168,18 @@ enum ExecutionState {
     TransferHLtoSP {
         hl: u16,
     },
+    ReadLowToStoreSp {
+        sp: u16,
+    },
+    ReadHighToStoreSp {
+        sp: u16,
+        low: u8,
+    },
+    WriteSpLow {
+        sp_low: u8,
+        sp_high: u8,
+        addr: u16,
+    },
     Faulted(CpuFault),
 }
 
@@ -244,6 +256,8 @@ impl CPU {
             | ReadImmediate16High { .. }
             | ReadSpOffset { .. }
             | ReadHighMemoryImmediate { .. }
+            | ReadLowToStoreSp { .. }
+            | ReadHighToStoreSp { .. }
             | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
@@ -258,6 +272,10 @@ impl CPU {
             WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
                 Ok(CycleAction::Write { addr, value })
             }
+            WriteSpLow { sp_low, addr, .. } => Ok(CycleAction::Write {
+                addr,
+                value: sp_low,
+            }),
             PushHigh { addr, high, .. } => Ok(CycleAction::Write { addr, value: high }),
             PushLow { addr, low } => Ok(CycleAction::Write { addr, value: low }),
             PushCallerHigh {
@@ -817,6 +835,50 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            ReadLowToStoreSp { sp } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                self.state = ReadHighToStoreSp { sp, low };
+                Ok(false)
+            }
+            ReadHighToStoreSp { sp, low } => {
+                let high = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                let addr = (high as u16) << 8 | low as u16;
+                let sp_low = (sp & 0xFF) as u8;
+                let sp_high = (sp >> 8) as u8;
+
+                self.state = WriteSpLow {
+                    sp_low,
+                    sp_high,
+                    addr,
+                };
+                Ok(false)
+            }
+            WriteSpLow { sp_high, addr, .. } => {
+                let addr = addr.wrapping_add(1);
+                self.state = WriteMemory {
+                    addr,
+                    value: sp_high,
+                };
+                Ok(false)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -1225,6 +1287,11 @@ impl CPU {
             DecodedOpcode::TransferHLtoSP => {
                 let hl = self.registers.hl();
                 self.state = TransferHLtoSP { hl };
+                Ok(false)
+            }
+            DecodedOpcode::StoreStackPointer => {
+                let sp = self.registers.sp;
+                self.state = ReadLowToStoreSp { sp };
                 Ok(false)
             }
             DecodedOpcode::Unknown => {

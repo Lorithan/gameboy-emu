@@ -19,3 +19,10 @@ Full-memory oracle at bus boundaries/echo aliases and FFFF->0000, including one 
 Exclude interrupts, CB and refactor implementation. Local contract: docs/tasks/STORE_SP_ABSOLUTE.md.
 
 Reference checked 2026-11-11: [RGBDS instruction reference](https://raw.githubusercontent.com/gbdev/rgbds/master/man/gbz80.7). User owns implementation; assistant owns tests/docs/review. No dependencies or ROM fixtures.
+## Completion - 2026-11-11
+
+No correctness findings. All 307 tests pass (213 unit, 94 integration); formatting and strict Clippy pass. Original SP is captured during opcode completion, address bytes are read little-endian, the dedicated low-write state retains the high byte, and the final high write reuses WriteMemory at wrapped target+1. SP and flags remain unchanged. Assistant changed tests/docs only.
+
+Evidence: independent 08 mapping/classification; all SP values and all target addresses in separate sweeps (131,072 cases, not all source/target pairs), distinct low/high data, exact snapshots and following-opcode continuation. All flags with captured SP under test-only mutation, preserved buffered low address, missing-read atomic retries, immutable requests and all fetch-wrap positions pass. Exact five-action public traces, all zero/partial/exact/excess budgets/resumes and no duplicate write stages pass. Full-address-space oracle covers every pause, independent low/high mapping, WRAM echo aliases and FFFF->0000. A 116-tick program stores the active stack pointer in HRAM, reads both bytes using A loads, and later pops the original stack data without SP corruption. All prior regressions pass. No external ROM suite was run.
+
+This completes all legal non-CB base load/store instruction encodings in the current CPU scope. Bus devices/mappers remain staged; load/store completion does not imply full memory hardware accuracy. Remaining instruction work is the 256 CB entries plus five base interrupt/control instructions and CB dispatch. Specify the next CB slice before implementation. Complete locally, publication pending.

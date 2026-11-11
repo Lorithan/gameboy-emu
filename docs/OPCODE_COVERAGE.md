@@ -42,3 +42,7 @@ E0/E2/F0/F2 now pass acceptance tests. Current implementation: 237 base instruct
 ## After LD SP,HL - 2026-11-11
 
 F9 now passes acceptance tests. Current implementation: 238 base instructions and zero CB instructions. Remaining: six base (08 load and five interrupt/control) plus 256 CB = 262 instruction encodings; CB dispatch remains separate.
+
+## After LD (a16),SP - 2026-11-11
+
+08 now passes acceptance tests; all legal base load/store instructions are implemented. Current implementation: 239/244 non-prefix base instructions and 0/256 CB instructions. Remaining: five base interrupt/control instructions (STOP, HALT, RETI, DI, EI) plus 256 CB = 261 encodings; CB dispatch remains separate. Device and mapper semantics and external ROM validation remain outside this count.

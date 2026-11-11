@@ -179,6 +179,7 @@ pub(super) enum DecodedOpcode {
         address_source: HighMemoryAddressSource,
     },
     TransferHLtoSP,
+    StoreStackPointer,
     Unknown,
 }
 
@@ -212,6 +213,7 @@ impl From<u8> for DecodedOpcode {
                     through_carry: false,
                 },
             },
+            0x08 => DecodedOpcode::StoreStackPointer,
             0x09 => DecodedOpcode::AddHL {
                 target: Register16::BC,
             },
