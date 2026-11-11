@@ -14,6 +14,7 @@ mod complement_carry;
 mod conditional_returns;
 mod decimal_adjust;
 mod hl_auto_update;
+mod ldh_transfers;
 mod memory_inc_dec;
 mod operand_add_sub;
 mod register_add_sub;

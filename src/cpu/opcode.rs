@@ -93,6 +93,12 @@ pub(super) enum IndirectPair {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum HighMemoryAddressSource {
+    C,
+    Immediate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DecodedOpcode {
     Nop,
     Load {
@@ -166,6 +172,12 @@ pub(super) enum DecodedOpcode {
     },
     LoadAFromAbsolute,
     StoreAToAbsolute,
+    LoadHighMemory {
+        address_source: HighMemoryAddressSource,
+    },
+    StoreHighMemory {
+        address_source: HighMemoryAddressSource,
+    },
     Unknown,
 }
 
@@ -478,8 +490,14 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Sub { carry: true },
                 operand: Operand::Immediate,
             },
+            0xE0 => DecodedOpcode::StoreHighMemory {
+                address_source: HighMemoryAddressSource::Immediate,
+            },
             0xE1 => DecodedOpcode::Pop {
                 operand: PushOperand::HL,
+            },
+            0xE2 => DecodedOpcode::StoreHighMemory {
+                address_source: HighMemoryAddressSource::C,
             },
             0xE5 => DecodedOpcode::Push {
                 operand: PushOperand::HL,
@@ -495,8 +513,14 @@ impl From<u8> for DecodedOpcode {
                 kind: ArithmeticKind::Xor,
                 operand: Operand::Immediate,
             },
+            0xF0 => DecodedOpcode::LoadHighMemory {
+                address_source: HighMemoryAddressSource::Immediate,
+            },
             0xF1 => DecodedOpcode::Pop {
                 operand: PushOperand::AF,
+            },
+            0xF2 => DecodedOpcode::LoadHighMemory {
+                address_source: HighMemoryAddressSource::C,
             },
             0xF5 => DecodedOpcode::Push {
                 operand: PushOperand::AF,

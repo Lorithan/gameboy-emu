@@ -61,6 +61,9 @@ enum ExecutionState {
         value: u8,
         operation: ArithmeticKind,
     },
+    ReadHighMemoryImmediate {
+        store: Option<u8>,
+    },
     WriteMemory {
         addr: u16,
         value: u8,
@@ -237,6 +240,7 @@ impl CPU {
             | ReadCallHigh { .. }
             | ReadImmediate16High { .. }
             | ReadSpOffset { .. }
+            | ReadHighMemoryImmediate { .. }
             | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
                 addr: self.registers.pc,
             }),
@@ -777,6 +781,33 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(true)
             }
+            ReadHighMemoryImmediate { store } => {
+                let low = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.pc = self.registers.pc.wrapping_add(1);
+
+                let addr = (0xFF00) | low as u16;
+
+                match store {
+                    Some(value) => {
+                        self.state = WriteMemory { addr, value };
+                        Ok(false)
+                    }
+                    None => {
+                        self.state = ReadMemory {
+                            addr,
+                            destination: Register::A,
+                        };
+                        Ok(false)
+                    }
+                }
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -1149,6 +1180,39 @@ impl CPU {
                 self.state = StoreAToAbsoluteLow { value };
                 Ok(false)
             }
+            DecodedOpcode::LoadHighMemory {
+                address_source: destination,
+            } => match destination {
+                HighMemoryAddressSource::C => {
+                    let addr = (0xFF00) | self.registers.c as u16;
+                    self.state = ReadMemory {
+                        addr,
+                        destination: Register::A,
+                    };
+                    Ok(false)
+                }
+                HighMemoryAddressSource::Immediate => {
+                    self.state = ReadHighMemoryImmediate { store: None };
+                    Ok(false)
+                }
+            },
+            DecodedOpcode::StoreHighMemory {
+                address_source: source,
+            } => match source {
+                HighMemoryAddressSource::C => {
+                    let addr = (0xFF00) | self.registers.c as u16;
+                    let value = self.registers.a;
+
+                    self.state = WriteMemory { addr, value };
+                    Ok(false)
+                }
+                HighMemoryAddressSource::Immediate => {
+                    let value = self.registers.a;
+
+                    self.state = ReadHighMemoryImmediate { store: Some(value) };
+                    Ok(false)
+                }
+            },
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,

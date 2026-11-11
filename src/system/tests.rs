@@ -1236,3 +1236,51 @@ fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
         }
     }
 }
+
+#[test]
+fn ldh_only_changes_mapped_hram_at_final_store_completion() {
+    for (opcode, store, immediate) in [
+        (0xE2, true, false),
+        (0xF2, false, false),
+        (0xE0, true, true),
+        (0xF0, false, true),
+    ] {
+        for offset in [0u8, 0x7F, 0x80, 0xFE, 0xFF] {
+            let cycles = if immediate { 3 } else { 2 };
+            for budget in 0..=cycles {
+                let mut rom = vec![0; 32768];
+                rom[0x014D] = 0xE7;
+                let mut bytes = vec![0x0E, offset, 0x3E, 0x5A, opcode];
+                if immediate {
+                    bytes.push(offset);
+                }
+                bytes.push(0);
+                rom[0x0100..0x0100 + bytes.len()].copy_from_slice(&bytes);
+                let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+                system.step_instruction(100).unwrap();
+                system.step_instruction(100).unwrap();
+                for addr in 0xC000..=0xDFFF {
+                    system.memory.write(addr, (addr % 251) as u8);
+                }
+                for addr in 0xFF80..=0xFFFE {
+                    system.memory.write(addr, (addr % 127) as u8);
+                }
+                let mut expected: Vec<_> = (0u16..=65535)
+                    .map(|addr| system.memory.read(addr))
+                    .collect();
+                system.step_instruction(budget).unwrap();
+                for phase in [budget, cycles] {
+                    if store && phase == cycles && (0x80..=0xFE).contains(&offset) {
+                        expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
+                    }
+                    for addr in 0u16..=65535 {
+                        assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                    }
+                    if phase < cycles {
+                        system.step_instruction(100).unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
