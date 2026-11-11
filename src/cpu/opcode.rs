@@ -178,6 +178,7 @@ pub(super) enum DecodedOpcode {
     StoreHighMemory {
         address_source: HighMemoryAddressSource,
     },
+    TransferHLtoSP,
     Unknown,
 }
 
@@ -530,6 +531,7 @@ impl From<u8> for DecodedOpcode {
                 operand: Operand::Immediate,
             },
             0xF8 => DecodedOpcode::LoadHlFromSpOffset,
+            0xF9 => DecodedOpcode::TransferHLtoSP,
             0xFA => DecodedOpcode::LoadAFromAbsolute,
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,

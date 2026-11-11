@@ -15,6 +15,7 @@ mod conditional_returns;
 mod decimal_adjust;
 mod hl_auto_update;
 mod ldh_transfers;
+mod load_sp_from_hl;
 mod memory_inc_dec;
 mod operand_add_sub;
 mod register_add_sub;

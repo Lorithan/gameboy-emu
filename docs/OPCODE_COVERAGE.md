@@ -38,3 +38,7 @@ EA/FA now pass acceptance tests. Current implementation: 233 base instructions a
 ## After LDH transfers - 2026-11-11
 
 E0/E2/F0/F2 now pass acceptance tests. Current implementation: 237 base instructions and zero CB instructions. Remaining: seven base (08/F9 loads and five interrupt/control) plus 256 CB = 263 instruction encodings; CB dispatch remains separate.
+
+## After LD SP,HL - 2026-11-11
+
+F9 now passes acceptance tests. Current implementation: 238 base instructions and zero CB instructions. Remaining: six base (08 load and five interrupt/control) plus 256 CB = 262 instruction encodings; CB dispatch remains separate.

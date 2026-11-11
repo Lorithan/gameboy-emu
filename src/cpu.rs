@@ -165,6 +165,9 @@ enum ExecutionState {
         value: u8,
         low: u8,
     },
+    TransferHLtoSP {
+        hl: u16,
+    },
     Faulted(CpuFault),
 }
 
@@ -280,6 +283,7 @@ impl CPU {
             | Addition16 { .. }
             | DelaySpOffset { .. }
             | ApplySpOffset { .. }
+            | TransferHLtoSP { .. }
             | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
@@ -808,6 +812,11 @@ impl CPU {
                     }
                 }
             }
+            TransferHLtoSP { hl } => {
+                self.registers.set_sp(hl);
+                self.state = FetchOpcode;
+                Ok(true)
+            }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -1213,6 +1222,11 @@ impl CPU {
                     Ok(false)
                 }
             },
+            DecodedOpcode::TransferHLtoSP => {
+                let hl = self.registers.hl();
+                self.state = TransferHLtoSP { hl };
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
                     opcode: byte,

@@ -1284,3 +1284,35 @@ fn ldh_only_changes_mapped_hram_at_final_store_completion() {
         }
     }
 }
+
+#[test]
+fn load_sp_from_hl_preserves_all_memory_at_every_pause() {
+    for hl in [0u16, 0xC100, 0xFFFE, 0xFFFF] {
+        for budget in 0..=2 {
+            let mut rom = vec![0; 32768];
+            rom[0x014D] = 0xE7;
+            rom[0x0100..0x0105].copy_from_slice(&[0x21, hl as u8, (hl / 256) as u8, 0xF9, 0]);
+            let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+            system.step_instruction(100).unwrap();
+            for addr in 0xC000..=0xDFFF {
+                system.memory.write(addr, (addr % 251) as u8);
+            }
+            for addr in 0xFF80..=0xFFFE {
+                system.memory.write(addr, (addr % 127) as u8);
+            }
+            let expected: Vec<_> = (0u16..=65535)
+                .map(|addr| system.memory.read(addr))
+                .collect();
+            system.step_instruction(budget).unwrap();
+            for addr in 0u16..=65535 {
+                assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+            }
+            if budget < 2 {
+                system.step_instruction(100).unwrap();
+                for addr in 0u16..=65535 {
+                    assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                }
+            }
+        }
+    }
+}
