@@ -4,6 +4,8 @@ mod registers;
 #[cfg(test)]
 mod tests;
 
+use std::ops::{Shl, Shr};
+
 pub use registers::Registers;
 
 use crate::cpu::{opcode::*, registers::*};
@@ -349,22 +351,11 @@ impl CPU {
                 match target {
                     Target::Register(register) => {
                         let value = self.get_register(register);
+                        let result = self.execute_cb_transform(value, cb_type);
 
-                        match cb_type {
-                            CbType::Rotate { direction } => {
-                                let (result, carry_out) = self.rotate(value, direction);
-
-                                self.set_register(register, result);
-
-                                self.registers.set_flag(Flag::C, carry_out);
-                                self.registers.set_flag(Flag::N, false);
-                                self.registers.set_flag(Flag::H, false);
-                                self.registers.set_flag(Flag::Z, result == 0);
-
-                                self.state = FetchOpcode;
-                                Ok(true)
-                            }
-                        }
+                        self.set_register(register, result);
+                        self.state = FetchOpcode;
+                        Ok(true)
                     }
                     Target::IndirectHL => {
                         let addr = self.registers.hl();
@@ -382,22 +373,10 @@ impl CPU {
                     }
                 };
 
-                match cb_type {
-                    CbType::Rotate { direction } => {
-                        let (result, carry_out) = self.rotate(value, direction);
+                let value = self.execute_cb_transform(value, cb_type);
 
-                        self.registers.set_flag(Flag::C, carry_out);
-                        self.registers.set_flag(Flag::N, false);
-                        self.registers.set_flag(Flag::H, false);
-                        self.registers.set_flag(Flag::Z, result == 0);
-
-                        self.state = WriteMemory {
-                            addr,
-                            value: result,
-                        };
-                        Ok(false)
-                    }
-                }
+                self.state = WriteMemory { addr, value };
+                Ok(false)
             }
             ReadDisplacement { taken } => {
                 let value = match read_value {
@@ -1602,5 +1581,66 @@ impl CPU {
         };
 
         (result, carry_out)
+    }
+
+    fn shift(&self, value: u8, kind: ShiftKind) -> (u8, bool) {
+        match kind {
+            ShiftKind::LeftArithmetic => {
+                let bit7 = (value >> 7) & 1;
+                let new_value = value.shl(1);
+
+                (new_value, bit7 == 1)
+            }
+            ShiftKind::RightArithmetic => {
+                let bit7 = value & (1 << 7);
+                let bit0 = value & 1;
+                let new_value = value.shr(1) | (bit7);
+
+                (new_value, bit0 == 1)
+            }
+            ShiftKind::RightLogical => {
+                let bit0 = value & 1;
+                let new_value = value.shr(1);
+
+                (new_value, bit0 == 1)
+            }
+        }
+    }
+
+    fn execute_cb_transform(&mut self, value: u8, operation: CbType) -> u8 {
+        match operation {
+            CbType::Rotate { direction } => {
+                let (result, carry_out) = self.rotate(value, direction);
+
+                self.registers.set_flag(Flag::C, carry_out);
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers.set_flag(Flag::Z, result == 0);
+
+                result
+            }
+            CbType::Shift { kind } => {
+                let (result, carry_out) = self.shift(value, kind);
+
+                self.registers.set_flag(Flag::C, carry_out);
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers.set_flag(Flag::Z, result == 0);
+
+                result
+            }
+            CbType::Swap => {
+                let low_nibble = value & 0xF;
+                let high_nibble = (value & 0xF0) >> 4;
+                let result = low_nibble << 4 | high_nibble;
+
+                self.registers.set_flag(Flag::C, false);
+                self.registers.set_flag(Flag::N, false);
+                self.registers.set_flag(Flag::H, false);
+                self.registers.set_flag(Flag::Z, result == 0);
+
+                result
+            }
+        }
     }
 }

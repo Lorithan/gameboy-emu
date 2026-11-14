@@ -46,3 +46,11 @@ F9 now passes acceptance tests. Current implementation: 238 base instructions an
 ## After LD (a16),SP - 2026-11-11
 
 08 now passes acceptance tests; all legal base load/store instructions are implemented. Current implementation: 239/244 non-prefix base instructions and 0/256 CB instructions. Remaining: five base interrupt/control instructions (STOP, HALT, RETI, DI, EI) plus 256 CB = 261 encodings; CB dispatch remains separate. Device and mapper semantics and external ROM validation remain outside this count.
+
+## After CB rotates - 2026-11-13
+
+Commit 3ff50d9 implements CB dispatch and CB 00-1F (RLC/RRC/RL/RR, eight targets each). Current coverage: 239/244 non-prefix base instructions and 32/256 CB instructions. Remaining: five base interrupt/control and 224 CB = 229 instruction encodings. All nine CB unit tests pass; no CB-specific System integration checks or external ROM validation have been run. Next: CB 20-3F shifts and nibble swap; see tasks/CB_SHIFTS_SWAP.md.
+
+## After CB shifts and SWAP - 2026-11-13
+
+CB 20-3F is implemented, bringing coverage to 239/244 non-prefix base instructions and 64/256 CB instructions. Remaining: five base plus 192 CB = 197 instruction encodings. All 319 tests pass (225 unit, 94 integration), with formatting and strict Clippy passing. Added checks exhaust A/(HL) shift values and initial flags, and all eight SWAP targets with values/flags, register preservation and cycle completion. CB-specific System integration and remaining task acceptance gaps are recorded in tasks/CB_SHIFTS_SWAP.md. Next implementation family: BIT.

@@ -205,7 +205,7 @@ fn cb_unsupported_decode_is_fallible_for_every_unimplemented_byte() {
     for byte in 0u8..=255 {
         assert_eq!(
             DecodedCbOpcode::try_from(byte).is_ok(),
-            byte < 0x20,
+            byte < 0x40,
             "CB {byte:02X}"
         );
     }
@@ -213,7 +213,7 @@ fn cb_unsupported_decode_is_fallible_for_every_unimplemented_byte() {
 
 #[test]
 fn cb_unsupported_fault_is_sticky_and_does_not_request_memory() {
-    for byte in [0x20, 0x26, 0x46, 0x86, 0xC6, 0xFF] {
+    for byte in [0x40, 0x46, 0x86, 0xC6, 0xFF] {
         let mut cpu = cpu_with_a(0x55, 0xF0);
         fetch_prefix(&mut cpu);
         let first = match cpu.complete_cycle(Some(byte)) {
@@ -247,16 +247,143 @@ fn cb_unsupported_fault_reports_prefix_address_and_consumes_both_bytes() {
         cpu.registers.pc = pc;
         let mut expected = cpu.snapshot();
         assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
-        let fault = match cpu.complete_cycle(Some(0x26)) {
+        let fault = match cpu.complete_cycle(Some(0x46)) {
             Err(CpuError::UnsupportedOpcode(fault)) => fault,
             other => panic!("expected CB fault, got {other:?}"),
         };
-        assert_eq!(fault.opcode, crate::cpu::OpcodeEncoding::Cb(0x26));
+        assert_eq!(fault.opcode, crate::cpu::OpcodeEncoding::Cb(0x46));
         expected.pc = pc.wrapping_add(2);
         assert_eq!(cpu.snapshot(), expected);
         assert_eq!(
             fault.addr, pc,
             "fault should identify the instruction start"
         );
+    }
+}
+
+// Widened arithmetic oracle: independent of production shifts and masks.
+fn shift_reference(opcode: u8, value: u8) -> (u8, u16) {
+    let value = u16::from(value);
+    let (result, carry) = match opcode {
+        0x27 => ((value * 2) % 256, value >= 128),
+        0x2F => (value / 2 + (value / 128) * 128, value % 2 != 0),
+        0x3F => (value / 2, value % 2 != 0),
+        _ => panic!("not a shift"),
+    };
+    let flags = if result == 0 { 0x80 } else { 0 } | if carry { 0x10 } else { 0 };
+    (result as u8, flags)
+}
+
+#[test]
+fn cb_shift_register_values_and_flags() {
+    for opcode in [0x27, 0x2F, 0x3F] {
+        // SLA A, SRA A, SRL A
+        for value in 0u8..=255 {
+            for flags in (0u8..=0xF0).step_by(16) {
+                let mut cpu = cpu_with_a(value, flags);
+                fetch_prefix(&mut cpu);
+                assert!(cpu.complete_cycle(Some(opcode)).unwrap());
+                let (result, expected_flags) = shift_reference(opcode, value);
+                assert_eq!(
+                    cpu.snapshot().af,
+                    u16::from(result) * 256 + expected_flags,
+                    "CB {opcode:02X}, input={value:02X}, flags={flags:02X}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn cb_shift_memory_values_flags_and_four_cycle_completion() {
+    for register_opcode in [0x27, 0x2F, 0x3F] {
+        for value in 0u8..=255 {
+            for flags in (0u8..=0xF0).step_by(16) {
+                let mut cpu = cpu_with_a(0x55, flags);
+                fetch_prefix(&mut cpu);
+                assert!(!cpu.complete_cycle(Some(register_opcode - 1)).unwrap());
+                assert!(matches!(
+                    cpu.request_cycle(),
+                    Ok(CycleAction::Read { addr: 0xC123 })
+                ));
+                assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                let (result, expected_flags) = shift_reference(register_opcode, value);
+                assert!(
+                    matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if value == result),
+                    "CB {:02X}, input={value:02X}, flags={flags:02X}, expected={result:02X}",
+                    register_opcode - 1
+                );
+                assert!(cpu.complete_cycle(None).unwrap());
+                assert_eq!(cpu.snapshot().af, 0x5500 + expected_flags);
+                assert_eq!(cpu.snapshot().pc, 0x0102);
+                assert!(matches!(
+                    cpu.request_cycle(),
+                    Ok(CycleAction::Read { addr: 0x0102 })
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn cb_swap_all_targets_values_flags_and_cycle_completion() {
+    for target in 0u8..8 {
+        for value in 0u8..=255 {
+            for flags in (0u8..=0xF0).step_by(16) {
+                let mut cpu = cpu_with_a(0x55, flags);
+                match target {
+                    0 => cpu.registers.b = value,
+                    1 => cpu.registers.c = value,
+                    2 => cpu.registers.d = value,
+                    3 => cpu.registers.e = value,
+                    4 => cpu.registers.h = value,
+                    5 => cpu.registers.l = value,
+                    6 => {}
+                    7 => cpu.registers.a = value,
+                    _ => unreachable!(),
+                }
+                let mut expected = cpu.snapshot();
+                // Independent decimal arithmetic exchanges the two base-16 digits.
+                let result = u16::from(value % 16) * 16 + u16::from(value / 16);
+                expected.af = (expected.af & 0xFF00) | if result == 0 { 0x80 } else { 0 };
+                expected.pc = 0x0102;
+                match target {
+                    0 => expected.bc = (expected.bc & 0x00FF) | (result * 256),
+                    1 => expected.bc = (expected.bc & 0xFF00) | result,
+                    2 => expected.de = (expected.de & 0x00FF) | (result * 256),
+                    3 => expected.de = (expected.de & 0xFF00) | result,
+                    4 => expected.hl = (expected.hl & 0x00FF) | (result * 256),
+                    5 => expected.hl = (expected.hl & 0xFF00) | result,
+                    6 => {}
+                    7 => expected.af = (result * 256) | (expected.af & 0xFF),
+                    _ => unreachable!(),
+                }
+                fetch_prefix(&mut cpu);
+                let complete = cpu.complete_cycle(Some(0x30 + target)).unwrap();
+                if target == 6 {
+                    assert!(!complete);
+                    assert!(matches!(
+                        cpu.request_cycle(),
+                        Ok(CycleAction::Read { addr: 0xC123 })
+                    ));
+                    assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                    assert!(
+                        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if u16::from(value) == result)
+                    );
+                    assert!(cpu.complete_cycle(None).unwrap());
+                } else {
+                    assert!(complete);
+                }
+                assert_eq!(
+                    cpu.snapshot(),
+                    expected,
+                    "SWAP target={target}, input={value:02X}, flags={flags:02X}"
+                );
+                assert!(matches!(
+                    cpu.request_cycle(),
+                    Ok(CycleAction::Read { addr: 0x0102 })
+                ));
+            }
+        }
     }
 }

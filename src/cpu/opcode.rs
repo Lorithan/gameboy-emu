@@ -550,8 +550,17 @@ impl From<u8> for DecodedOpcode {
 pub struct UnsupportedCbOpcode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ShiftKind {
+    LeftArithmetic,
+    RightArithmetic,
+    RightLogical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CbType {
     Rotate { direction: RotationDirection },
+    Shift { kind: ShiftKind },
+    Swap,
 }
 
 impl TryFrom<u8> for CbType {
@@ -578,6 +587,16 @@ impl TryFrom<u8> for CbType {
                 direction: RotationDirection::Right {
                     through_carry: true,
                 },
+            }),
+            4 => Ok(Self::Shift {
+                kind: ShiftKind::LeftArithmetic,
+            }),
+            5 => Ok(Self::Shift {
+                kind: ShiftKind::RightArithmetic,
+            }),
+            6 => Ok(Self::Swap),
+            7 => Ok(Self::Shift {
+                kind: ShiftKind::RightLogical,
             }),
             _ => Err(UnsupportedCbOpcode),
         }

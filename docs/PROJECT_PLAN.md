@@ -1,4 +1,11 @@
 # Game Boy emulator project plan
+## Current checkpoint - 2026-11-13
+Latest local checkpoint: CB 20-3F shifts and SWAP are implemented. All 319 tests pass (225 unit, 94 integration); formatting and strict Clippy pass. New shift tests exhaust values and initial flags for A and (HL); SWAP tests exhaust values and flags across all eight targets and check register preservation and cycle completion. CB-specific System traces/budgets and full shift-target coverage remain acceptance gaps; no external ROM suite was run. Implementation coverage is now 239/244 non-prefix base instructions and 64/256 CB instructions, leaving five base plus 192 CB encodings. Next implementation task: specify BIT, including its read-only (HL) path and distinct flag rules. The next-task sentence below describes the prior checkpoint.
+
+This checkpoint supersedes older next-task notes below. CB dispatch and RLC/RRC/RL/RR for all eight targets are committed locally as 3ff50d9. The implementation shares rotate arithmetic, keeps base/CB Z policies explicit, uses fallible CB decoding and preserves Base/Cb fault encoding with a sticky fault at the instruction's prefix address. The last full run passed 316 tests (222 unit, 94 integration); after removal of the redundant CPU error variant, all nine CB tests, formatting and strict Clippy passed. No CB-specific System integration tests or external ROM suite were run; existing cycle tests exercise the CPU interface. Publication has not been verified.
+
+Next task: [CB shifts and nibble swap](tasks/CB_SHIFTS_SWAP.md), starting with SLA, then SRA, SWAP and SRL. Reuse the existing CB cycle paths; the task records proposed selectors, flag/timing requirements and acceptance criteria. The user owns implementation. Current coverage is 239/244 non-prefix base instructions and 32/256 CB instructions; five base and 224 CB encodings remain. GitHub task synchronization remains pending.
+
 
 ## Ownership and scope
 
