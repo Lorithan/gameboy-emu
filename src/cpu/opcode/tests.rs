@@ -105,7 +105,7 @@ fn every_other_byte_remains_explicitly_unknown() {
         if [0xC0, 0xC8, 0xD0, 0xD8].contains(&byte) {
             continue;
         }
-        if byte == 0xC9 || byte == 0xCB {
+        if [0xC9, 0xCB, 0xF3, 0xFB].contains(&byte) {
             continue;
         }
         if [0xC4, 0xCC, 0xCD, 0xD4, 0xDC].contains(&byte) {

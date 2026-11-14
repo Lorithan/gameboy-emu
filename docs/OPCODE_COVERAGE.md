@@ -62,3 +62,7 @@ All 256 CB instruction encodings are implemented and decode successfully. Combin
 ## CB System/Bus validation - 2026-11-14
 
 Focused integration validation now passes for all 256 CB encodings: exact traces/ticks and independent result/flag checks, every instruction-budget boundary, full-memory checks for all 32 memory variants across mapped/unmapped addresses and WRAM echo, mixed branch execution, and PC wrapping. All 326 tests pass (228 unit, 98 integration); formatting and strict Clippy pass. See tasks/CB_INTEGRATION.md for evidence and limitations. No external ROM suite was run. Coverage remains 495/500 implemented instruction encodings. Changes remain uncommitted.
+
+## After DI/EI - 2026-11-14
+
+DI (F3) and EI (FB) are locally verified. Coverage is now 241/244 non-prefix base plus 256/256 CB = 497/500 instruction encodings. Remaining: RETI (D9), HALT (76), STOP (10). The last full run passed 334 tests; after a visibility-only correction, all eight DI/EI tests, formatting and strict Clippy pass. IME lifecycle is covered; actual interrupt dispatch and hardware IF/IE behavior remain unimplemented. See tasks/DI_EI.md. Changes are uncommitted.

@@ -14,6 +14,7 @@ mod compare;
 mod complement_carry;
 mod conditional_returns;
 mod decimal_adjust;
+mod di_ei;
 mod hl_auto_update;
 mod ldh_transfers;
 mod load_sp_from_hl;

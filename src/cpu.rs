@@ -227,10 +227,18 @@ pub enum CpuError {
     MissingReadValue { addr: u16 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InterruptState {
+    Disabled,
+    Delayed,
+    Enabled,
+}
+
 #[derive(Debug, Clone)]
 pub struct CPU {
     registers: Registers,
     state: ExecutionState,
+    interrupt_state: InterruptState,
 }
 
 impl CPU {
@@ -238,6 +246,7 @@ impl CPU {
         CPU {
             registers,
             state: ExecutionState::FetchOpcode,
+            interrupt_state: InterruptState::Disabled,
         }
     }
 
@@ -323,6 +332,18 @@ impl CPU {
     }
 
     pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
+        let enable_was_pending = self.interrupt_state == InterruptState::Delayed;
+
+        let complete = self.complete_cycle_inner(read_value)?;
+
+        if complete && enable_was_pending && self.interrupt_state == InterruptState::Delayed {
+            self.interrupt_state = InterruptState::Enabled;
+        }
+
+        Ok(complete)
+    }
+
+    fn complete_cycle_inner(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
         match self.state {
             FetchOpcode => self.read_opcode(read_value),
             DecodeCbOpcode => {
@@ -1390,6 +1411,19 @@ impl CPU {
             DecodedOpcode::DecodeCbOpcode => {
                 self.state = DecodeCbOpcode;
                 Ok(false)
+            }
+            DecodedOpcode::DisableInterrupts => {
+                self.interrupt_state = InterruptState::Disabled;
+                self.state = FetchOpcode;
+                Ok(true)
+            }
+            DecodedOpcode::EnabledInterrupts => {
+                if self.interrupt_state == InterruptState::Disabled {
+                    self.interrupt_state = InterruptState::Delayed;
+                }
+
+                self.state = FetchOpcode;
+                Ok(true)
             }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {

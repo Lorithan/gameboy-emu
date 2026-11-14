@@ -181,6 +181,8 @@ pub(super) enum DecodedOpcode {
     TransferHLtoSP,
     StoreStackPointer,
     DecodeCbOpcode,
+    DisableInterrupts,
+    EnabledInterrupts,
     Unknown,
 }
 
@@ -527,6 +529,7 @@ impl From<u8> for DecodedOpcode {
             0xF2 => DecodedOpcode::LoadHighMemory {
                 address_source: HighMemoryAddressSource::C,
             },
+            0xF3 => DecodedOpcode::DisableInterrupts,
             0xF5 => DecodedOpcode::Push {
                 operand: PushOperand::AF,
             },
@@ -537,6 +540,7 @@ impl From<u8> for DecodedOpcode {
             0xF8 => DecodedOpcode::LoadHlFromSpOffset,
             0xF9 => DecodedOpcode::TransferHLtoSP,
             0xFA => DecodedOpcode::LoadAFromAbsolute,
+            0xFB => DecodedOpcode::EnabledInterrupts,
             0xFE => DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,
