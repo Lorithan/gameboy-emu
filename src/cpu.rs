@@ -351,11 +351,38 @@ impl CPU {
                 match target {
                     Target::Register(register) => {
                         let value = self.get_register(register);
-                        let result = self.execute_cb_transform(value, cb_type);
 
-                        self.set_register(register, result);
-                        self.state = FetchOpcode;
-                        Ok(true)
+                        match cb_type {
+                            CbType::Transform(operation) => {
+                                let result = self.execute_cb_transform(value, operation);
+
+                                self.set_register(register, result);
+                                self.state = FetchOpcode;
+                                Ok(true)
+                            }
+                            CbType::Bit(bit) => {
+                                let zero = value & (1 << bit) == 0;
+                                self.registers.set_flag(Flag::Z, zero);
+                                self.registers.set_flag(Flag::H, true);
+                                self.registers.set_flag(Flag::N, false);
+                                self.state = FetchOpcode;
+                                Ok(true)
+                            }
+                            CbType::Clear(bit) => {
+                                let result = value & (!(1 << bit));
+
+                                self.set_register(register, result);
+                                self.state = FetchOpcode;
+                                Ok(true)
+                            }
+                            CbType::Set(bit) => {
+                                let result = value | (1 << bit);
+
+                                self.set_register(register, result);
+                                self.state = FetchOpcode;
+                                Ok(true)
+                            }
+                        }
                     }
                     Target::IndirectHL => {
                         let addr = self.registers.hl();
@@ -373,10 +400,35 @@ impl CPU {
                     }
                 };
 
-                let value = self.execute_cb_transform(value, cb_type);
+                match cb_type {
+                    CbType::Transform(operation) => {
+                        let value = self.execute_cb_transform(value, operation);
 
-                self.state = WriteMemory { addr, value };
-                Ok(false)
+                        self.state = WriteMemory { addr, value };
+                        Ok(false)
+                    }
+                    CbType::Bit(bit) => {
+                        let zero = value & (1 << bit) == 0;
+                        self.registers.set_flag(Flag::Z, zero);
+                        self.registers.set_flag(Flag::H, true);
+                        self.registers.set_flag(Flag::N, false);
+                        self.state = FetchOpcode;
+                        Ok(true)
+                    }
+                    CbType::Clear(bit) => {
+                        let value = value & (!(1 << bit));
+
+                        self.state = WriteMemory { addr, value };
+                        Ok(false)
+                    }
+
+                    CbType::Set(bit) => {
+                        let value = value | (1 << bit);
+
+                        self.state = WriteMemory { addr, value };
+                        Ok(false)
+                    }
+                }
             }
             ReadDisplacement { taken } => {
                 let value = match read_value {
@@ -1607,9 +1659,9 @@ impl CPU {
         }
     }
 
-    fn execute_cb_transform(&mut self, value: u8, operation: CbType) -> u8 {
+    fn execute_cb_transform(&mut self, value: u8, operation: CbTransform) -> u8 {
         match operation {
-            CbType::Rotate { direction } => {
+            CbTransform::Rotate { direction } => {
                 let (result, carry_out) = self.rotate(value, direction);
 
                 self.registers.set_flag(Flag::C, carry_out);
@@ -1619,7 +1671,7 @@ impl CPU {
 
                 result
             }
-            CbType::Shift { kind } => {
+            CbTransform::Shift { kind } => {
                 let (result, carry_out) = self.shift(value, kind);
 
                 self.registers.set_flag(Flag::C, carry_out);
@@ -1629,7 +1681,7 @@ impl CPU {
 
                 result
             }
-            CbType::Swap => {
+            CbTransform::Swap => {
                 let low_nibble = value & 0xF;
                 let high_nibble = (value & 0xF0) >> 4;
                 let result = low_nibble << 4 | high_nibble;

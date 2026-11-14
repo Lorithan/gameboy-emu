@@ -1,3 +1,5 @@
+mod cb_integration;
+
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
 

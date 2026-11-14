@@ -557,47 +557,66 @@ pub(super) enum ShiftKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CbType {
+pub(super) enum CbTransform {
     Rotate { direction: RotationDirection },
     Shift { kind: ShiftKind },
     Swap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CbType {
+    Transform(CbTransform),
+    Bit(u8),
+    Clear(u8),
+    Set(u8),
 }
 
 impl TryFrom<u8> for CbType {
     type Error = UnsupportedCbOpcode;
 
     fn try_from(bits: u8) -> Result<Self, Self::Error> {
-        match bits >> 3 {
-            0 => Ok(Self::Rotate {
-                direction: RotationDirection::Left {
-                    through_carry: false,
-                },
-            }),
-            1 => Ok(Self::Rotate {
-                direction: RotationDirection::Right {
-                    through_carry: false,
-                },
-            }),
-            2 => Ok(Self::Rotate {
-                direction: RotationDirection::Left {
-                    through_carry: true,
-                },
-            }),
-            3 => Ok(Self::Rotate {
-                direction: RotationDirection::Right {
-                    through_carry: true,
-                },
-            }),
-            4 => Ok(Self::Shift {
-                kind: ShiftKind::LeftArithmetic,
-            }),
-            5 => Ok(Self::Shift {
-                kind: ShiftKind::RightArithmetic,
-            }),
-            6 => Ok(Self::Swap),
-            7 => Ok(Self::Shift {
-                kind: ShiftKind::RightLogical,
-            }),
+        let family = bits >> 6;
+        let selector = (bits >> 3) & 0b111;
+        match family {
+            0 => {
+                let transform = match selector {
+                    0 => CbTransform::Rotate {
+                        direction: RotationDirection::Left {
+                            through_carry: false,
+                        },
+                    },
+                    1 => CbTransform::Rotate {
+                        direction: RotationDirection::Right {
+                            through_carry: false,
+                        },
+                    },
+                    2 => CbTransform::Rotate {
+                        direction: RotationDirection::Left {
+                            through_carry: true,
+                        },
+                    },
+                    3 => CbTransform::Rotate {
+                        direction: RotationDirection::Right {
+                            through_carry: true,
+                        },
+                    },
+                    4 => CbTransform::Shift {
+                        kind: ShiftKind::LeftArithmetic,
+                    },
+                    5 => CbTransform::Shift {
+                        kind: ShiftKind::RightArithmetic,
+                    },
+                    6 => CbTransform::Swap,
+                    7 => CbTransform::Shift {
+                        kind: ShiftKind::RightLogical,
+                    },
+                    _ => unreachable!(),
+                };
+                Ok(Self::Transform(transform))
+            }
+            1 => Ok(Self::Bit(selector)),
+            2 => Ok(Self::Clear(selector)),
+            3 => Ok(Self::Set(selector)),
             _ => Err(UnsupportedCbOpcode),
         }
     }

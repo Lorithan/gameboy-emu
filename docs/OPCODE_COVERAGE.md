@@ -54,3 +54,11 @@ Commit 3ff50d9 implements CB dispatch and CB 00-1F (RLC/RRC/RL/RR, eight targets
 ## After CB shifts and SWAP - 2026-11-13
 
 CB 20-3F is implemented, bringing coverage to 239/244 non-prefix base instructions and 64/256 CB instructions. Remaining: five base plus 192 CB = 197 instruction encodings. All 319 tests pass (225 unit, 94 integration), with formatting and strict Clippy passing. Added checks exhaust A/(HL) shift values and initial flags, and all eight SWAP targets with values/flags, register preservation and cycle completion. CB-specific System integration and remaining task acceptance gaps are recorded in tasks/CB_SHIFTS_SWAP.md. Next implementation family: BIT.
+
+## After BIT, RES and SET - 2026-11-14
+
+All 256 CB instruction encodings are implemented and decode successfully. Combined implementation coverage is 495/500 instruction encodings: 239/244 non-prefix base plus 256/256 CB. The five remaining base instructions are STOP (10), HALT (76), RETI (D9), DI (F3), EI (FB). The CB prefix itself is dispatch, not an additional standalone instruction. All 321 tests pass (227 unit, 94 integration), with formatting and strict Clippy passing. Exhaustive BIT/RES/SET values/flags/targets and CPU cycle completion checks pass. CB System integration, remaining transform-target validation and external ROM validation are not demonstrated by this count. Changes are currently uncommitted.
+
+## CB System/Bus validation - 2026-11-14
+
+Focused integration validation now passes for all 256 CB encodings: exact traces/ticks and independent result/flag checks, every instruction-budget boundary, full-memory checks for all 32 memory variants across mapped/unmapped addresses and WRAM echo, mixed branch execution, and PC wrapping. All 326 tests pass (228 unit, 98 integration); formatting and strict Clippy pass. See tasks/CB_INTEGRATION.md for evidence and limitations. No external ROM suite was run. Coverage remains 495/500 implemented instruction encodings. Changes remain uncommitted.

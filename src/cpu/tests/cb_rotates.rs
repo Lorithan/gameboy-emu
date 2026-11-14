@@ -200,67 +200,31 @@ fn cb_rotate_memory_retries_and_writes_to_captured_address_on_fourth_cycle() {
 }
 
 #[test]
-fn cb_unsupported_decode_is_fallible_for_every_unimplemented_byte() {
-    use crate::cpu::opcode::DecodedCbOpcode;
+fn cb_decoder_accepts_all_bytes_and_maps_bit_families_and_targets() {
+    use crate::cpu::opcode::{CbType, DecodedCbOpcode, Target};
+    use crate::cpu::registers::Register;
+    let targets = [
+        Target::Register(Register::B),
+        Target::Register(Register::C),
+        Target::Register(Register::D),
+        Target::Register(Register::E),
+        Target::Register(Register::H),
+        Target::Register(Register::L),
+        Target::IndirectHL,
+        Target::Register(Register::A),
+    ];
     for byte in 0u8..=255 {
-        assert_eq!(
-            DecodedCbOpcode::try_from(byte).is_ok(),
-            byte < 0x40,
-            "CB {byte:02X}"
-        );
-    }
-}
-
-#[test]
-fn cb_unsupported_fault_is_sticky_and_does_not_request_memory() {
-    for byte in [0x40, 0x46, 0x86, 0xC6, 0xFF] {
-        let mut cpu = cpu_with_a(0x55, 0xF0);
-        fetch_prefix(&mut cpu);
-        let first = match cpu.complete_cycle(Some(byte)) {
-            Err(CpuError::UnsupportedOpcode(fault)) => fault,
-            other => panic!("expected CB fault, got {other:?}"),
-        };
-        assert_eq!(first.opcode, crate::cpu::OpcodeEncoding::Cb(byte));
-        let after = cpu.snapshot();
-        for _ in 0..2 {
-            match cpu.request_cycle() {
-                Err(CpuError::UnsupportedOpcode(fault)) => {
-                    assert_eq!((fault.opcode, fault.addr), (first.opcode, first.addr));
-                }
-                other => panic!("expected sticky CB fault, got {other:?}"),
-            }
-            match cpu.complete_cycle(Some(0x07)) {
-                Err(CpuError::UnsupportedOpcode(fault)) => {
-                    assert_eq!((fault.opcode, fault.addr), (first.opcode, first.addr));
-                }
-                other => panic!("expected sticky CB fault, got {other:?}"),
-            }
-            assert_eq!(cpu.snapshot(), after);
+        let decoded = DecodedCbOpcode::try_from(byte).unwrap();
+        assert_eq!(decoded.target, targets[usize::from(byte % 8)]);
+        let bit = (byte % 64) / 8;
+        match byte {
+            0x00..=0x3F => assert!(matches!(decoded.cb_type, CbType::Transform(_))),
+            0x40..=0x7F => assert_eq!(decoded.cb_type, CbType::Bit(bit)),
+            0x80..=0xBF => assert_eq!(decoded.cb_type, CbType::Clear(bit)),
+            0xC0..=0xFF => assert_eq!(decoded.cb_type, CbType::Set(bit)),
         }
     }
 }
-
-#[test]
-fn cb_unsupported_fault_reports_prefix_address_and_consumes_both_bytes() {
-    for pc in [0x0100u16, 0xFFFE, 0xFFFF] {
-        let mut cpu = cpu_with_a(0x55, 0xF0);
-        cpu.registers.pc = pc;
-        let mut expected = cpu.snapshot();
-        assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
-        let fault = match cpu.complete_cycle(Some(0x46)) {
-            Err(CpuError::UnsupportedOpcode(fault)) => fault,
-            other => panic!("expected CB fault, got {other:?}"),
-        };
-        assert_eq!(fault.opcode, crate::cpu::OpcodeEncoding::Cb(0x46));
-        expected.pc = pc.wrapping_add(2);
-        assert_eq!(cpu.snapshot(), expected);
-        assert_eq!(
-            fault.addr, pc,
-            "fault should identify the instruction start"
-        );
-    }
-}
-
 // Widened arithmetic oracle: independent of production shifts and masks.
 fn shift_reference(opcode: u8, value: u8) -> (u8, u16) {
     let value = u16::from(value);
@@ -386,4 +350,177 @@ fn cb_swap_all_targets_values_flags_and_cycle_completion() {
             }
         }
     }
+}
+
+#[test]
+fn cb_bit_all_bits_targets_values_flags_and_read_only_completion() {
+    for bit in 0u8..8 {
+        for target in 0u8..8 {
+            for value in 0u8..=255 {
+                for flags in (0u8..=0xF0).step_by(16) {
+                    let mut cpu = cpu_with_a(0x55, flags);
+                    match target {
+                        0 => cpu.registers.b = value,
+                        1 => cpu.registers.c = value,
+                        2 => cpu.registers.d = value,
+                        3 => cpu.registers.e = value,
+                        4 => cpu.registers.h = value,
+                        5 => cpu.registers.l = value,
+                        6 => {}
+                        7 => cpu.registers.a = value,
+                        _ => unreachable!(),
+                    }
+                    let mut expected = cpu.snapshot();
+                    let zero = (u16::from(value) / 2u16.pow(u32::from(bit))) % 2 == 0;
+                    let expected_flags =
+                        u16::from(flags & 0x10) + 0x20 + if zero { 0x80 } else { 0 };
+                    expected.af = (expected.af & 0xFF00) | expected_flags;
+                    expected.pc = 0x0102;
+                    fetch_prefix(&mut cpu);
+                    let complete = cpu.complete_cycle(Some(0x40 + bit * 8 + target)).unwrap();
+                    if target == 6 {
+                        assert!(!complete);
+                        assert!(matches!(
+                            cpu.request_cycle(),
+                            Ok(CycleAction::Read { addr: 0xC123 })
+                        ));
+                        assert!(cpu.complete_cycle(Some(value)).unwrap());
+                    } else {
+                        assert!(complete);
+                    }
+                    assert_eq!(
+                        cpu.snapshot(),
+                        expected,
+                        "BIT {bit}, target={target}, value={value:02X}, flags={flags:02X}"
+                    );
+                    assert!(matches!(
+                        cpu.request_cycle(),
+                        Ok(CycleAction::Read { addr: 0x0102 })
+                    ));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cb_bit_memory_wrap_retry_captured_address_and_continuation() {
+    for pc in [0x0100u16, 0xFFFE, 0xFFFF] {
+        for bit in 0u8..8 {
+            let mut cpu = cpu_with_a(0x55, 0xF0);
+            cpu.registers.pc = pc;
+            assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
+            let before_decode = cpu.snapshot();
+            assert!(
+                matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc.wrapping_add(1))
+            );
+            assert_eq!(cpu.snapshot(), before_decode);
+            assert!(!cpu.complete_cycle(Some(0x46 + bit * 8)).unwrap());
+            cpu.registers.set_hl(0xD456);
+            let before_read = cpu.snapshot();
+            for _ in 0..2 {
+                assert!(matches!(
+                    cpu.request_cycle(),
+                    Ok(CycleAction::Read { addr: 0xC123 })
+                ));
+                assert!(matches!(
+                    cpu.complete_cycle(None),
+                    Err(CpuError::MissingReadValue { addr: 0xC123 })
+                ));
+                assert_eq!(cpu.snapshot(), before_read);
+            }
+            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            let mut expected = before_read;
+            expected.af = 0x55B0;
+            assert_eq!(cpu.snapshot(), expected);
+            assert_eq!(expected.pc, pc.wrapping_add(2));
+            assert!(
+                matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+            );
+            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            expected.pc = expected.pc.wrapping_add(1);
+            assert_eq!(cpu.snapshot(), expected);
+        }
+    }
+}
+
+fn check_res_set(set: bool) {
+    for bit in 0u8..8 {
+        for target in 0u8..8 {
+            for value in 0u8..=255 {
+                for flags in (0u8..=0xF0).step_by(16) {
+                    let mut cpu = cpu_with_a(0x55, flags);
+                    match target {
+                        0 => cpu.registers.b = value,
+                        1 => cpu.registers.c = value,
+                        2 => cpu.registers.d = value,
+                        3 => cpu.registers.e = value,
+                        4 => cpu.registers.h = value,
+                        5 => cpu.registers.l = value,
+                        6 => {}
+                        7 => cpu.registers.a = value,
+                        _ => unreachable!(),
+                    }
+                    let mut expected = cpu.snapshot();
+                    // Independent arithmetic: add/subtract the bit's positional weight.
+                    let weight = 2u16.pow(u32::from(bit));
+                    let present = (u16::from(value) / weight) % 2 != 0;
+                    let result = match (set, present) {
+                        (true, false) => u16::from(value) + weight,
+                        (false, true) => u16::from(value) - weight,
+                        _ => u16::from(value),
+                    };
+                    expected.pc = 0x0102;
+                    match target {
+                        0 => expected.bc = (expected.bc & 0x00FF) | (result * 256),
+                        1 => expected.bc = (expected.bc & 0xFF00) | result,
+                        2 => expected.de = (expected.de & 0x00FF) | (result * 256),
+                        3 => expected.de = (expected.de & 0xFF00) | result,
+                        4 => expected.hl = (expected.hl & 0x00FF) | (result * 256),
+                        5 => expected.hl = (expected.hl & 0xFF00) | result,
+                        6 => {}
+                        7 => expected.af = (result * 256) | u16::from(flags),
+                        _ => unreachable!(),
+                    }
+                    fetch_prefix(&mut cpu);
+                    let opcode = if set { 0xC0 } else { 0x80 } + bit * 8 + target;
+                    let complete = cpu.complete_cycle(Some(opcode)).unwrap();
+                    if target == 6 {
+                        assert!(!complete);
+                        assert!(matches!(
+                            cpu.request_cycle(),
+                            Ok(CycleAction::Read { addr: 0xC123 })
+                        ));
+                        assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                        assert!(
+                            matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if u16::from(value) == result),
+                            "set={set}, bit={bit}, input={value:02X}, expected={result:02X}"
+                        );
+                        assert!(cpu.complete_cycle(None).unwrap());
+                    } else {
+                        assert!(complete);
+                    }
+                    assert_eq!(
+                        cpu.snapshot(),
+                        expected,
+                        "set={set}, bit={bit}, target={target}, input={value:02X}, flags={flags:02X}"
+                    );
+                    assert!(matches!(
+                        cpu.request_cycle(),
+                        Ok(CycleAction::Read { addr: 0x0102 })
+                    ));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cb_res_all_bits_targets_values_flags_and_completion() {
+    check_res_set(false);
+}
+
+#[test]
+fn cb_set_all_bits_targets_values_flags_and_completion() {
+    check_res_set(true);
 }
