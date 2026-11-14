@@ -180,6 +180,7 @@ pub(super) enum DecodedOpcode {
     },
     TransferHLtoSP,
     StoreStackPointer,
+    DecodeCbOpcode,
     Unknown,
 }
 
@@ -451,6 +452,7 @@ impl From<u8> for DecodedOpcode {
             0xCA => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Z,
             },
+            0xCB => DecodedOpcode::DecodeCbOpcode,
             0xCC => DecodedOpcode::Call {
                 condition: JumpCondition::Z,
             },
@@ -541,5 +543,60 @@ impl From<u8> for DecodedOpcode {
             },
             _ => DecodedOpcode::Unknown,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct UnsupportedCbOpcode;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CbType {
+    Rotate { direction: RotationDirection },
+}
+
+impl TryFrom<u8> for CbType {
+    type Error = UnsupportedCbOpcode;
+
+    fn try_from(bits: u8) -> Result<Self, Self::Error> {
+        match bits >> 3 {
+            0 => Ok(Self::Rotate {
+                direction: RotationDirection::Left {
+                    through_carry: false,
+                },
+            }),
+            1 => Ok(Self::Rotate {
+                direction: RotationDirection::Right {
+                    through_carry: false,
+                },
+            }),
+            2 => Ok(Self::Rotate {
+                direction: RotationDirection::Left {
+                    through_carry: true,
+                },
+            }),
+            3 => Ok(Self::Rotate {
+                direction: RotationDirection::Right {
+                    through_carry: true,
+                },
+            }),
+            _ => Err(UnsupportedCbOpcode),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct DecodedCbOpcode {
+    pub(super) target: Target,
+    pub(super) cb_type: CbType,
+}
+
+impl TryFrom<u8> for DecodedCbOpcode {
+    type Error = UnsupportedCbOpcode;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let target = Target::from_bits(value);
+        let cb_type = CbType::try_from(value)?;
+
+        Ok(Self { target, cb_type })
     }
 }

@@ -9,6 +9,7 @@ mod adc_sbc;
 mod bc_de_memory_loads;
 mod byte_transfers;
 mod call_ret;
+mod cb_rotates;
 mod compare;
 mod complement_carry;
 mod conditional_returns;
@@ -129,7 +130,7 @@ fn unsupported_fetch_records_original_address_and_consumes_one_byte() {
         cpu.complete_cycle(Some(0xD3))
             .expect_err("opcode not implemented"),
     );
-    assert_eq!(fault.opcode, 0xD3);
+    assert_eq!(fault.opcode, super::OpcodeEncoding::Base(0xD3));
     assert_eq!(fault.addr, 0x0100);
     assert_eq!(cpu.snapshot(), expected);
 }
@@ -277,7 +278,10 @@ fn unsupported_fetch_wraps_pc_and_retains_the_original_fault_address() {
         cpu.complete_cycle(Some(0xD3))
             .expect_err("unsupported fetch"),
     );
-    assert_eq!((fault.opcode, fault.addr), (0xD3, 0xFFFF));
+    assert_eq!(
+        (fault.opcode, fault.addr),
+        (super::OpcodeEncoding::Base(0xD3), 0xFFFF)
+    );
     assert_eq!(cpu.snapshot().pc, 0);
 }
 

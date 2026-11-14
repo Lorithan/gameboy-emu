@@ -180,6 +180,11 @@ enum ExecutionState {
         sp_high: u8,
         addr: u16,
     },
+    DecodeCbOpcode,
+    ReadHLForCbOpcode {
+        addr: u16,
+        cb_type: CbType,
+    },
     Faulted(CpuFault),
 }
 
@@ -202,9 +207,15 @@ pub enum CycleAction {
     Write { addr: u16, value: u8 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpcodeEncoding {
+    Base(u8),
+    Cb(u8),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CpuFault {
-    pub opcode: u8,
+    pub opcode: OpcodeEncoding,
     pub addr: u16,
 }
 
@@ -242,6 +253,7 @@ impl CPU {
     pub fn request_cycle(&self) -> Result<CycleAction, CpuError> {
         match self.state {
             FetchOpcode
+            | DecodeCbOpcode
             | ReadAbsoluteLow
             | ReadAbsoluteHigh { .. }
             | StoreAToAbsoluteLow { .. }
@@ -268,6 +280,7 @@ impl CPU {
             | ReadReturnLow { addr }
             | ReadReturnHigh { addr, .. }
             | ReadOperation { addr, .. }
+            | ReadHLForCbOpcode { addr, .. }
             | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
             WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
                 Ok(CycleAction::Write { addr, value })
@@ -310,6 +323,82 @@ impl CPU {
     pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<bool, CpuError> {
         match self.state {
             FetchOpcode => self.read_opcode(read_value),
+            DecodeCbOpcode => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue {
+                            addr: self.registers.pc,
+                        });
+                    }
+                };
+                self.registers.increment_pc();
+
+                let (target, cb_type) = match DecodedCbOpcode::try_from(value) {
+                    Ok(DecodedCbOpcode { target, cb_type }) => (target, cb_type),
+                    Err(_) => {
+                        let err = CpuFault {
+                            opcode: OpcodeEncoding::Cb(value),
+                            addr: self.registers.pc.wrapping_sub(2),
+                        };
+                        self.state = Faulted(err);
+                        return Err(CpuError::UnsupportedOpcode(err));
+                    }
+                };
+
+                match target {
+                    Target::Register(register) => {
+                        let value = self.get_register(register);
+
+                        match cb_type {
+                            CbType::Rotate { direction } => {
+                                let (result, carry_out) = self.rotate(value, direction);
+
+                                self.set_register(register, result);
+
+                                self.registers.set_flag(Flag::C, carry_out);
+                                self.registers.set_flag(Flag::N, false);
+                                self.registers.set_flag(Flag::H, false);
+                                self.registers.set_flag(Flag::Z, result == 0);
+
+                                self.state = FetchOpcode;
+                                Ok(true)
+                            }
+                        }
+                    }
+                    Target::IndirectHL => {
+                        let addr = self.registers.hl();
+
+                        self.state = ReadHLForCbOpcode { addr, cb_type };
+                        Ok(false)
+                    }
+                }
+            }
+            ReadHLForCbOpcode { addr, cb_type } => {
+                let value = match read_value {
+                    Some(byte) => byte,
+                    None => {
+                        return Err(CpuError::MissingReadValue { addr });
+                    }
+                };
+
+                match cb_type {
+                    CbType::Rotate { direction } => {
+                        let (result, carry_out) = self.rotate(value, direction);
+
+                        self.registers.set_flag(Flag::C, carry_out);
+                        self.registers.set_flag(Flag::N, false);
+                        self.registers.set_flag(Flag::H, false);
+                        self.registers.set_flag(Flag::Z, result == 0);
+
+                        self.state = WriteMemory {
+                            addr,
+                            value: result,
+                        };
+                        Ok(false)
+                    }
+                }
+            }
             ReadDisplacement { taken } => {
                 let value = match read_value {
                     Some(byte) => byte as i8,
@@ -1054,35 +1143,8 @@ impl CPU {
                 Ok(true)
             }
             DecodedOpcode::Rotate { direction } => {
-                let a = self.get_register(Register::A);
-                let carry_in = self.registers.get_flag(Flag::C);
-
-                let (result, carry_out) = match direction {
-                    RotationDirection::Right { through_carry } => {
-                        let bit0 = a & 1;
-                        let new_a = if through_carry {
-                            if carry_in {
-                                (a >> 1) | (1 << 7)
-                            } else {
-                                a >> 1
-                            }
-                        } else {
-                            (a >> 1) | (bit0 << 7)
-                        };
-
-                        (new_a, bit0 == 1)
-                    }
-                    RotationDirection::Left { through_carry } => {
-                        let bit7 = (a >> 7) & 1;
-                        let new_a = if through_carry {
-                            if carry_in { (a << 1) | 1 } else { a << 1 }
-                        } else {
-                            (a << 1) | bit7
-                        };
-
-                        (new_a, bit7 == 1)
-                    }
-                };
+                let value = self.get_register(Register::A);
+                let (result, carry_out) = self.rotate(value, direction);
 
                 self.set_register(Register::A, result);
                 self.registers.set_flag(Flag::C, carry_out);
@@ -1294,9 +1356,13 @@ impl CPU {
                 self.state = ReadLowToStoreSp { sp };
                 Ok(false)
             }
+            DecodedOpcode::DecodeCbOpcode => {
+                self.state = DecodeCbOpcode;
+                Ok(false)
+            }
             DecodedOpcode::Unknown => {
                 let err = CpuFault {
-                    opcode: byte,
+                    opcode: OpcodeEncoding::Base(byte),
                     addr: op_addr,
                 };
                 self.state = ExecutionState::Faulted(err);
@@ -1499,5 +1565,42 @@ impl CPU {
                 self.sub(left, right, false);
             }
         }
+    }
+
+    fn rotate(&self, value: u8, direction: RotationDirection) -> (u8, bool) {
+        let carry_in = self.registers.get_flag(Flag::C);
+
+        let (result, carry_out) = match direction {
+            RotationDirection::Right { through_carry } => {
+                let bit0 = value & 1;
+                let new_value = if through_carry {
+                    if carry_in {
+                        (value >> 1) | (1 << 7)
+                    } else {
+                        value >> 1
+                    }
+                } else {
+                    (value >> 1) | (bit0 << 7)
+                };
+
+                (new_value, bit0 == 1)
+            }
+            RotationDirection::Left { through_carry } => {
+                let bit7 = (value >> 7) & 1;
+                let new_value = if through_carry {
+                    if carry_in {
+                        (value << 1) | 1
+                    } else {
+                        value << 1
+                    }
+                } else {
+                    (value << 1) | bit7
+                };
+
+                (new_value, bit7 == 1)
+            }
+        };
+
+        (result, carry_out)
     }
 }
