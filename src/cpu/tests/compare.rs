@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
@@ -92,7 +94,12 @@ fn comparison_all_operand_pairs_change_only_flags_and_pc() {
                 let mut cpu = machine(left, right, source, (left ^ right) & 0xF0, 0x0100);
                 let before = cpu.snapshot();
                 let register = matches!(source, Source::Register(_));
-                assert_eq!(cpu.complete_cycle(Some(opcode)).expect("opcode"), register);
+                assert_eq!(
+                    cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .expect("opcode"),
+                    register
+                );
                 if !register {
                     let mut pending = before;
                     pending.pc += 1;
@@ -105,7 +112,11 @@ fn comparison_all_operand_pairs_change_only_flags_and_pc() {
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
-                    assert!(cpu.complete_cycle(Some(right)).expect("operand"));
+                    assert!(
+                        cpu.complete_cycle(Some(right))
+                            .map(instruction_complete)
+                            .expect("operand")
+                    );
                 }
                 let mut expected = reference(before, left, right);
                 expected.pc += if source == Source::Immediate { 2 } else { 1 };
@@ -136,7 +147,11 @@ fn self_comparison_preserves_every_a_value_and_overwrites_all_flags() {
             let mut expected = cpu.snapshot();
             expected.af = u16::from(value) << 8 | 0xC0;
             expected.pc += 1;
-            assert!(cpu.complete_cycle(Some(0xBF)).expect("CP A,A"));
+            assert!(
+                cpu.complete_cycle(Some(0xBF))
+                    .map(instruction_complete)
+                    .expect("CP A,A")
+            );
             assert_eq!(cpu.snapshot(), expected);
         }
     }
@@ -155,12 +170,14 @@ fn comparison_boundaries_ignore_carry_and_retain_reads_across_retry_and_wrap() {
                         let mut cpu = machine(left, right, source, combination << 4, start);
                         let before = cpu.snapshot();
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
                         );
                         assert_eq!(cpu.snapshot(), before);
                         let register = matches!(source, Source::Register(_));
                         assert_eq!(
-                            cpu.complete_cycle(Some(opcode)).expect("retry opcode"),
+                            cpu.complete_cycle(Some(opcode))
+                                .map(instruction_complete)
+                                .expect("retry opcode"),
                             register
                         );
                         let mut expected = before;
@@ -182,11 +199,15 @@ fn comparison_boundaries_ignore_carry_and_retain_reads_across_retry_and_wrap() {
                                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                                 );
                                 assert!(
-                                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == address)
+                                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
                                 );
                                 assert_eq!(cpu.snapshot(), expected);
                             }
-                            assert!(cpu.complete_cycle(Some(right)).expect("retry operand"));
+                            assert!(
+                                cpu.complete_cycle(Some(right))
+                                    .map(instruction_complete)
+                                    .expect("retry operand")
+                            );
                             if source == Source::Immediate {
                                 expected.pc = expected.pc.wrapping_add(1);
                             }

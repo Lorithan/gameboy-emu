@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, ExecutionState, Registers,
     opcode::{DecodedOpcode, PushOperand},
@@ -54,32 +56,48 @@ fn stack_opcodes_select_every_word_and_capture_push_sources_for_each_pair() {
                 word
             };
             let mut cpu = CPU::from_registers(registers);
-            assert!(!cpu.complete_cycle(Some(push)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(push))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             // Alter all source pairs after decode to verify captured data.
             cpu.registers.set_bc(!word);
             cpu.registers.set_de(!word);
             cpu.registers.set_hl(!word);
             cpu.registers.set_af(!word);
             let mut expected = cpu.snapshot();
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             assert!(
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr: 0xFFFD, value } if value == (source / 256) as u8)
             );
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             expected.sp = 0xFFFD;
             assert_eq!(cpu.snapshot(), expected);
             assert!(
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr: 0xFFFC, value } if value == source as u8)
             );
-            assert!(cpu.complete_cycle(None).unwrap());
+            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             expected.sp = 0xFFFC;
             assert_eq!(cpu.snapshot(), expected);
-            assert!(!cpu.complete_cycle(Some(pop)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(pop))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc += 1;
-            assert!(!cpu.complete_cycle(Some(word as u8)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(word as u8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.sp = 0xFFFD;
             assert_eq!(cpu.snapshot(), expected);
-            assert!(cpu.complete_cycle(Some((word / 256) as u8)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some((word / 256) as u8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.sp = 0xFFFE;
             match pair {
                 PushOperand::BC => expected.bc = word,
@@ -112,21 +130,33 @@ fn pop_bc_consumes_every_word_with_all_initial_flags_via_the_decoder() {
             registers.set_af(0x4200 | (flags << 4));
             let mut cpu = CPU::from_registers(registers);
             let mut expected = cpu.snapshot();
-            assert!(!cpu.complete_cycle(Some(0xC1)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(0xC1))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = 0;
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(
                 cpu.request_cycle().unwrap(),
                 CycleAction::Read { addr: 0xFFFF }
             ));
-            assert!(!cpu.complete_cycle(Some(word as u8)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(word as u8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.sp = 0;
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(
                 cpu.request_cycle().unwrap(),
                 CycleAction::Read { addr: 0 }
             ));
-            assert!(cpu.complete_cycle(Some((word / 256) as u8)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some((word / 256) as u8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.sp = 1;
             expected.bc = word;
             assert_eq!(cpu.snapshot(), expected);
@@ -166,10 +196,14 @@ fn pop_low_requests_the_next_address_without_assigning_the_pair() {
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 assert!(
-                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
                 );
                 assert_eq!(cpu.snapshot(), expected);
-                assert!(!cpu.complete_cycle(Some(0x3F)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(0x3F))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.sp = start.wrapping_add(1);
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
@@ -177,11 +211,15 @@ fn pop_low_requests_the_next_address_without_assigning_the_pair() {
                     "high read must use S+1"
                 );
                 assert!(
-                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == start.wrapping_add(1))
+                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start.wrapping_add(1))
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 cpu.registers.sp = 0x9000;
-                assert!(cpu.complete_cycle(Some(0x12)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(0x12))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.sp = start.wrapping_add(2);
                 match target {
                     PushOperand::BC => expected.bc = 0x123F,
@@ -214,11 +252,15 @@ fn pop_high_assigns_every_word_and_masks_af_without_other_side_effects() {
             };
             let mut expected = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(None),
+                cpu.complete_cycle(None).map(instruction_complete),
                 Err(CpuError::MissingReadValue { addr: 0xFFFF })
             ));
             assert_eq!(cpu.snapshot(), expected);
-            assert!(cpu.complete_cycle(Some((value / 256) as u8)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some((value / 256) as u8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.sp = 0;
             match target {
                 PushOperand::BC => expected.bc = value,
@@ -242,14 +284,18 @@ fn push_bc_writes_every_word_high_then_low_below_initial_sp() {
         registers.set_bc(value);
         let mut cpu = CPU::from_registers(registers);
         let mut expected = cpu.snapshot();
-        assert!(!cpu.complete_cycle(Some(0xC5)).unwrap());
+        assert!(
+            !cpu.complete_cycle(Some(0xC5))
+                .map(instruction_complete)
+                .unwrap()
+        );
         expected.pc += 1;
         assert_eq!(cpu.snapshot(), expected);
         for _ in 0..2 {
             assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
             assert_eq!(cpu.snapshot(), expected);
         }
-        assert!(!cpu.complete_cycle(None).unwrap());
+        assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
         for _ in 0..2 {
             assert!(
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr: 0xFFFD, value: high } if high == (value / 256) as u8),
@@ -257,7 +303,7 @@ fn push_bc_writes_every_word_high_then_low_below_initial_sp() {
             );
             assert_eq!(cpu.snapshot(), expected);
         }
-        assert!(!cpu.complete_cycle(None).unwrap());
+        assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
         expected.sp = 0xFFFD;
         assert_eq!(cpu.snapshot(), expected);
         for _ in 0..2 {
@@ -267,7 +313,7 @@ fn push_bc_writes_every_word_high_then_low_below_initial_sp() {
             );
             assert_eq!(cpu.snapshot(), expected);
         }
-        assert!(cpu.complete_cycle(None).unwrap());
+        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
         expected.sp = 0xFFFC;
         assert_eq!(cpu.snapshot(), expected);
         assert!(matches!(
@@ -289,16 +335,20 @@ fn push_bc_captures_source_and_assigns_sp_from_pending_addresses() {
             let mut cpu = CPU::from_registers(registers);
             let original = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(None),
+                cpu.complete_cycle(None).map(instruction_complete),
                 Err(CpuError::MissingReadValue { addr: 0xFFFF })
             ));
             assert_eq!(cpu.snapshot(), original);
-            assert!(!cpu.complete_cycle(Some(0xC5)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(0xC5))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             cpu.registers.set_bc(0xABCD); // Test-only source perturbation.
             cpu.registers.sp = 0x8000;
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             assert_eq!(cpu.snapshot().sp, 0x8000); // Idle does not change SP.
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             assert_eq!(
                 cpu.snapshot().sp,
                 start.wrapping_sub(1),
@@ -308,7 +358,7 @@ fn push_bc_captures_source_and_assigns_sp_from_pending_addresses() {
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr, value: 0x34 } if addr == start.wrapping_sub(2))
             );
             cpu.registers.sp = 0x9000;
-            assert!(cpu.complete_cycle(None).unwrap());
+            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             let mut expected = original;
             expected.pc = 0;
             expected.bc = 0xABCD;

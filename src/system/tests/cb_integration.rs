@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::super::System;
 use crate::{cpu::CycleAction, memory::Cartridge};
 #[path = "../../../tests/support/cb.rs"]
@@ -60,10 +62,13 @@ fn cb_memory_variants_change_only_completed_target_and_echo_alias() {
                         let mut writes = 0;
                         for remaining in phase..cycles {
                             let trace = system.step_machine_cycle().unwrap();
-                            if matches!(trace.action, CycleAction::Write { .. }) {
+                            if matches!(trace.record.action, CycleAction::Write { .. }) {
                                 writes += 1;
                             }
-                            assert_eq!(trace.complete, remaining + 1 == cycles);
+                            assert_eq!(
+                                instruction_complete(trace.outcome),
+                                remaining + 1 == cycles
+                            );
                         }
                         assert_eq!(writes, u8::from(cycles == 4));
                     }

@@ -1,5 +1,11 @@
 # Review of external CPU refactoring suggestions
 
+## Selected transition refactor - 2026-11-17
+
+The user approved and implemented the previously deferred transition-return design as the first slice of #39. ExecutionState and private CycleTransition now live in cpu/state.rs. Continue carries the next state; instruction/entry finish centrally restore FetchOpcode; Faulted latches a sticky fault before reporting an error. The public wrapper alone assigns execution state and promotes delayed IME only on instruction completion. Public CycleOutcome distinguishes progress, instruction completion and interrupt-entry completion. The trace/error design separates CycleRecord from successful CycleTrace. See [the updated contract](tasks/INTERRUPT_ENTRY.md).
+
+Assistant test migration preserves the existing arithmetic, capture, timing, budget, retry, fault and EI oracles. A shared test-only instruction completion adapter explicitly rejects unexpected interrupt entry instead of treating it as progress. Two direct public API tests exercise typed outcomes, retryability, next-instruction continuation and complete failed-cycle diagnostics. No interrupt acceptance or entry execution has been implemented by this refactor. Required-read extraction remains deferred.
+
 Reviewed against checkpoint bee1ed0 on 2026-11-03. These are recommendations; the user owns implementation.
 
 ## Next focused refactor

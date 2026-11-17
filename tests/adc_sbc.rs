@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -91,11 +96,14 @@ fn every_carry_source_has_correct_traces_budgets_and_boundary_results() {
                     expected.pc += if source == Source::Immediate { 2 } else { 1 };
                     let fetch = system.step_machine_cycle().expect("opcode");
                     assert!(
-                        matches!(fetch.action, CycleAction::Read { addr } if addr == before.pc)
+                        matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc)
                     );
-                    assert_eq!(fetch.read_value, Some(opcode));
-                    assert_eq!((fetch.tick_before, fetch.tick_after), (ticks, ticks + 4));
-                    assert_eq!(fetch.complete, !memory_operand);
+                    assert_eq!(fetch.record.read_value, Some(opcode));
+                    assert_eq!(
+                        (fetch.record.tick_before, fetch.record.tick_after),
+                        (ticks, ticks + 4)
+                    );
+                    assert_eq!(instruction_complete(fetch.outcome), !memory_operand);
                     if memory_operand {
                         let mut pending = before;
                         pending.pc += 1;
@@ -107,11 +115,14 @@ fn every_carry_source_has_correct_traces_budgets_and_boundary_results() {
                             0xC123
                         };
                         assert!(
-                            matches!(read.action, CycleAction::Read { addr } if addr == address)
+                            matches!(read.record.action, CycleAction::Read { addr } if addr == address)
                         );
-                        assert_eq!(read.read_value, Some(right));
-                        assert_eq!((read.tick_before, read.tick_after), (ticks + 4, ticks + 8));
-                        assert!(read.complete);
+                        assert_eq!(read.record.read_value, Some(right));
+                        assert_eq!(
+                            (read.record.tick_before, read.record.tick_after),
+                            (ticks + 4, ticks + 8)
+                        );
+                        assert!(instruction_complete(read.outcome));
                     }
                     assert_eq!(system.cpu_snapshot(), expected);
                     for budget in [cycles, 100] {

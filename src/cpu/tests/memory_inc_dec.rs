@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{CPU, CpuError, CycleAction, Registers};
 
 fn reference(old: u8, flags: u8, increment: bool) -> (u8, u8) {
@@ -25,14 +27,22 @@ fn memory_inc_dec_exhaustively_preserve_registers_and_update_flags_at_the_read()
                 registers.sp = 0xDEF0;
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
-                assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .expect("opcode")
+                );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(matches!(
                     cpu.request_cycle(),
                     Ok(CycleAction::Read { addr: 0xC123 })
                 ));
-                assert!(!cpu.complete_cycle(Some(old)).expect("data read"));
+                assert!(
+                    !cpu.complete_cycle(Some(old))
+                        .map(instruction_complete)
+                        .expect("data read")
+                );
                 let (value, final_flags) = reference(old, flags, increment);
                 expected.af = 0xA700 | u16::from(final_flags);
                 assert_eq!(
@@ -46,7 +56,11 @@ fn memory_inc_dec_exhaustively_preserve_registers_and_update_flags_at_the_read()
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
-                assert!(cpu.complete_cycle(None).expect("write completion"));
+                assert!(
+                    cpu.complete_cycle(None)
+                        .map(instruction_complete)
+                        .expect("write completion")
+                );
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(matches!(
                     cpu.request_cycle(),
@@ -66,11 +80,15 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
         let mut cpu = CPU::from_registers(registers);
         let before = cpu.snapshot();
         assert!(matches!(
-            cpu.complete_cycle(None),
+            cpu.complete_cycle(None).map(instruction_complete),
             Err(CpuError::MissingReadValue { addr: 0xFFFF })
         ));
         assert_eq!(cpu.snapshot(), before);
-        assert!(!cpu.complete_cycle(Some(opcode)).expect("opcode"));
+        assert!(
+            !cpu.complete_cycle(Some(opcode))
+                .map(instruction_complete)
+                .expect("opcode")
+        );
         assert_eq!(cpu.snapshot().pc, 0);
         // Check the stored address independently of live HL. Current normal
         // execution does not modify HL while a data read is pending.
@@ -82,19 +100,27 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
                 Ok(CycleAction::Read { addr: 0xC123 })
             ));
             assert!(matches!(
-                cpu.complete_cycle(None),
+                cpu.complete_cycle(None).map(instruction_complete),
                 Err(CpuError::MissingReadValue { addr: 0xC123 })
             ));
             assert_eq!(cpu.snapshot(), expected);
         }
-        assert!(!cpu.complete_cycle(Some(0x0F)).expect("retry read"));
+        assert!(
+            !cpu.complete_cycle(Some(0x0F))
+                .map(instruction_complete)
+                .expect("retry read")
+        );
         let (value, flags) = reference(0x0F, 0xB0, increment);
         expected.af = 0x0100 | u16::from(flags);
         assert_eq!(cpu.snapshot(), expected);
         assert!(
             matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value: actual }) if actual == value)
         );
-        assert!(cpu.complete_cycle(None).expect("write"));
+        assert!(
+            cpu.complete_cycle(None)
+                .map(instruction_complete)
+                .expect("write")
+        );
         assert_eq!(cpu.snapshot(), expected);
         assert!(matches!(
             cpu.request_cycle(),

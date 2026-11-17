@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::opcode::DecodedOpcode;
 
@@ -34,7 +36,7 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                         );
                         assert_eq!(cpu.snapshot(), before);
                     }
@@ -46,14 +48,22 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                     let mut expected = before;
                     expected.af = u16::from(value) * 256 + u16::from(expected_flags);
                     expected.pc = pc.wrapping_add(1);
-                    assert!(cpu.complete_cycle(Some(opcode)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(opcode))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                     );
                     // Second application restores A for Cpl and C for Ccf;
                     // N/H follow the instruction rules rather than reverting.
-                    assert!(cpu.complete_cycle(Some(opcode)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(opcode))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.pc = expected.pc.wrapping_add(1);
                     expected.af = match opcode {
                         0x2F => u16::from(a) * 256 + u16::from(flags | 0x60),

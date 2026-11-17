@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
     opcode::{DecodedOpcode, HighMemoryAddressSource},
@@ -47,7 +49,11 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
             for value in 0u8..=255 {
                 let mut cpu = machine(offset, value, value & 0xF0, 0x0100);
                 let mut expected = cpu.snapshot();
-                assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
                 if immediate {
@@ -55,7 +61,11 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
                         cpu.request_cycle(),
                         Ok(CycleAction::Read { addr: 0x0101 })
                     ));
-                    assert!(!cpu.complete_cycle(Some(offset)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(offset))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.pc += 1;
                     assert_eq!(cpu.snapshot(), expected);
                 }
@@ -64,12 +74,16 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value: actual }) if addr == address && actual == value)
                     );
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 } else {
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
-                    assert!(cpu.complete_cycle(Some(255 - value)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(255 - value))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.af = u16::from(255 - value) * 256 + (expected.af & 0xF0);
                 }
                 assert_eq!(cpu.snapshot(), expected);
@@ -88,10 +102,14 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                 let mut cpu = machine(0x80, 0x5A, flags, pc);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                 );
                 assert_eq!(cpu.snapshot(), expected);
-                assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc = expected.pc.wrapping_add(1);
                 assert_eq!(cpu.snapshot(), expected);
                 cpu.registers.a = 0xA5;
@@ -104,11 +122,15 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }
-                    assert!(!cpu.complete_cycle(Some(0x80)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(0x80))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.pc = expected.pc.wrapping_add(1);
                     assert_eq!(cpu.snapshot(), expected);
                 }
@@ -127,20 +149,28 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                             Ok(CycleAction::Read { addr: 0xFF80 })
                         ));
                         assert!(matches!(
-                            cpu.complete_cycle(None),
+                            cpu.complete_cycle(None).map(instruction_complete),
                             Err(CpuError::MissingReadValue { addr: 0xFF80 })
                         ));
                     }
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 if store {
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 } else {
-                    assert!(cpu.complete_cycle(Some(0x69)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(0x69))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.af = 0x6900 + u16::from(flags);
                 }
                 assert_eq!(cpu.snapshot(), expected);
-                assert!(cpu.complete_cycle(Some(0)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(0))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc = expected.pc.wrapping_add(1);
                 assert_eq!(cpu.snapshot(), expected);
             }

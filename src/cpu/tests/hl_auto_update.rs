@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
     opcode::{DecodedOpcode, UnaryOperation},
@@ -48,18 +50,26 @@ fn hl_auto_update_all_addresses_use_original_hl_and_preserve_flags() {
             let before = cpu.snapshot();
             let mut expected = before;
             expected.pc = 0;
-            assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(opcode))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             assert_eq!(cpu.snapshot(), expected);
             if store {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
                 );
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             } else {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                 );
-                assert!(cpu.complete_cycle(Some(255 - value)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(255 - value))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.af = u16::from(255 - value) * 256 + (before.af & 0xF0);
             }
             expected.hl = next(addr, increment);
@@ -68,7 +78,11 @@ fn hl_auto_update_all_addresses_use_original_hl_and_preserve_flags() {
                 cpu.request_cycle(),
                 Ok(CycleAction::Read { addr: 0 })
             ));
-            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some(0))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = 1;
             assert_eq!(cpu.snapshot(), expected);
         }
@@ -82,11 +96,15 @@ fn hl_auto_update_captures_address_data_and_update_through_atomic_retries() {
                 let mut cpu = machine(addr, 0x5A, flags, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(matches!(
-                    cpu.complete_cycle(None),
+                    cpu.complete_cycle(None).map(instruction_complete),
                     Err(CpuError::MissingReadValue { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
-                assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let mut pending = before;
                 pending.pc = 0;
                 assert_eq!(cpu.snapshot(), pending);
@@ -103,7 +121,7 @@ fn hl_auto_update_captures_address_data_and_update_through_atomic_retries() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr: actual }) if actual == addr)
+                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr: actual }) if actual == addr)
                         );
                     }
                     assert_eq!(cpu.snapshot(), changed);
@@ -111,9 +129,13 @@ fn hl_auto_update_captures_address_data_and_update_through_atomic_retries() {
                 let mut expected = changed;
                 expected.hl = next(addr, increment);
                 if store {
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 } else {
-                    assert!(cpu.complete_cycle(Some(0x69)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(0x69))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.af = 0x6900 + u16::from(flags);
                 }
                 assert_eq!(cpu.snapshot(), expected);

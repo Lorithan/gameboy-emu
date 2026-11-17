@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
@@ -100,7 +102,9 @@ fn exhaustive(immediate: bool) {
                     let before = cpu.snapshot();
                     let register = source < 6;
                     assert_eq!(
-                        cpu.complete_cycle(Some(opcode)).expect("logic opcode"),
+                        cpu.complete_cycle(Some(opcode))
+                            .map(instruction_complete)
+                            .expect("logic opcode"),
                         register
                     );
                     if !register {
@@ -111,7 +115,11 @@ fn exhaustive(immediate: bool) {
                         assert!(
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected_addr)
                         );
-                        assert!(cpu.complete_cycle(Some(right)).unwrap());
+                        assert!(
+                            cpu.complete_cycle(Some(right))
+                                .map(instruction_complete)
+                                .unwrap()
+                        );
                     }
                     let expected =
                         reference(before, a, right, group, if immediate { 2 } else { 1 });
@@ -147,11 +155,15 @@ fn logic_self_sources_overwrite_every_initial_flag_combination() {
                 let mut cpu = machine(a, a, 7, flags * 16, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(matches!(
-                    cpu.complete_cycle(None),
+                    cpu.complete_cycle(None).map(instruction_complete),
                     Err(CpuError::MissingReadValue { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
-                assert!(cpu.complete_cycle(Some(base + 7)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(base + 7))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 assert_eq!(cpu.snapshot(), reference(before, a, a, group, 1));
             }
         }
@@ -165,7 +177,11 @@ fn logic_pending_reads_capture_operands_and_retry_without_mutation() {
             for flags in 0..16 {
                 let mut cpu = machine(0x96, 0x69, source, flags * 16, 0xFFFF);
                 let before = cpu.snapshot();
-                assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let address = if source == 8 { 0 } else { 0xC123 };
                 cpu.registers.a = 0xFF;
                 cpu.registers.set_hl(0xD234);
@@ -175,11 +191,15 @@ fn logic_pending_reads_capture_operands_and_retry_without_mutation() {
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == address)
+                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
                     );
                     assert_eq!(cpu.snapshot(), pending);
                 }
-                assert!(cpu.complete_cycle(Some(0x69)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(0x69))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let mut expected =
                     reference(before, 0x96, 0x69, group, if source == 8 { 2 } else { 1 });
                 expected.hl = 0xD234;
@@ -206,7 +226,7 @@ fn logic_boundaries_ignore_initial_flags_and_wrap_program_counter() {
                             let mut cpu = machine(a, right, source, flags * 16, pc);
                             let before = cpu.snapshot();
                             assert!(
-                                matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                                matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                             );
                             assert_eq!(cpu.snapshot(), before);
                             for _ in 0..2 {
@@ -216,9 +236,18 @@ fn logic_boundaries_ignore_initial_flags_and_wrap_program_counter() {
                                 assert_eq!(cpu.snapshot(), before);
                             }
                             let register = source < 6 || source == 7;
-                            assert_eq!(cpu.complete_cycle(Some(opcode)).unwrap(), register);
+                            assert_eq!(
+                                cpu.complete_cycle(Some(opcode))
+                                    .map(instruction_complete)
+                                    .unwrap(),
+                                register
+                            );
                             if !register {
-                                assert!(cpu.complete_cycle(Some(right)).unwrap());
+                                assert!(
+                                    cpu.complete_cycle(Some(right))
+                                        .map(instruction_complete)
+                                        .unwrap()
+                                );
                             }
                             assert_eq!(
                                 cpu.snapshot(),

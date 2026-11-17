@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::opcode::{DecodedOpcode, RotationDirection};
 
@@ -67,7 +69,7 @@ fn rotations_exhaust_all_values_flags_wrap_retries_and_repetition() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                         );
                         assert_eq!(cpu.snapshot(), before);
                     }
@@ -75,7 +77,11 @@ fn rotations_exhaust_all_values_flags_wrap_retries_and_repetition() {
                     let mut expected = before;
                     for _ in 0..9 {
                         (value, carry) = reference(opcode, value, carry);
-                        assert!(cpu.complete_cycle(Some(opcode)).unwrap());
+                        assert!(
+                            cpu.complete_cycle(Some(opcode))
+                                .map(instruction_complete)
+                                .unwrap()
+                        );
                         expected.af = u16::from(value) * 256 + if carry { 0x10 } else { 0 };
                         expected.pc = expected.pc.wrapping_add(1);
                         assert_eq!(

@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
 fn machine(sp: u16, flags: u8, pc: u16) -> CPU {
     let mut r = Registers::dmg_post_boot(1);
@@ -17,26 +19,34 @@ fn check(sp: u16, target: u16) {
     let mut cpu = machine(sp, ((sp % 16) * 16) as u8, 0x0100);
     let mut expected = cpu.snapshot();
     for byte in [0x08, (target % 256) as u8, (target / 256) as u8] {
-        assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+        assert!(
+            !cpu.complete_cycle(Some(byte))
+                .map(instruction_complete)
+                .unwrap()
+        );
         expected.pc += 1;
         assert_eq!(cpu.snapshot(), expected);
     }
     assert!(
         matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value }) if addr == target && value == (sp % 256) as u8)
     );
-    assert!(!cpu.complete_cycle(None).unwrap());
+    assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
     assert_eq!(cpu.snapshot(), expected);
     let next = ((u32::from(target) + 1) % 65536) as u16;
     assert!(
         matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value }) if addr == next && value == (sp / 256) as u8)
     );
-    assert!(cpu.complete_cycle(None).unwrap());
+    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
     assert_eq!(cpu.snapshot(), expected);
     assert!(matches!(
         cpu.request_cycle(),
         Ok(CycleAction::Read { addr: 0x0103 })
     ));
-    assert!(cpu.complete_cycle(Some(0)).unwrap());
+    assert!(
+        cpu.complete_cycle(Some(0))
+            .map(instruction_complete)
+            .unwrap()
+    );
     expected.pc += 1;
     assert_eq!(cpu.snapshot(), expected);
 }
@@ -59,11 +69,15 @@ fn store_sp_absolute_captures_sp_and_low_address_with_atomic_retries_and_pc_wrap
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
-                assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(byte))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc = expected.pc.wrapping_add(1);
                 assert_eq!(cpu.snapshot(), expected);
                 if phase == 0 {
@@ -78,7 +92,10 @@ fn store_sp_absolute_captures_sp_and_low_address_with_atomic_retries_and_pc_wrap
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
-                assert_eq!(cpu.complete_cycle(None).unwrap(), phase == 1);
+                assert_eq!(
+                    cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+                    phase == 1
+                );
                 assert_eq!(cpu.snapshot(), expected);
             }
             assert!(

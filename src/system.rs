@@ -1,5 +1,5 @@
 use crate::{
-    cpu::{CPU, CpuError, CpuSnapShot, CycleAction, Registers},
+    cpu::{CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, Registers},
     memory::{Bus, Cartridge},
 };
 
@@ -9,22 +9,38 @@ mod tests;
 #[derive(Debug, Clone, Copy)]
 pub enum SystemError {
     CpuRequestError(CpuError),
-    CpuCompletionError(CpuError, CycleTrace),
+    CpuCompletionError(CpuError, CycleRecord),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct CycleTrace {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CycleRecord {
     pub tick_before: u64,
     pub tick_after: u64,
     pub action: CycleAction,
     pub read_value: Option<u8>,
-    pub complete: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CycleTrace {
+    pub record: CycleRecord,
+    pub outcome: CycleOutcome,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum InstructionStep {
-    Complete { mcycles: u64, ticks: u64 },
-    BudgetExhausted { mcycles: u64, ticks: u64 },
+    Complete {
+        mcycles: u64,
+        ticks: u64,
+    },
+    BudgetExhausted {
+        mcycles: u64,
+        ticks: u64,
+    },
+    InterruptEntered {
+        mcycles: u64,
+        ticks: u64,
+        vector: u16,
+    },
 }
 
 pub struct System {
@@ -57,56 +73,39 @@ impl System {
             Err(err) => return Err(SystemError::CpuRequestError(err)),
         };
 
-        let mut trace = CycleTrace {
-            tick_before: self.elapsed_ticks,
-            tick_after: self.elapsed_ticks,
-            action,
-            read_value: None,
-            complete: false,
-        };
+        let tick_before = self.elapsed_ticks;
+        let mut read_value = None;
 
         self.elapsed_ticks += 4;
 
-        match action {
-            crate::cpu::CycleAction::Idle => {
-                let complete = match self.cpu.complete_cycle(None) {
-                    Ok(complete) => complete,
-                    Err(err) => {
-                        trace.tick_after = self.elapsed_ticks;
-                        return Err(SystemError::CpuCompletionError(err, trace));
-                    }
-                };
-                trace.complete = complete;
-            }
+        let outcome = match action {
+            crate::cpu::CycleAction::Idle => self.cpu.complete_cycle(None),
             crate::cpu::CycleAction::Read { addr } => {
                 let value = self.memory.read(addr);
-                trace.read_value = Some(value);
+                read_value = Some(value);
 
-                let complete = match self.cpu.complete_cycle(Some(value)) {
-                    Ok(complete) => complete,
-                    Err(err) => {
-                        trace.tick_after = self.elapsed_ticks;
-                        return Err(SystemError::CpuCompletionError(err, trace));
-                    }
-                };
-                trace.complete = complete;
+                self.cpu.complete_cycle(Some(value))
             }
             crate::cpu::CycleAction::Write { addr, value } => {
                 self.memory.write(addr, value);
-                let complete = match self.cpu.complete_cycle(None) {
-                    Ok(complete) => complete,
-                    Err(err) => {
-                        trace.tick_after = self.elapsed_ticks;
-                        return Err(SystemError::CpuCompletionError(err, trace));
-                    }
-                };
-                trace.complete = complete;
+                self.cpu.complete_cycle(None)
             }
+        };
+
+        let record = CycleRecord {
+            tick_before,
+            tick_after: self.elapsed_ticks,
+            action,
+            read_value,
+        };
+
+        match outcome {
+            Ok(outcome) => {
+                let trace = CycleTrace { record, outcome };
+                Ok(trace)
+            }
+            Err(err) => Err(SystemError::CpuCompletionError(err, record)),
         }
-
-        trace.tick_after = self.elapsed_ticks;
-
-        Ok(trace)
     }
 
     pub fn step_instruction(&mut self, max_mcycles: u64) -> Result<InstructionStep, SystemError> {
@@ -115,11 +114,21 @@ impl System {
         for cycle in 0..max_mcycles {
             let trace = self.step_machine_cycle()?;
 
-            if trace.complete {
-                return Ok(InstructionStep::Complete {
-                    mcycles: cycle + 1,
-                    ticks: self.elapsed_ticks - starting_ticks,
-                });
+            match trace.outcome {
+                CycleOutcome::InstructionComplete => {
+                    return Ok(InstructionStep::Complete {
+                        mcycles: cycle + 1,
+                        ticks: self.elapsed_ticks - starting_ticks,
+                    });
+                }
+                CycleOutcome::InterruptEntryComplete { vector } => {
+                    return Ok(InstructionStep::InterruptEntered {
+                        mcycles: cycle + 1,
+                        ticks: self.elapsed_ticks - starting_ticks,
+                        vector,
+                    });
+                }
+                CycleOutcome::InProgress => {}
             }
         }
 

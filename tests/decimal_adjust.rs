@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -41,10 +46,17 @@ fn decimal_adjust_completes_on_one_fetch_and_respects_all_budgets() {
                 assert_eq!(system.cpu_snapshot(), before);
                 assert_eq!(system.elapsed_ticks(), 16);
                 let trace = system.step_machine_cycle().unwrap();
-                assert!(matches!(trace.action, CycleAction::Read { addr: 0x0104 }));
-                assert_eq!(trace.read_value, Some(0x27));
+                assert!(matches!(
+                    trace.record.action,
+                    CycleAction::Read { addr: 0x0104 }
+                ));
+                assert_eq!(trace.record.read_value, Some(0x27));
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after, trace.complete),
+                    (
+                        trace.record.tick_before,
+                        trace.record.tick_after,
+                        instruction_complete(trace.outcome)
+                    ),
                     (16, 20, true)
                 );
             } else {

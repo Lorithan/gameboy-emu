@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
     opcode::{DecodedOpcode, JumpCondition},
@@ -40,30 +42,45 @@ fn conditional_returns_cover_every_target_and_both_decisions() {
                 registers.sp = 0xFFFC;
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
-                assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(byte))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
                 let decision = taken(byte, flags);
-                assert_eq!(cpu.complete_cycle(None).unwrap(), !decision);
+                assert_eq!(
+                    cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+                    !decision
+                );
                 assert_eq!(cpu.snapshot(), expected);
                 if decision {
                     assert!(matches!(
                         cpu.request_cycle().unwrap(),
                         CycleAction::Read { addr: 0xFFFC }
                     ));
-                    assert!(!cpu.complete_cycle(Some(target as u8)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(target as u8))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.sp = 0xFFFD;
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(matches!(
                         cpu.request_cycle().unwrap(),
                         CycleAction::Read { addr: 0xFFFD }
                     ));
-                    assert!(!cpu.complete_cycle(Some((target / 256) as u8)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some((target / 256) as u8))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.sp = 0xFFFE;
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     expected.pc = target;
                 }
                 assert_eq!(cpu.snapshot(), expected);
@@ -88,10 +105,14 @@ fn conditional_returns_capture_flags_and_stack_through_pause_retry_and_wrap() {
                     let mut cpu = CPU::from_registers(registers);
                     let initial = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                     );
                     assert_eq!(cpu.snapshot(), initial);
-                    assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(byte))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     cpu.registers.sp = 0x8000;
                     cpu.registers.set_af(initial.af ^ 0x90);
                     let mut expected = cpu.snapshot();
@@ -100,7 +121,10 @@ fn conditional_returns_capture_flags_and_stack_through_pause_retry_and_wrap() {
                         assert_eq!(cpu.snapshot(), expected);
                     }
                     let decision = taken(byte, flags << 4);
-                    assert_eq!(cpu.complete_cycle(None).unwrap(), !decision);
+                    assert_eq!(
+                        cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+                        !decision
+                    );
                     assert_eq!(cpu.snapshot(), expected);
                     if decision {
                         for (address, value, final_read) in
@@ -111,18 +135,22 @@ fn conditional_returns_capture_flags_and_stack_through_pause_retry_and_wrap() {
                                     matches!(cpu.request_cycle().unwrap(), CycleAction::Read { addr } if addr == address)
                                 );
                                 assert!(
-                                    matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == address)
+                                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
                                 );
                                 assert_eq!(cpu.snapshot(), expected);
                             }
-                            assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                            assert!(
+                                !cpu.complete_cycle(Some(value))
+                                    .map(instruction_complete)
+                                    .unwrap()
+                            );
                             expected.sp = address.wrapping_add(1);
                             assert_eq!(cpu.snapshot(), expected);
                             if final_read {
                                 assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
                             }
                         }
-                        assert!(cpu.complete_cycle(None).unwrap());
+                        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                         expected.pc = 0x1234;
                     }
                     assert_eq!(cpu.snapshot(), expected);

@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::memory::{Bus, Cartridge};
 use gameboy_emu::{cpu::CpuSnapShot, system::System};
 
@@ -101,12 +106,12 @@ fn public_machine_steps_advance_one_cycle_at_a_time() {
         (0x0104, 16, 0x42, 0x00, true),
     ] {
         let trace = system.step_machine_cycle().expect("supported cycle");
-        assert_eq!(trace.tick_before, ticks - 4);
-        assert_eq!(trace.tick_after, ticks);
-        assert_eq!(trace.read_value, Some(read_value));
-        assert_eq!(trace.complete, complete);
+        assert_eq!(trace.record.tick_before, ticks - 4);
+        assert_eq!(trace.record.tick_after, ticks);
+        assert_eq!(trace.record.read_value, Some(read_value));
+        assert_eq!(instruction_complete(trace.outcome), complete);
         assert!(
-            matches!(trace.action, gameboy_emu::cpu::CycleAction::Read { addr } if addr == pc - 1)
+            matches!(trace.record.action, gameboy_emu::cpu::CycleAction::Read { addr } if addr == pc - 1)
         );
         assert_eq!(system.elapsed_ticks(), ticks);
         let mut expected = initial;

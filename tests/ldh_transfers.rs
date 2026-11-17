@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -46,27 +51,37 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
             for cycle in 0..cycles {
                 let trace = system.step_machine_cycle().unwrap();
                 if cycle == 0 {
-                    assert!(matches!(trace.action, CycleAction::Read { addr: 0x0104 }));
-                    assert_eq!(trace.read_value, Some(opcode));
+                    assert!(matches!(
+                        trace.record.action,
+                        CycleAction::Read { addr: 0x0104 }
+                    ));
+                    assert_eq!(trace.record.read_value, Some(opcode));
                 } else if immediate && cycle == 1 {
-                    assert!(matches!(trace.action, CycleAction::Read { addr: 0x0105 }));
-                    assert_eq!(trace.read_value, Some(offset));
+                    assert!(matches!(
+                        trace.record.action,
+                        CycleAction::Read { addr: 0x0105 }
+                    ));
+                    assert_eq!(trace.record.read_value, Some(offset));
                 } else if store {
                     assert!(
-                        matches!(trace.action, CycleAction::Write { addr, value: 0x5A } if addr == 0xFF00 + u16::from(offset))
+                        matches!(trace.record.action, CycleAction::Write { addr, value: 0x5A } if addr == 0xFF00 + u16::from(offset))
                     );
-                    assert_eq!(trace.read_value, None);
+                    assert_eq!(trace.record.read_value, None);
                 } else {
                     assert!(
-                        matches!(trace.action, CycleAction::Read { addr } if addr == 0xFF00 + u16::from(offset))
+                        matches!(trace.record.action, CycleAction::Read { addr } if addr == 0xFF00 + u16::from(offset))
                     );
-                    assert_eq!(trace.read_value, Some(read));
+                    assert_eq!(trace.record.read_value, Some(read));
                 }
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after, trace.complete),
+                    (
+                        trace.record.tick_before,
+                        trace.record.tick_after,
+                        instruction_complete(trace.outcome)
+                    ),
                     (16 + cycle * 4, 20 + cycle * 4, cycle + 1 == cycles)
                 );
-                if !trace.complete {
+                if !instruction_complete(trace.outcome) {
                     let mut pending = before;
                     pending.pc += cycle as u16 + 1;
                     assert_eq!(system.cpu_snapshot(), pending);

@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -38,10 +43,10 @@ fn store_sp_absolute_has_five_cycles_and_resumes_between_both_writes() {
             let trace = system.step_machine_cycle().unwrap();
             if cycle < 3 {
                 assert!(
-                    matches!(trace.action, CycleAction::Read { addr } if addr == 0x0103 + cycle as u16)
+                    matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x0103 + cycle as u16)
                 );
                 assert_eq!(
-                    trace.read_value,
+                    trace.record.read_value,
                     Some([0x08, target as u8, (target / 256) as u8][cycle as usize])
                 );
             } else {
@@ -52,12 +57,16 @@ fn store_sp_absolute_has_five_cycles_and_resumes_between_both_writes() {
                 };
                 let value = if cycle == 3 { 0xA5 } else { 0x5A };
                 assert!(
-                    matches!(trace.action, CycleAction::Write { addr: actual, value: actual_value } if actual == addr && actual_value == value)
+                    matches!(trace.record.action, CycleAction::Write { addr: actual, value: actual_value } if actual == addr && actual_value == value)
                 );
-                assert_eq!(trace.read_value, None);
+                assert_eq!(trace.record.read_value, None);
             }
             assert_eq!(
-                (trace.tick_before, trace.tick_after, trace.complete),
+                (
+                    trace.record.tick_before,
+                    trace.record.tick_after,
+                    instruction_complete(trace.outcome)
+                ),
                 (12 + cycle * 4, 16 + cycle * 4, cycle == 4)
             );
             let mut pending = before;

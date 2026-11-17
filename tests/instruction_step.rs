@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CpuError,
     memory::Cartridge,
@@ -45,7 +50,9 @@ fn zero_budget_changes_neither_fresh_nor_partial_instruction_state() {
     assert_eq!(system.cpu_snapshot(), fresh);
     assert_eq!(system.elapsed_ticks(), 0);
 
-    assert!(!system.step_machine_cycle().expect("opcode cycle").complete);
+    assert!(!instruction_complete(
+        system.step_machine_cycle().expect("opcode cycle").outcome
+    ));
     let partial = system.cpu_snapshot();
     assert_exhausted(
         system.step_instruction(0).expect("zero budget during LD"),
@@ -57,8 +64,8 @@ fn zero_budget_changes_neither_fresh_nor_partial_instruction_state() {
     let operand = system
         .step_machine_cycle()
         .expect("operand must remain pending");
-    assert_eq!(operand.read_value, Some(0x42));
-    assert!(operand.complete);
+    assert_eq!(operand.record.read_value, Some(0x42));
+    assert!(instruction_complete(operand.outcome));
 }
 
 #[test]
@@ -135,7 +142,6 @@ fn instruction_step_propagates_fault_trace_and_does_not_retry_a_faulted_cpu() {
         SystemError::CpuCompletionError(CpuError::UnsupportedOpcode(_), trace) => {
             assert_eq!((trace.tick_before, trace.tick_after), (0, 4));
             assert_eq!(trace.read_value, Some(0xD3));
-            assert!(!trace.complete);
         }
         other => panic!("wrong error: {other:?}"),
     }

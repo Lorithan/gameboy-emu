@@ -51,6 +51,7 @@ impl InterruptController {
 
 // Temporary: production sources arrive with interrupt entry and peripherals.
 #[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Interrupt {
     VBlank,
     LCDStat,
@@ -69,6 +70,16 @@ impl Interrupt {
             Interrupt::Timer => 2,
             Interrupt::Serial => 3,
             Interrupt::Joypad => 4,
+        }
+    }
+
+    pub(crate) fn vector_address(self) -> u16 {
+        match self {
+            Interrupt::VBlank => 0x0040,
+            Interrupt::LCDStat => 0x0048,
+            Interrupt::Timer => 0x0050,
+            Interrupt::Serial => 0x0058,
+            Interrupt::Joypad => 0x0060,
         }
     }
 }

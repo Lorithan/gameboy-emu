@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -38,10 +43,10 @@ fn absolute_a_four_action_traces_and_every_budget_resume() {
                 let trace = system.step_machine_cycle().unwrap();
                 if cycle < 3 {
                     assert!(
-                        matches!(trace.action, CycleAction::Read { addr } if addr == before.pc + cycle as u16)
+                        matches!(trace.record.action, CycleAction::Read { addr } if addr == before.pc + cycle as u16)
                     );
                     assert_eq!(
-                        trace.read_value,
+                        trace.record.read_value,
                         Some([opcode, addr as u8, (addr / 256) as u8][cycle as usize])
                     );
                     let mut pending = before;
@@ -49,17 +54,21 @@ fn absolute_a_four_action_traces_and_every_budget_resume() {
                     assert_eq!(system.cpu_snapshot(), pending);
                 } else if store {
                     assert!(
-                        matches!(trace.action, CycleAction::Write { addr: actual, value: 0x5A } if actual == addr)
+                        matches!(trace.record.action, CycleAction::Write { addr: actual, value: 0x5A } if actual == addr)
                     );
-                    assert_eq!(trace.read_value, None);
+                    assert_eq!(trace.record.read_value, None);
                 } else {
                     assert!(
-                        matches!(trace.action, CycleAction::Read { addr: actual } if actual == addr)
+                        matches!(trace.record.action, CycleAction::Read { addr: actual } if actual == addr)
                     );
-                    assert_eq!(trace.read_value, Some(read));
+                    assert_eq!(trace.record.read_value, Some(read));
                 }
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after, trace.complete),
+                    (
+                        trace.record.tick_before,
+                        trace.record.tick_after,
+                        instruction_complete(trace.outcome)
+                    ),
                     (8 + cycle * 4, 12 + cycle * 4, cycle == 3)
                 );
             }

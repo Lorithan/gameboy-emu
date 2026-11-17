@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -70,10 +75,16 @@ fn arithmetic_boundaries_have_exact_public_traces_flags_and_budgets() {
                 expected.af = (expected.af & 0xFF00) | u16::from(flags) | 0x10;
                 expected.pc += 1;
                 let trace = system.step_machine_cycle().expect("arithmetic opcode");
-                assert!(matches!(trace.action, CycleAction::Read { addr: 0x0102 }));
-                assert_eq!(trace.read_value, Some(opcode));
-                assert_eq!((trace.tick_before, trace.tick_after), (ticks, ticks + 4));
-                assert!(trace.complete);
+                assert!(matches!(
+                    trace.record.action,
+                    CycleAction::Read { addr: 0x0102 }
+                ));
+                assert_eq!(trace.record.read_value, Some(opcode));
+                assert_eq!(
+                    (trace.record.tick_before, trace.record.tick_after),
+                    (ticks, ticks + 4)
+                );
+                assert!(instruction_complete(trace.outcome));
                 assert_eq!(system.cpu_snapshot(), expected);
                 for budget in [1, 100] {
                     let mut system = program(&[load, old, opcode, 0xD3]);

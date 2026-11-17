@@ -1,5 +1,7 @@
 # DMG core architecture
 
+Interrupt-entry design selected 2026-11-17: [#39 contract](tasks/INTERRUPT_ENTRY.md). System offers pending masks before machine-cycle action queries; CPU explicitly accepts only at an enabled instruction boundary, owns five captured entry stages, and reports instruction/entry completion distinctly. System acknowledges through Bus, with no CPU Bus borrow and immutable request_cycle queries. Source/vector capture and acknowledgment at acceptance are the first-stage project approximation; [#40](https://github.com/Lorithan/gameboy-emu/issues/40) tracks known hardware late-selection/IE-write differences. This is specified, not implemented.
+
 Status: library, registers, snapshots, and System construction are implemented. The first execution interface and explicit initial timing convention are specified in [task #5](tasks/FIRST_CPU_CYCLES.md). This is an M-cycle model, not a pin/edge-accurate implementation. Issue #1 stays open for architecture review and staged device initialization.
 
 ## Responsibilities and ownership
@@ -124,3 +126,7 @@ Two decoder tests verify all eight supported mappings and rejection of every oth
 ## Interrupt-register implementation checkpoint - 2026-11-17
 
 The #38 proposal above is now implemented: Bus owns a private controller, maps FF0F/FFFF, and forwards crate-visible request_interrupt, pending_interrupts and acknowledge_interrupt operations. Interrupt is crate-visible through memory; the controller is confined to memory. The named post_boot constructor stores IF=01 and IE=00; IF reads E1 initially. CPU/System production stepping is unchanged. Acceptance evidence and temporary dead-code allowance removal conditions are in [INTERRUPT_REGISTERS.md](tasks/INTERRUPT_REGISTERS.md). Interrupt entry and device scheduling remain unimplemented and need their own contracts.
+
+## Transition/outcome refactor checkpoint - 2026-11-17
+
+Private CycleTransition and ExecutionState live in cpu/state.rs. Completion handlers return transitions; the public wrapper applies execution-state changes, latches faults and performs instruction-only delayed-EI bookkeeping. Public CycleOutcome carries progress or completed instruction/entry, with a numeric vector for entry. CycleTrace holds a CycleRecord and successful outcome; SystemError::CpuCompletionError holds the failed CycleRecord. Bounded stepping matches the plain outcome and reports InterruptEntered distinctly. This refactor slice passes 341 tests; actual interrupt acceptance/entry remains to be implemented under #39.

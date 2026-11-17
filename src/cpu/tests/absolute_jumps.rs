@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
     opcode::{DecodedOpcode, JumpCondition},
@@ -29,7 +31,7 @@ fn read_request(cpu: &CPU, address: u16) {
 fn missing_read(cpu: &mut CPU, address: u16) {
     let before = cpu.snapshot();
     assert!(
-        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == address)
+        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
     );
     assert_eq!(cpu.snapshot(), before);
     read_request(cpu, address);
@@ -61,21 +63,31 @@ fn immediate_jumps_consume_every_target_in_little_endian_order() {
                 registers.set_af(0x4200 | flags);
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
-                assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(byte))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc = 0x0101;
                 assert_eq!(cpu.snapshot(), expected);
-                assert!(!cpu.complete_cycle(Some(target as u8)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(target as u8))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.pc = 0x0102;
                 assert_eq!(cpu.snapshot(), expected);
                 assert_eq!(
-                    cpu.complete_cycle(Some((target / 256) as u8)).unwrap(),
+                    cpu.complete_cycle(Some((target / 256) as u8))
+                        .map(instruction_complete)
+                        .unwrap(),
                     !taken(byte, flags)
                 );
                 expected.pc = 0x0103;
                 assert_eq!(cpu.snapshot(), expected);
                 if taken(byte, flags) {
                     assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     expected.pc = target;
                 }
                 assert_eq!(cpu.snapshot(), expected);
@@ -96,7 +108,11 @@ fn jump_hl_copies_every_address_for_every_flag_combination_in_one_cycle() {
             let mut cpu = CPU::from_registers(registers);
             let mut expected = cpu.snapshot();
             missing_read(&mut cpu, 0xFFFF);
-            assert!(cpu.complete_cycle(Some(0xE9)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some(0xE9))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = target;
             assert_eq!(cpu.snapshot(), expected);
             read_request(&cpu, target);
@@ -116,17 +132,27 @@ fn jump_reads_retry_wrap_and_preserve_decisions_low_bytes_and_targets() {
                     registers.set_af(0x4200 | flags);
                     let mut cpu = CPU::from_registers(registers);
                     missing_read(&mut cpu, start);
-                    assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(byte))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     // Flipped flags cannot alter the captured branch decision.
                     cpu.registers.set_af(0x4200 | (flags ^ 0x90));
                     let mut expected = cpu.snapshot();
                     missing_read(&mut cpu, start.wrapping_add(1));
-                    assert!(!cpu.complete_cycle(Some(target as u8)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(target as u8))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.pc = start.wrapping_add(2);
                     assert_eq!(cpu.snapshot(), expected);
                     missing_read(&mut cpu, expected.pc);
                     assert_eq!(
-                        cpu.complete_cycle(Some((target / 256) as u8)).unwrap(),
+                        cpu.complete_cycle(Some((target / 256) as u8))
+                            .map(instruction_complete)
+                            .unwrap(),
                         !taken(byte, flags)
                     );
                     expected.pc = start.wrapping_add(3);
@@ -138,7 +164,7 @@ fn jump_reads_retry_wrap_and_preserve_decisions_low_bytes_and_targets() {
                             assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
                             assert_eq!(cpu.snapshot().pc, !target);
                         }
-                        assert!(cpu.complete_cycle(None).unwrap());
+                        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                         expected.pc = target;
                     }
                     assert_eq!(cpu.snapshot(), expected);

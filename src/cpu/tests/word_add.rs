@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, Registers,
     opcode::DecodedOpcode,
@@ -30,13 +32,17 @@ fn machine(lhs: u16, rhs: u16, source: Register16, flags: u8) -> CPU {
 fn finish(cpu: &mut CPU, opcode: u8) {
     let mut pending = cpu.snapshot();
     pending.pc += 1;
-    assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+    assert!(
+        !cpu.complete_cycle(Some(opcode))
+            .map(instruction_complete)
+            .unwrap()
+    );
     assert_eq!(
         cpu.snapshot(),
         pending,
         "opcode fetch must not change HL/flags"
     );
-    assert!(cpu.complete_cycle(None).unwrap());
+    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
 }
 
 #[test]
@@ -146,11 +152,15 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                     cpu.registers.pc = 0xFFFF;
                     let before = cpu.snapshot();
                     assert!(matches!(
-                        cpu.complete_cycle(None),
+                        cpu.complete_cycle(None).map(instruction_complete),
                         Err(crate::cpu::CpuError::MissingReadValue { addr: 0xFFFF })
                     ));
                     assert_eq!(cpu.snapshot(), before);
-                    assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(opcode))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     let mut pending = before;
                     pending.pc = 0;
                     assert_eq!(cpu.snapshot(), pending);
@@ -170,7 +180,7 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                         ));
                         assert_eq!(cpu.snapshot(), changed);
                     }
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     let sum = u32::from(lhs) + u32::from(rhs);
                     let mut expected = changed;
                     expected.hl = (sum % 65536) as u16;
@@ -186,7 +196,11 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                         cpu.request_cycle(),
                         Ok(crate::cpu::CycleAction::Read { addr: 0 })
                     ));
-                    assert!(cpu.complete_cycle(Some(0)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(0))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     expected.pc = 1;
                     assert_eq!(cpu.snapshot(), expected);
                 }

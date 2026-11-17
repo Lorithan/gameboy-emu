@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
     opcode::{DecodedOpcode, IndirectPair},
@@ -43,19 +45,27 @@ fn indirect_pair_all_addresses_preserve_flags_and_unrelated_registers() {
             let mut cpu = machine(pair, addr, value, ((addr % 16) * 16) as u8, 0x0100);
             let mut expected = cpu.snapshot();
             expected.pc += 1;
-            assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(opcode))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             assert_eq!(cpu.snapshot(), expected);
             if store {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
                 );
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             } else {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                 );
                 let read = 255 - value;
-                assert!(cpu.complete_cycle(Some(read)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(read))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.af = u16::from(read) * 256 + (expected.af & 0xF0);
             }
             assert_eq!(cpu.snapshot(), expected);
@@ -73,11 +83,15 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
             let mut cpu = machine(pair, 0xC123, 0x5A, flags, 0xFFFF);
             let before = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(None),
+                cpu.complete_cycle(None).map(instruction_complete),
                 Err(CpuError::MissingReadValue { addr: 0xFFFF })
             ));
             assert_eq!(cpu.snapshot(), before);
-            assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(opcode))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             let mut pending = before;
             pending.pc = 0;
             assert_eq!(cpu.snapshot(), pending);
@@ -102,7 +116,7 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
                         Ok(CycleAction::Read { addr: 0xC123 })
                     ));
                     assert!(matches!(
-                        cpu.complete_cycle(None),
+                        cpu.complete_cycle(None).map(instruction_complete),
                         Err(CpuError::MissingReadValue { addr: 0xC123 })
                     ));
                 }
@@ -110,9 +124,13 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
             }
             let mut expected = changed;
             if store {
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             } else {
-                assert!(cpu.complete_cycle(Some(0x69)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(0x69))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 expected.af = 0x6900 + u16::from(flags);
             }
             assert_eq!(cpu.snapshot(), expected);
@@ -120,7 +138,11 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
                 cpu.request_cycle(),
                 Ok(CycleAction::Read { addr: 0 })
             ));
-            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some(0))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = 1;
             assert_eq!(cpu.snapshot(), expected);
         }

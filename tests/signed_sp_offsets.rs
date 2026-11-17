@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -41,24 +46,30 @@ fn signed_sp_exact_cycles_no_early_changes_and_all_budget_resumes() {
                 let trace = system.step_machine_cycle().unwrap();
                 match cycle {
                     0 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0103 }));
-                        assert_eq!(trace.read_value, Some(opcode));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0103 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(opcode));
                     }
                     1 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0104 }));
-                        assert_eq!(trace.read_value, Some(raw));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0104 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(raw));
                     }
                     _ => {
-                        assert!(matches!(trace.action, CycleAction::Idle));
-                        assert_eq!(trace.read_value, None);
+                        assert!(matches!(trace.record.action, CycleAction::Idle));
+                        assert_eq!(trace.record.read_value, None);
                     }
                 }
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after),
+                    (trace.record.tick_before, trace.record.tick_after),
                     (12 + 4 * cycle, 16 + 4 * cycle)
                 );
-                assert_eq!(trace.complete, cycle + 1 == cycles);
-                if !trace.complete {
+                assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
+                if !instruction_complete(trace.outcome) {
                     let mut pending = before;
                     pending.pc += if cycle == 0 { 1 } else { 2 };
                     assert_eq!(system.cpu_snapshot(), pending);

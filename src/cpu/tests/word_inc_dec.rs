@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::CpuSnapShot;
 use crate::cpu::{
@@ -75,10 +77,14 @@ fn word_inc_dec_exhaustive_values_commit_only_on_idle_and_preserve_flags() {
             let mut cpu = machine(target, value, ((value % 16) * 16) as u8, 0x0100);
             let mut pending = cpu.snapshot();
             pending.pc += 1;
-            assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(opcode))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             assert_eq!(cpu.snapshot(), pending);
             assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
-            assert!(cpu.complete_cycle(None).unwrap());
+            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             assert_eq!(
                 cpu.snapshot(),
                 expected(pending, target, result(value, increment)),
@@ -96,11 +102,15 @@ fn word_inc_dec_capture_values_through_requests_retries_and_pc_wrap() {
                 let mut cpu = machine(target, value, flags, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(matches!(
-                    cpu.complete_cycle(None),
+                    cpu.complete_cycle(None).map(instruction_complete),
                     Err(CpuError::MissingReadValue { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
-                assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let mut pending = before;
                 pending.pc = 0;
                 assert_eq!(cpu.snapshot(), pending);
@@ -111,7 +121,7 @@ fn word_inc_dec_capture_values_through_requests_retries_and_pc_wrap() {
                     assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
                     assert_eq!(cpu.snapshot(), changed);
                 }
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 assert_eq!(
                     cpu.snapshot(),
                     expected(pending, target, result(value, increment))
@@ -126,19 +136,31 @@ fn word_inc_dec_completion_resumes_opcode_fetch_and_runs_inverse() {
     for (opcode, target, increment) in CASES {
         let mut cpu = machine(target, 0xFFFF, 0xF0, 0x0100);
         let before = cpu.snapshot();
-        assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
-        assert!(cpu.complete_cycle(None).unwrap());
+        assert!(
+            !cpu.complete_cycle(Some(opcode))
+                .map(instruction_complete)
+                .unwrap()
+        );
+        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
         assert!(
             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: 0x0101 })),
             "opcode {opcode:02X} must leave its idle state after completion"
         );
         let inverse = if increment { opcode + 8 } else { opcode - 8 };
-        assert!(!cpu.complete_cycle(Some(inverse)).unwrap());
-        assert!(cpu.complete_cycle(None).unwrap());
+        assert!(
+            !cpu.complete_cycle(Some(inverse))
+                .map(instruction_complete)
+                .unwrap()
+        );
+        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
         let mut expected = before;
         expected.pc += 2;
         assert_eq!(cpu.snapshot(), expected);
-        assert!(cpu.complete_cycle(Some(0x00)).unwrap());
+        assert!(
+            cpu.complete_cycle(Some(0x00))
+                .map(instruction_complete)
+                .unwrap()
+        );
         expected.pc += 1;
         assert_eq!(cpu.snapshot(), expected);
     }

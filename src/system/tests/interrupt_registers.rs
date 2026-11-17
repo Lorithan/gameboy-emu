@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::super::{InstructionStep, System};
 use crate::{cpu::CycleAction, memory::Cartridge};
 
@@ -62,27 +64,27 @@ fn interrupt_register_transfers_have_exact_cycles_and_resumable_writes() {
                     for cycle in budget..cycles {
                         let t = s.step_machine_cycle().unwrap();
                         assert_eq!(
-                            (t.tick_before, t.tick_after),
+                            (t.record.tick_before, t.record.tick_after),
                             (16 + cycle * 4, 20 + cycle * 4)
                         );
-                        assert_eq!(t.complete, cycle + 1 == cycles);
+                        assert_eq!(instruction_complete(t.outcome), cycle + 1 == cycles);
                         if cycle + 1 == cycles {
                             if store {
                                 assert!(
-                                    matches!(t.action, CycleAction::Write { addr: a, value: v } if a == addr && v == value)
+                                    matches!(t.record.action, CycleAction::Write { addr: a, value: v } if a == addr && v == value)
                                 );
                             } else {
                                 assert!(
-                                    matches!(t.action, CycleAction::Read { addr: a } if a == addr)
+                                    matches!(t.record.action, CycleAction::Read { addr: a } if a == addr)
                                 );
                                 assert_eq!(
-                                    t.read_value,
+                                    t.record.read_value,
                                     Some(if addr == 0xFF0F { 0xF2 } else { 0x12 })
                                 );
                             }
                         } else {
                             assert!(
-                                matches!(t.action, CycleAction::Read { addr: a } if a == before.pc + cycle as u16)
+                                matches!(t.record.action, CycleAction::Read { addr: a } if a == before.pc + cycle as u16)
                             );
                         }
                     }

@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -26,26 +31,38 @@ fn every_memory_operand_has_three_exact_cycles_and_can_be_reloaded() {
                 | if delta < 0 { 0x40 } else { 0 }
                 | if half { 0x20 } else { 0 };
             let fetch = system.step_machine_cycle().expect("opcode read");
-            assert!(matches!(fetch.action, CycleAction::Read { addr: 0x0105 }));
-            assert_eq!(fetch.read_value, Some(opcode));
-            assert_eq!((fetch.tick_before, fetch.tick_after), (24, 28));
-            assert!(!fetch.complete);
+            assert!(matches!(
+                fetch.record.action,
+                CycleAction::Read { addr: 0x0105 }
+            ));
+            assert_eq!(fetch.record.read_value, Some(opcode));
+            assert_eq!(
+                (fetch.record.tick_before, fetch.record.tick_after),
+                (24, 28)
+            );
+            assert!(!instruction_complete(fetch.outcome));
             expected.pc += 1;
             assert_eq!(system.cpu_snapshot(), expected);
             let read = system.step_machine_cycle().expect("data read");
-            assert!(matches!(read.action, CycleAction::Read { addr: 0xC123 }));
-            assert_eq!(read.read_value, Some(old));
-            assert_eq!((read.tick_before, read.tick_after), (28, 32));
-            assert!(!read.complete);
+            assert!(matches!(
+                read.record.action,
+                CycleAction::Read { addr: 0xC123 }
+            ));
+            assert_eq!(read.record.read_value, Some(old));
+            assert_eq!((read.record.tick_before, read.record.tick_after), (28, 32));
+            assert!(!instruction_complete(read.outcome));
             expected.af = (expected.af & 0xFF00) | flags;
             assert_eq!(system.cpu_snapshot(), expected);
             let write = system.step_machine_cycle().expect("data write");
             assert!(
-                matches!(write.action, CycleAction::Write { addr: 0xC123, value: actual } if actual == value)
+                matches!(write.record.action, CycleAction::Write { addr: 0xC123, value: actual } if actual == value)
             );
-            assert_eq!(write.read_value, None);
-            assert_eq!((write.tick_before, write.tick_after), (32, 36));
-            assert!(write.complete);
+            assert_eq!(write.record.read_value, None);
+            assert_eq!(
+                (write.record.tick_before, write.record.tick_after),
+                (32, 36)
+            );
+            assert!(instruction_complete(write.outcome));
             assert_eq!(system.cpu_snapshot(), expected);
             assert!(matches!(
                 system.step_instruction(100),

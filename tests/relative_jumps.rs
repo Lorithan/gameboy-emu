@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -36,21 +41,27 @@ fn conditional_traces_and_budgets_match_both_branch_outcomes() {
             let before = system.cpu_snapshot();
             for cycle in 0..cycles {
                 let trace = system.step_machine_cycle().unwrap();
-                assert_eq!(trace.tick_before, 16 + cycle * 4);
-                assert_eq!(trace.tick_after, 20 + cycle * 4);
-                assert_eq!(trace.complete, cycle + 1 == cycles);
+                assert_eq!(trace.record.tick_before, 16 + cycle * 4);
+                assert_eq!(trace.record.tick_after, 20 + cycle * 4);
+                assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
                 match cycle {
                     0 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0104 }));
-                        assert_eq!(trace.read_value, Some(byte));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0104 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(byte));
                     }
                     1 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0105 }));
-                        assert_eq!(trace.read_value, Some(0xFE));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0105 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(0xFE));
                     }
                     _ => {
-                        assert!(matches!(trace.action, CycleAction::Idle));
-                        assert_eq!(trace.read_value, None);
+                        assert!(matches!(trace.record.action, CycleAction::Idle));
+                        assert_eq!(trace.record.read_value, None);
                     }
                 }
                 let mut expected = before;
@@ -143,21 +154,27 @@ fn backward_jump_has_two_reads_and_one_idle_with_target_committed_last() {
     let mut expected = system.cpu_snapshot();
     for (cycle, pc) in [(0, 0x0101), (1, 0x0102), (2, 0x0100)] {
         let trace = system.step_machine_cycle().unwrap();
-        assert_eq!(trace.tick_before, cycle * 4);
-        assert_eq!(trace.tick_after, (cycle + 1) * 4);
-        assert_eq!(trace.complete, cycle == 2);
+        assert_eq!(trace.record.tick_before, cycle * 4);
+        assert_eq!(trace.record.tick_after, (cycle + 1) * 4);
+        assert_eq!(instruction_complete(trace.outcome), cycle == 2);
         match cycle {
             0 => {
-                assert!(matches!(trace.action, CycleAction::Read { addr: 0x0100 }));
-                assert_eq!(trace.read_value, Some(0x18));
+                assert!(matches!(
+                    trace.record.action,
+                    CycleAction::Read { addr: 0x0100 }
+                ));
+                assert_eq!(trace.record.read_value, Some(0x18));
             }
             1 => {
-                assert!(matches!(trace.action, CycleAction::Read { addr: 0x0101 }));
-                assert_eq!(trace.read_value, Some(0xFE));
+                assert!(matches!(
+                    trace.record.action,
+                    CycleAction::Read { addr: 0x0101 }
+                ));
+                assert_eq!(trace.record.read_value, Some(0xFE));
             }
             _ => {
-                assert!(matches!(trace.action, CycleAction::Idle));
-                assert_eq!(trace.read_value, None);
+                assert!(matches!(trace.record.action, CycleAction::Idle));
+                assert_eq!(trace.record.read_value, None);
             }
         }
         expected.pc = pc;

@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -55,17 +60,26 @@ fn operand_reads_have_two_exact_cycles_and_resumable_instruction_budgets() {
                 expected.pc += 1;
             }
             let fetch = system.step_machine_cycle().expect("opcode fetch");
-            assert!(matches!(fetch.action, CycleAction::Read { addr: 0x0107 }));
-            assert_eq!(fetch.read_value, Some(opcode));
-            assert_eq!((fetch.tick_before, fetch.tick_after), (32, 36));
-            assert!(!fetch.complete);
+            assert!(matches!(
+                fetch.record.action,
+                CycleAction::Read { addr: 0x0107 }
+            ));
+            assert_eq!(fetch.record.read_value, Some(opcode));
+            assert_eq!(
+                (fetch.record.tick_before, fetch.record.tick_after),
+                (32, 36)
+            );
+            assert!(!instruction_complete(fetch.outcome));
             assert_eq!(system.cpu_snapshot(), pending);
             let operand = system.step_machine_cycle().expect("operand read");
             let address = if immediate { 0x0108 } else { 0xC123 };
-            assert!(matches!(operand.action, CycleAction::Read { addr } if addr == address));
-            assert_eq!(operand.read_value, Some(right));
-            assert_eq!((operand.tick_before, operand.tick_after), (36, 40));
-            assert!(operand.complete);
+            assert!(matches!(operand.record.action, CycleAction::Read { addr } if addr == address));
+            assert_eq!(operand.record.read_value, Some(right));
+            assert_eq!(
+                (operand.record.tick_before, operand.record.tick_after),
+                (36, 40)
+            );
+            assert!(instruction_complete(operand.outcome));
             assert_eq!(system.cpu_snapshot(), expected);
             for budget in [2, 100] {
                 let mut system = machine(opcode, left, right, immediate);

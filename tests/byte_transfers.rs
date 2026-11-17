@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuError, CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -83,28 +88,34 @@ fn all_transfers_have_exact_public_traces_and_preserve_unrelated_state() {
             let final_state = expected(before, destination, source);
             let start = system.elapsed_ticks();
             let fetch = system.step_machine_cycle().expect("opcode fetch");
-            assert!(matches!(fetch.action, CycleAction::Read { addr } if addr == before.pc));
-            assert_eq!(fetch.read_value, Some(opcode));
-            assert_eq!((fetch.tick_before, fetch.tick_after), (start, start + 4));
-            assert_eq!(fetch.complete, !memory);
+            assert!(matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc));
+            assert_eq!(fetch.record.read_value, Some(opcode));
+            assert_eq!(
+                (fetch.record.tick_before, fetch.record.tick_after),
+                (start, start + 4)
+            );
+            assert_eq!(instruction_complete(fetch.outcome), !memory);
             if memory {
                 let mut pending = before;
                 pending.pc += 1;
                 assert_eq!(system.cpu_snapshot(), pending);
                 let access = system.step_machine_cycle().expect("data access");
                 assert_eq!(
-                    (access.tick_before, access.tick_after),
+                    (access.record.tick_before, access.record.tick_after),
                     (start + 4, start + 8)
                 );
-                assert!(access.complete);
+                assert!(instruction_complete(access.outcome));
                 if source == 6 {
-                    assert!(matches!(access.action, CycleAction::Read { addr: 0xC123 }));
-                    assert_eq!(access.read_value, Some(0x9B));
+                    assert!(matches!(
+                        access.record.action,
+                        CycleAction::Read { addr: 0xC123 }
+                    ));
+                    assert_eq!(access.record.read_value, Some(0x9B));
                 } else {
                     assert!(
-                        matches!(access.action, CycleAction::Write { addr: 0xC123, value } if value == VALUES[source])
+                        matches!(access.record.action, CycleAction::Write { addr: 0xC123, value } if value == VALUES[source])
                     );
-                    assert_eq!(access.read_value, None);
+                    assert_eq!(access.record.read_value, None);
                 }
             }
             assert_eq!(system.cpu_snapshot(), final_state, "opcode {opcode:02X}");
@@ -228,7 +239,6 @@ fn halt_remains_an_unsupported_sticky_fault_without_a_memory_transfer() {
             assert!(matches!(trace.action, CycleAction::Read { addr } if addr == before.pc));
             assert_eq!(trace.read_value, Some(0x76));
             assert_eq!((trace.tick_before, trace.tick_after), (start, start + 4));
-            assert!(!trace.complete);
         }
         _ => panic!("expected unsupported opcode completion"),
     }

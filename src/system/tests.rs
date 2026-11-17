@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 mod cb_integration;
 mod di_ei;
 
@@ -486,6 +488,7 @@ fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
                 InstructionStep::Complete { mcycles, ticks } => {
                     assert_eq!((prefix, mcycles, ticks), (3, 3, 12))
                 }
+                InstructionStep::InterruptEntered { .. } => panic!("unexpected interrupt entry"),
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < 3);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));
@@ -601,6 +604,7 @@ fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches(
                     assert_eq!(prefix, cycles);
                     assert_eq!((mcycles, ticks), (cycles, cycles * 4));
                 }
+                InstructionStep::InterruptEntered { .. } => panic!("unexpected interrupt entry"),
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < cycles);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));
@@ -769,20 +773,20 @@ fn immediate_values_are_data_and_preserve_flags() {
     for immediate in [0, 0x3E, 0x80, 0xFF] {
         let mut system = program_system(&[0x3E, immediate]);
         let initial = system.cpu_snapshot();
-        assert!(
-            !system
+        assert!(!instruction_complete(
+            system
                 .step_machine_cycle()
                 .expect("LD opcode cycle")
-                .complete
-        );
+                .outcome
+        ));
         assert_eq!(system.cpu_snapshot().af, initial.af);
         assert_eq!(system.elapsed_ticks(), 4);
-        assert!(
+        assert!(instruction_complete(
             system
                 .step_machine_cycle()
                 .expect("LD operand cycle")
-                .complete
-        );
+                .outcome
+        ));
         let mut expected = initial;
         expected.pc = 0x0102;
         expected.af = u16::from(immediate) << 8 | (initial.af & 0xFF);
@@ -815,12 +819,12 @@ fn each_trace_records_its_own_bus_action_and_read_byte() {
         (0x0103, 0x00, true),
     ] {
         let trace = system.step_machine_cycle().expect("supported cycle");
-        match trace.action {
+        match trace.record.action {
             CycleAction::Read { addr } => assert_eq!(addr, address),
             _ => panic!("expected a read cycle at {address:#06X}"),
         }
-        assert_eq!(trace.read_value, Some(value));
-        assert_eq!(trace.complete, complete);
+        assert_eq!(trace.record.read_value, Some(value));
+        assert_eq!(instruction_complete(trace.outcome), complete);
     }
 }
 
@@ -829,8 +833,8 @@ fn each_trace_counts_one_machine_cycle_not_the_whole_instruction() {
     let mut system = program_system(&[0x00, 0x3E, 0x42, 0x00]);
     for expected_elapsed in [4, 8, 12, 16] {
         let trace = system.step_machine_cycle().expect("supported cycle");
-        assert_eq!(trace.tick_before, expected_elapsed - 4);
-        assert_eq!(trace.tick_after, expected_elapsed);
+        assert_eq!(trace.record.tick_before, expected_elapsed - 4);
+        assert_eq!(trace.record.tick_after, expected_elapsed);
         assert_eq!(system.elapsed_ticks(), expected_elapsed);
     }
 }
@@ -847,7 +851,6 @@ fn failing_read_retains_its_byte_and_tick_span_in_the_error_trace() {
             assert_eq!(trace.tick_after, 4);
             assert!(matches!(trace.action, CycleAction::Read { addr: 0x0100 }));
             assert_eq!(trace.read_value, Some(0xD3));
-            assert!(!trace.complete);
         }
         other => panic!("wrong execution error: {other:?}"),
     }

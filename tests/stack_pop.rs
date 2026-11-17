@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -44,17 +49,19 @@ fn pop_bc_reads_low_then_high_with_atomic_pair_assignment_and_exact_timing() {
         for cycle in 0u64..3 {
             let trace = system.step_machine_cycle().unwrap();
             assert_eq!(
-                (trace.tick_before, trace.tick_after),
+                (trace.record.tick_before, trace.record.tick_after),
                 (52 + cycle * 4, 56 + cycle * 4)
             );
-            assert_eq!(trace.complete, cycle == 2);
+            assert_eq!(instruction_complete(trace.outcome), cycle == 2);
             let (addr, data) = match cycle {
                 0 => (0x010A, 0xC1),
                 1 => (sp - 2, 0x34),
                 _ => (sp - 1, 0x12),
             };
-            assert!(matches!(trace.action, CycleAction::Read { addr: actual } if actual == addr));
-            assert_eq!(trace.read_value, Some(data));
+            assert!(
+                matches!(trace.record.action, CycleAction::Read { addr: actual } if actual == addr)
+            );
+            assert_eq!(trace.record.read_value, Some(data));
             expected.pc = 0x010B;
             if cycle == 1 {
                 expected.sp = sp - 1;

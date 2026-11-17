@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -27,38 +32,47 @@ fn cpu_stores_and_loads_every_high_ram_address_with_exact_traces() {
             for cycle in 0u64..3 {
                 let trace = system.step_machine_cycle().unwrap();
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after),
+                    (trace.record.tick_before, trace.record.tick_after),
                     (12 + cycle * 4, 16 + cycle * 4)
                 );
-                assert_eq!(trace.complete, cycle == 2);
+                assert_eq!(instruction_complete(trace.outcome), cycle == 2);
                 match cycle {
                     0 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0103 }));
-                        assert_eq!(trace.read_value, Some(0x36));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0103 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(0x36));
                         expected.pc = 0x0104;
                     }
                     1 => {
-                        assert!(matches!(trace.action, CycleAction::Read { addr: 0x0104 }));
-                        assert_eq!(trace.read_value, Some(value));
+                        assert!(matches!(
+                            trace.record.action,
+                            CycleAction::Read { addr: 0x0104 }
+                        ));
+                        assert_eq!(trace.record.read_value, Some(value));
                         expected.pc = 0x0105;
                     }
                     _ => {
                         assert!(
-                            matches!(trace.action, CycleAction::Write { addr, value: byte } if addr == address && byte == value)
+                            matches!(trace.record.action, CycleAction::Write { addr, value: byte } if addr == address && byte == value)
                         );
-                        assert_eq!(trace.read_value, None);
+                        assert_eq!(trace.record.read_value, None);
                     }
                 }
                 assert_eq!(system.cpu_snapshot(), expected);
             }
             let opcode = system.step_machine_cycle().unwrap();
-            assert!(matches!(opcode.action, CycleAction::Read { addr: 0x0105 }));
-            assert_eq!(opcode.read_value, Some(0x7E));
-            assert!(!opcode.complete);
+            assert!(matches!(
+                opcode.record.action,
+                CycleAction::Read { addr: 0x0105 }
+            ));
+            assert_eq!(opcode.record.read_value, Some(0x7E));
+            assert!(!instruction_complete(opcode.outcome));
             let data = system.step_machine_cycle().unwrap();
-            assert!(matches!(data.action, CycleAction::Read { addr } if addr == address));
-            assert_eq!(data.read_value, Some(value));
-            assert!(data.complete);
+            assert!(matches!(data.record.action, CycleAction::Read { addr } if addr == address));
+            assert_eq!(data.record.read_value, Some(value));
+            assert!(instruction_complete(data.outcome));
             expected.pc = 0x0106;
             expected.af = (u16::from(value) << 8) | (expected.af & 0xFF);
             assert_eq!(system.cpu_snapshot(), expected);
@@ -77,10 +91,14 @@ fn cpu_writes_an_instruction_then_fetches_and_executes_it_in_high_ram() {
         let mut expected = system.cpu_snapshot();
         assert_eq!(expected.pc, address);
         let trace = system.step_machine_cycle().unwrap();
-        assert!(matches!(trace.action, CycleAction::Read { addr } if addr == address));
-        assert_eq!(trace.read_value, Some(0x04));
+        assert!(matches!(trace.record.action, CycleAction::Read { addr } if addr == address));
+        assert_eq!(trace.record.read_value, Some(0x04));
         assert_eq!(
-            (trace.tick_before, trace.tick_after, trace.complete),
+            (
+                trace.record.tick_before,
+                trace.record.tick_after,
+                instruction_complete(trace.outcome)
+            ),
             (28, 32, true)
         );
         expected.bc = 0x0113;

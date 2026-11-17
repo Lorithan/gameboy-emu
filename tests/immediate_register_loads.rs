@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuError, CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -55,19 +60,28 @@ fn every_register_loads_every_byte_with_correct_per_cycle_state_and_trace() {
             let mut system = machine(opcode, value);
             let initial = system.cpu_snapshot();
             let first = system.step_machine_cycle().expect("opcode cycle");
-            assert_eq!((first.tick_before, first.tick_after), (0, 4));
-            assert!(matches!(first.action, CycleAction::Read { addr: 0x0100 }));
-            assert_eq!(first.read_value, Some(opcode));
-            assert!(!first.complete);
+            assert_eq!((first.record.tick_before, first.record.tick_after), (0, 4));
+            assert!(matches!(
+                first.record.action,
+                CycleAction::Read { addr: 0x0100 }
+            ));
+            assert_eq!(first.record.read_value, Some(opcode));
+            assert!(!instruction_complete(first.outcome));
             let mut pending = initial;
             pending.pc = 0x0101;
             assert_eq!(system.cpu_snapshot(), pending);
 
             let second = system.step_machine_cycle().expect("operand cycle");
-            assert_eq!((second.tick_before, second.tick_after), (4, 8));
-            assert!(matches!(second.action, CycleAction::Read { addr: 0x0101 }));
-            assert_eq!(second.read_value, Some(value));
-            assert!(second.complete);
+            assert_eq!(
+                (second.record.tick_before, second.record.tick_after),
+                (4, 8)
+            );
+            assert!(matches!(
+                second.record.action,
+                CycleAction::Read { addr: 0x0101 }
+            ));
+            assert_eq!(second.record.read_value, Some(value));
+            assert!(instruction_complete(second.outcome));
             assert_eq!(system.elapsed_ticks(), 8);
             assert_eq!(
                 system.cpu_snapshot(),

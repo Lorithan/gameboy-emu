@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -88,29 +93,36 @@ fn call_ret_round_trip_has_stack_reads_then_idle_and_restores_sp() {
         for cycle in 0u64..4 {
             let trace = system.step_machine_cycle().unwrap();
             assert_eq!(
-                (trace.tick_before, trace.tick_after),
+                (trace.record.tick_before, trace.record.tick_after),
                 (36 + cycle * 4, 40 + cycle * 4)
             );
-            assert_eq!(trace.complete, cycle == 3);
+            assert_eq!(instruction_complete(trace.outcome), cycle == 3);
             match cycle {
                 0 => {
-                    assert!(matches!(trace.action, CycleAction::Read { addr: 0x0200 }));
-                    assert_eq!(trace.read_value, Some(0xC9));
+                    assert!(matches!(
+                        trace.record.action,
+                        CycleAction::Read { addr: 0x0200 }
+                    ));
+                    assert_eq!(trace.record.read_value, Some(0xC9));
                     expected.pc = 0x0201;
                 }
                 1 => {
-                    assert!(matches!(trace.action, CycleAction::Read { addr } if addr == sp - 2));
-                    assert_eq!(trace.read_value, Some(6));
+                    assert!(
+                        matches!(trace.record.action, CycleAction::Read { addr } if addr == sp - 2)
+                    );
+                    assert_eq!(trace.record.read_value, Some(6));
                     expected.sp = sp - 1;
                 }
                 2 => {
-                    assert!(matches!(trace.action, CycleAction::Read { addr } if addr == sp - 1));
-                    assert_eq!(trace.read_value, Some(1));
+                    assert!(
+                        matches!(trace.record.action, CycleAction::Read { addr } if addr == sp - 1)
+                    );
+                    assert_eq!(trace.record.read_value, Some(1));
                     expected.sp = sp;
                 }
                 _ => {
-                    assert!(matches!(trace.action, CycleAction::Idle));
-                    assert_eq!(trace.read_value, None);
+                    assert!(matches!(trace.record.action, CycleAction::Idle));
+                    assert_eq!(trace.record.read_value, None);
                     expected.pc = 0x0106;
                 }
             }
@@ -166,23 +178,23 @@ fn call_traces_place_idle_before_return_writes_for_all_conditions() {
             for cycle in 0..cycles {
                 let trace = system.step_machine_cycle().unwrap();
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after),
+                    (trace.record.tick_before, trace.record.tick_after),
                     (16 + cycle * 4, 20 + cycle * 4)
                 );
-                assert_eq!(trace.complete, cycle + 1 == cycles);
+                assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
                 if cycle < 3 {
                     assert!(
-                        matches!(trace.action, CycleAction::Read { addr } if addr == 0x0104 + cycle as u16)
+                        matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x0104 + cycle as u16)
                     );
-                    assert_eq!(trace.read_value, Some([byte, 4, 1][cycle as usize]));
+                    assert_eq!(trace.record.read_value, Some([byte, 4, 1][cycle as usize]));
                     expected.pc = 0x0105 + cycle as u16;
                 } else {
-                    assert_eq!(trace.read_value, None);
+                    assert_eq!(trace.record.read_value, None);
                     match cycle {
-                        3 => assert!(matches!(trace.action, CycleAction::Idle)),
+                        3 => assert!(matches!(trace.record.action, CycleAction::Idle)),
                         4 => {
                             assert!(matches!(
-                                trace.action,
+                                trace.record.action,
                                 CycleAction::Write {
                                     addr: 0xFFFD,
                                     value: 1
@@ -192,7 +204,7 @@ fn call_traces_place_idle_before_return_writes_for_all_conditions() {
                         }
                         _ => {
                             assert!(matches!(
-                                trace.action,
+                                trace.record.action,
                                 CycleAction::Write {
                                     addr: 0xFFFC,
                                     value: 7

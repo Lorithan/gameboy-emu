@@ -1,5 +1,11 @@
 # Game Boy emulator project plan
 
+## Current next task - 2026-11-17
+
+User selected the explicit acceptance/CPU-owned entry design. [#39 - Resumable interrupt entry](https://github.com/Lorithan/gameboy-emu/issues/39) is specified in [INTERRUPT_ENTRY.md](tasks/INTERRUPT_ENTRY.md), under M2; implementation has not started. Begin with explicit CPU completion, trace and bounded-step outcomes while preserving existing instruction behavior, then add CPU entry and System coordination in reviewed slices. User owns application changes; assistant owns test migration and acceptance checks. Baseline is d6b0bb7 with the prior 339-test validation; no new test run was needed for this documentation-only change.
+
+The first-stage model captures source/vector and acknowledges at acceptance. This is an explicit approximation: hardware-tested Mooneye ie_push shows source changes/cancellation when an upper-byte stack write modifies IE. [#40](https://github.com/Lorithan/gameboy-emu/issues/40) tracks late selection/acknowledgment research and implementation before claiming that behavior or ie_push conformance. No physical sampling-edge accuracy is claimed. RETI, HALT, STOP, peripherals and frontend remain separate work.
+
 ## Current checkpoint - 2026-11-16
 
 This checkpoint supersedes historical next-task and publication notes below. Local and live GitHub main match 6a634f8; all four handoff commits are present. Fresh verification passes 334 tests (236 unit, 98 integration), formatting and strict Clippy. No external ROM suite was run. DI/EI issue #37 is closed; coverage is 241/244 legal non-prefix base encodings and all 256 CB encodings.
@@ -230,3 +236,9 @@ Checkpoint d0960a4 contains the core library, CPU registers/flags, System startu
 This supersedes the 2026-11-16 next-task statement: #38 IF/IE controller and Bus mapping is implemented and verified locally. All 339 tests pass (241 unit, 98 integration), formatting, strict Clippy and diff whitespace checks pass. No external ROM suite was run. See [acceptance evidence](tasks/INTERRUPT_REGISTERS.md). No correctness findings remain. User owns implementation; assistant added five tests, updated old fallback expectations and applied approved temporary dead-code allowances for staged production hooks. Publication of this work has not been verified.
 
 Current next task is the interrupt-entry architecture contract: sampling boundaries, priority, acknowledgment ordering, five-M-cycle entry, and a result that distinguishes interrupt service from instruction completion without advancing delayed-EI bookkeeping. Specify before implementation. RETI, HALT, STOP and peripherals remain separately scoped.
+
+## Transition/outcome refactor checkpoint - 2026-11-17
+
+The first slice of #39 is verified locally: private CycleTransition with centralized execution-state application, public CycleOutcome, successful CycleTrace plus CycleRecord failure diagnostics, and explicit bounded-step interrupt completion. User implemented application changes; assistant migrated tests and added two direct public API checks. All 341 tests pass (241 unit, 100 integration), formatting/strict Clippy/whitespace checks pass; no external ROM suite ran. User approved the staged-variant dead-code allowance and redundant-return cleanup. Changes are uncommitted. See [slice evidence](tasks/INTERRUPT_ENTRY.md).
+
+Current next implementation: CPU acceptance and captured five-cycle entry states, followed by System coordination under the #39 contract. Interrupt acceptance/entry is not implemented yet; #39 stays open. Required-read extraction, RETI, HALT, STOP and hardware late-selection #40 remain separate.

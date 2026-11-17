@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
@@ -75,7 +77,11 @@ fn check_all_pairs(add: bool) {
                 let flags = (left ^ right) & 0xF0;
                 let mut cpu = machine(left, right, source, flags, 0x0100);
                 let expected = reference(cpu.snapshot(), left, right, add);
-                assert!(cpu.complete_cycle(Some(opcode)).expect("binary arithmetic"));
+                assert!(
+                    cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .expect("binary arithmetic")
+                );
                 assert_eq!(
                     cpu.snapshot(),
                     expected,
@@ -105,6 +111,7 @@ fn self_source_reads_original_a_twice_and_overwrites_all_initial_flags() {
                 let expected = reference(cpu.snapshot(), value, value, add);
                 assert!(
                     cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
                         .expect("self-source arithmetic")
                 );
                 assert_eq!(cpu.snapshot(), expected);
@@ -131,13 +138,14 @@ fn boundaries_overwrite_all_flags_and_opcode_retry_wraps_pc() {
                                 Ok(CycleAction::Read { addr: 0xFFFF })
                             ));
                             assert!(matches!(
-                                cpu.complete_cycle(None),
+                                cpu.complete_cycle(None).map(instruction_complete),
                                 Err(CpuError::MissingReadValue { addr: 0xFFFF })
                             ));
                             assert_eq!(cpu.snapshot(), before);
                         }
                         assert!(
                             cpu.complete_cycle(Some(opcode))
+                                .map(instruction_complete)
                                 .expect("retry arithmetic opcode")
                         );
                         assert_eq!(cpu.snapshot(), reference(before, left, right, add));

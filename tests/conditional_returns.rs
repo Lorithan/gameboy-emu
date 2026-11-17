@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -50,35 +55,38 @@ fn conditional_return_traces_and_all_budgets_cover_both_outcomes() {
                 for cycle in 0..cycles {
                     let trace = system.step_machine_cycle().unwrap();
                     assert_eq!(
-                        (trace.tick_before, trace.tick_after),
+                        (trace.record.tick_before, trace.record.tick_after),
                         (56 + cycle * 4, 60 + cycle * 4)
                     );
-                    assert_eq!(trace.complete, cycle + 1 == cycles);
+                    assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
                     match cycle {
                         0 => {
-                            assert!(matches!(trace.action, CycleAction::Read { addr: 0x010B }));
-                            assert_eq!(trace.read_value, Some(byte));
+                            assert!(matches!(
+                                trace.record.action,
+                                CycleAction::Read { addr: 0x010B }
+                            ));
+                            assert_eq!(trace.record.read_value, Some(byte));
                             expected.pc = 0x010C;
                         }
                         1 | 4 => {
-                            assert!(matches!(trace.action, CycleAction::Idle));
-                            assert_eq!(trace.read_value, None);
+                            assert!(matches!(trace.record.action, CycleAction::Idle));
+                            assert_eq!(trace.record.read_value, None);
                             if cycle == 4 {
                                 expected.pc = 0x0200;
                             }
                         }
                         2 => {
                             assert!(
-                                matches!(trace.action, CycleAction::Read { addr } if addr == sp - 2)
+                                matches!(trace.record.action, CycleAction::Read { addr } if addr == sp - 2)
                             );
-                            assert_eq!(trace.read_value, Some(0));
+                            assert_eq!(trace.record.read_value, Some(0));
                             expected.sp = sp - 1;
                         }
                         _ => {
                             assert!(
-                                matches!(trace.action, CycleAction::Read { addr } if addr == sp - 1)
+                                matches!(trace.record.action, CycleAction::Read { addr } if addr == sp - 1)
                             );
-                            assert_eq!(trace.read_value, Some(2));
+                            assert_eq!(trace.record.read_value, Some(2));
                             expected.sp = sp;
                         }
                     }

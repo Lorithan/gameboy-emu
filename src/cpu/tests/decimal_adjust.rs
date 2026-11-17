@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::opcode::DecodedOpcode;
 
@@ -20,7 +22,11 @@ fn decimal_adjust_opcode_mapping_is_explicit() {
 #[test]
 fn decimal_adjust_wraps_addition_correction() {
     let mut cpu = machine(0x9A, 0, 0x0100);
-    assert!(cpu.complete_cycle(Some(0x27)).unwrap());
+    assert!(
+        cpu.complete_cycle(Some(0x27))
+            .map(instruction_complete)
+            .unwrap()
+    );
     assert_eq!(cpu.snapshot().af, 0x0090);
 }
 
@@ -28,7 +34,11 @@ fn decimal_adjust_wraps_addition_correction() {
 fn decimal_adjust_wraps_subtraction_correction() {
     // Include a non-BCD-derived input: opcode behavior is defined for all states.
     let mut cpu = machine(0, 0x70, 0x0100);
-    assert!(cpu.complete_cycle(Some(0x27)).unwrap());
+    assert!(
+        cpu.complete_cycle(Some(0x27))
+            .map(instruction_complete)
+            .unwrap()
+    );
     assert_eq!(cpu.snapshot().af, 0x9A50);
 }
 
@@ -44,7 +54,7 @@ fn decimal_adjust_all_input_states_preserve_contract_and_retry_atomicity() {
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                     );
                     assert_eq!(cpu.snapshot(), before);
                 }
@@ -68,7 +78,11 @@ fn decimal_adjust_all_input_states_preserve_contract_and_retry_atomicity() {
                     + if adjusted == 0 { 0x80 } else { 0 }
                     + if high { 0x10 } else { 0 };
                 expected.pc = pc.wrapping_add(1);
-                assert!(cpu.complete_cycle(Some(0x27)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(0x27))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 assert_eq!(cpu.snapshot(), expected, "A={a:02X} F={flags:02X}");
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
@@ -94,8 +108,16 @@ fn decimal_adjust_after_all_valid_bcd_add_adc_sub_sbc_pairs() {
             for right in 0u16..100 {
                 for incoming in [false, true] {
                     let mut cpu = machine(bcd(left), if incoming { 0x10 } else { 0 }, 0x0100);
-                    assert!(!cpu.complete_cycle(Some(opcode)).unwrap());
-                    assert!(cpu.complete_cycle(Some(bcd(right))).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(opcode))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
+                    assert!(
+                        cpu.complete_cycle(Some(bcd(right)))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     let before = cpu.snapshot();
                     let operand = right as i16 + i16::from(incoming && uses_carry);
                     let decimal = left as i16 + if subtract { -operand } else { operand };
@@ -107,7 +129,11 @@ fn decimal_adjust_after_all_valid_bcd_add_adc_sub_sbc_pairs() {
                         + if subtract { 0x40 } else { 0 }
                         + if carry { 0x10 } else { 0 };
                     expected.pc += 1;
-                    assert!(cpu.complete_cycle(Some(0x27)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(0x27))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     assert_eq!(
                         cpu.snapshot(),
                         expected,

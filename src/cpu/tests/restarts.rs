@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
 
 const RESTARTS: [(u8, u16); 8] = [
@@ -34,10 +36,14 @@ fn restart_captures_return_stack_and_vector_and_preserves_flags_at_boundaries() 
                     let mut cpu = CPU::from_registers(registers);
                     let before = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
                     );
                     assert_eq!(cpu.snapshot(), before);
-                    assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(byte))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     cpu.registers.pc = 0xABCD;
                     cpu.registers.sp = 0x8000;
                     let mut expected = cpu.snapshot();
@@ -45,7 +51,7 @@ fn restart_captures_return_stack_and_vector_and_preserves_flags_at_boundaries() 
                         assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
                         assert_eq!(cpu.snapshot(), expected);
                     }
-                    assert!(!cpu.complete_cycle(None).unwrap());
+                    assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     let return_pc = pc.wrapping_add(1);
                     for _ in 0..2 {
                         assert!(
@@ -53,14 +59,14 @@ fn restart_captures_return_stack_and_vector_and_preserves_flags_at_boundaries() 
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }
-                    assert!(!cpu.complete_cycle(None).unwrap());
+                    assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     expected.sp = sp.wrapping_sub(1);
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(
                         matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr, value } if addr == sp.wrapping_sub(2) && value == return_pc as u8)
                     );
                     cpu.registers.sp = 0x9000;
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     expected.sp = sp.wrapping_sub(2);
                     expected.pc = target;
                     assert_eq!(cpu.snapshot(), expected);
@@ -79,23 +85,27 @@ fn restarts_push_the_full_return_address_for_every_opcode_address() {
             let mut cpu = CPU::from_registers(registers);
             let mut expected = cpu.snapshot();
             let return_pc = pc.wrapping_add(1);
-            assert!(!cpu.complete_cycle(Some(byte)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(byte))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = return_pc;
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             assert_eq!(cpu.snapshot(), expected);
             assert!(
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr: 0xFFFD, value } if value == (return_pc / 256) as u8)
             );
-            assert!(!cpu.complete_cycle(None).unwrap());
+            assert!(!cpu.complete_cycle(None).map(instruction_complete).unwrap());
             expected.sp = 0xFFFD;
             assert_eq!(cpu.snapshot(), expected);
             assert!(
                 matches!(cpu.request_cycle().unwrap(), CycleAction::Write { addr: 0xFFFC, value } if value == return_pc as u8),
                 "RST {byte:02X} at {pc:04X} must push all eight low bits of {return_pc:04X}"
             );
-            assert!(cpu.complete_cycle(None).unwrap());
+            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             expected.sp = 0xFFFC;
             expected.pc = target;
             assert_eq!(cpu.snapshot(), expected);

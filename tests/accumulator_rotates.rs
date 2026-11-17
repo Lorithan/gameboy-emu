@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -33,10 +38,17 @@ fn rotates_finish_on_one_fetch_with_all_instruction_budgets() {
                 assert_eq!(system.cpu_snapshot(), before);
                 assert_eq!(system.elapsed_ticks(), 0);
                 let trace = system.step_machine_cycle().unwrap();
-                assert!(matches!(trace.action, CycleAction::Read { addr: 0x0100 }));
-                assert_eq!(trace.read_value, Some(opcode));
+                assert!(matches!(
+                    trace.record.action,
+                    CycleAction::Read { addr: 0x0100 }
+                ));
+                assert_eq!(trace.record.read_value, Some(opcode));
                 assert_eq!(
-                    (trace.tick_before, trace.tick_after, trace.complete),
+                    (
+                        trace.record.tick_before,
+                        trace.record.tick_after,
+                        instruction_complete(trace.outcome)
+                    ),
                     (0, 4, true)
                 );
             } else {

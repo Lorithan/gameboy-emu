@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -21,14 +26,14 @@ fn check_load(opcode: u8, set_expected: fn(&mut CpuSnapShot, u16)) {
         {
             let trace = system.step_machine_cycle().expect("word-load read cycle");
             assert!(
-                matches!(trace.action, CycleAction::Read { addr } if addr == 0x0100 + index as u16)
+                matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x0100 + index as u16)
             );
-            assert_eq!(trace.read_value, Some(byte));
+            assert_eq!(trace.record.read_value, Some(byte));
             assert_eq!(
-                (trace.tick_before, trace.tick_after),
+                (trace.record.tick_before, trace.record.tick_after),
                 (index as u64 * 4, (index as u64 + 1) * 4)
             );
-            assert_eq!(trace.complete, index == 2);
+            assert_eq!(instruction_complete(trace.outcome), index == 2);
             expected.pc += 1;
             if index == 2 {
                 set_expected(&mut expected, value);

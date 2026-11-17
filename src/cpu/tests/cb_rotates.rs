@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::{CPU, CpuError, CycleAction, Registers};
 
 fn cpu_with_a(value: u8, flags: u8) -> CPU {
@@ -8,7 +10,11 @@ fn cpu_with_a(value: u8, flags: u8) -> CPU {
 }
 
 fn fetch_prefix(cpu: &mut CPU) {
-    assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
+    assert!(
+        !cpu.complete_cycle(Some(0xCB))
+            .map(instruction_complete)
+            .unwrap()
+    );
     assert!(matches!(
         cpu.request_cycle(),
         Ok(CycleAction::Read { addr: 0x0101 })
@@ -46,7 +52,11 @@ fn cb_rotate_register_results_exhaust_values_and_carry() {
                         _ => unreachable!(),
                     }
                     fetch_prefix(&mut cpu);
-                    assert!(cpu.complete_cycle(Some(group * 8 + target)).unwrap());
+                    assert!(
+                        cpu.complete_cycle(Some(group * 8 + target))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     let actual = match target {
                         0 => cpu.registers.b,
                         1 => cpu.registers.c,
@@ -75,7 +85,11 @@ fn cb_rotate_register_flags_exhaust_values_and_initial_flags() {
             for flags in (0u8..=0xF0).step_by(16) {
                 let mut cpu = cpu_with_a(value, flags);
                 fetch_prefix(&mut cpu);
-                assert!(cpu.complete_cycle(Some(group * 8 + 7)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(group * 8 + 7))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let (result, carry) = reference(group, value, flags & 0x10 != 0);
                 let expected_flags =
                     if result == 0 { 0x80 } else { 0 } | if carry { 0x10 } else { 0 };
@@ -96,18 +110,26 @@ fn cb_rotate_memory_results_exhaust_values_and_carry() {
             for carry in [false, true] {
                 let mut cpu = cpu_with_a(0x55, if carry { 0x10 } else { 0 });
                 fetch_prefix(&mut cpu);
-                assert!(!cpu.complete_cycle(Some(group * 8 + 6)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(group * 8 + 6))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 assert!(matches!(
                     cpu.request_cycle(),
                     Ok(CycleAction::Read { addr: 0xC123 })
                 ));
-                assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(value))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let expected = reference(group, value, carry).0;
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if value == expected),
                     "group={group}, value={value:02X}, carry={carry}, expected={expected:02X}"
                 );
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
             }
         }
     }
@@ -120,9 +142,17 @@ fn cb_rotate_memory_flags_exhaust_values_and_initial_flags() {
             for flags in (0u8..=0xF0).step_by(16) {
                 let mut cpu = cpu_with_a(0x55, flags);
                 fetch_prefix(&mut cpu);
-                assert!(!cpu.complete_cycle(Some(group * 8 + 6)).unwrap());
-                assert!(!cpu.complete_cycle(Some(value)).unwrap());
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(group * 8 + 6))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
+                assert!(
+                    !cpu.complete_cycle(Some(value))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 let (result, carry) = reference(group, value, flags & 0x10 != 0);
                 let expected_flags =
                     if result == 0 { 0x80 } else { 0 } | if carry { 0x10 } else { 0 };
@@ -142,24 +172,36 @@ fn cb_rotate_fetch_wraps_retries_and_finishes_on_second_cycle() {
         let mut cpu = cpu_with_a(0x42, 0);
         cpu.registers.pc = pc;
         let mut expected = cpu.snapshot();
-        assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
+        assert!(
+            !cpu.complete_cycle(Some(0xCB))
+                .map(instruction_complete)
+                .unwrap()
+        );
         expected.pc = pc.wrapping_add(1);
         assert_eq!(cpu.snapshot(), expected);
         assert!(
-            matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
         );
         assert_eq!(cpu.snapshot(), expected);
         assert!(
             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
         );
-        assert!(cpu.complete_cycle(Some(0x07)).unwrap()); // RLC A
+        assert!(
+            cpu.complete_cycle(Some(0x07))
+                .map(instruction_complete)
+                .unwrap()
+        ); // RLC A
         expected.pc = pc.wrapping_add(2);
         expected.af = 0x8400;
         assert_eq!(cpu.snapshot(), expected);
         assert!(
             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
         );
-        assert!(cpu.complete_cycle(Some(0)).unwrap());
+        assert!(
+            cpu.complete_cycle(Some(0))
+                .map(instruction_complete)
+                .unwrap()
+        );
     }
 }
 
@@ -167,10 +209,14 @@ fn cb_rotate_fetch_wraps_retries_and_finishes_on_second_cycle() {
 fn cb_rotate_memory_retries_and_writes_to_captured_address_on_fourth_cycle() {
     let mut cpu = cpu_with_a(0x55, 0);
     fetch_prefix(&mut cpu);
-    assert!(!cpu.complete_cycle(Some(0x06)).unwrap()); // RLC (HL)
+    assert!(
+        !cpu.complete_cycle(Some(0x06))
+            .map(instruction_complete)
+            .unwrap()
+    ); // RLC (HL)
     let before = cpu.snapshot();
     assert!(matches!(
-        cpu.complete_cycle(None),
+        cpu.complete_cycle(None).map(instruction_complete),
         Err(CpuError::MissingReadValue { addr: 0xC123 })
     ));
     assert_eq!(cpu.snapshot(), before);
@@ -179,7 +225,11 @@ fn cb_rotate_memory_retries_and_writes_to_captured_address_on_fourth_cycle() {
         cpu.request_cycle(),
         Ok(CycleAction::Read { addr: 0xC123 })
     ));
-    assert!(!cpu.complete_cycle(Some(0x42)).unwrap());
+    assert!(
+        !cpu.complete_cycle(Some(0x42))
+            .map(instruction_complete)
+            .unwrap()
+    );
     for _ in 0..2 {
         assert!(matches!(
             cpu.request_cycle(),
@@ -189,7 +239,7 @@ fn cb_rotate_memory_retries_and_writes_to_captured_address_on_fourth_cycle() {
             })
         ));
     }
-    assert!(cpu.complete_cycle(None).unwrap());
+    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
     assert_eq!(cpu.snapshot().pc, 0x0102);
     assert_eq!(cpu.snapshot().hl, 0xD456);
     assert_eq!(cpu.snapshot().af, 0x5500);
@@ -246,7 +296,11 @@ fn cb_shift_register_values_and_flags() {
             for flags in (0u8..=0xF0).step_by(16) {
                 let mut cpu = cpu_with_a(value, flags);
                 fetch_prefix(&mut cpu);
-                assert!(cpu.complete_cycle(Some(opcode)).unwrap());
+                assert!(
+                    cpu.complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let (result, expected_flags) = shift_reference(opcode, value);
                 assert_eq!(
                     cpu.snapshot().af,
@@ -265,19 +319,27 @@ fn cb_shift_memory_values_flags_and_four_cycle_completion() {
             for flags in (0u8..=0xF0).step_by(16) {
                 let mut cpu = cpu_with_a(0x55, flags);
                 fetch_prefix(&mut cpu);
-                assert!(!cpu.complete_cycle(Some(register_opcode - 1)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(register_opcode - 1))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 assert!(matches!(
                     cpu.request_cycle(),
                     Ok(CycleAction::Read { addr: 0xC123 })
                 ));
-                assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                assert!(
+                    !cpu.complete_cycle(Some(value))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 let (result, expected_flags) = shift_reference(register_opcode, value);
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if value == result),
                     "CB {:02X}, input={value:02X}, flags={flags:02X}, expected={result:02X}",
                     register_opcode - 1
                 );
-                assert!(cpu.complete_cycle(None).unwrap());
+                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 assert_eq!(cpu.snapshot().af, 0x5500 + expected_flags);
                 assert_eq!(cpu.snapshot().pc, 0x0102);
                 assert!(matches!(
@@ -323,18 +385,25 @@ fn cb_swap_all_targets_values_flags_and_cycle_completion() {
                     _ => unreachable!(),
                 }
                 fetch_prefix(&mut cpu);
-                let complete = cpu.complete_cycle(Some(0x30 + target)).unwrap();
+                let complete = cpu
+                    .complete_cycle(Some(0x30 + target))
+                    .map(instruction_complete)
+                    .unwrap();
                 if target == 6 {
                     assert!(!complete);
                     assert!(matches!(
                         cpu.request_cycle(),
                         Ok(CycleAction::Read { addr: 0xC123 })
                     ));
-                    assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                    assert!(
+                        !cpu.complete_cycle(Some(value))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if u16::from(value) == result)
                     );
-                    assert!(cpu.complete_cycle(None).unwrap());
+                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                 } else {
                     assert!(complete);
                 }
@@ -377,14 +446,21 @@ fn cb_bit_all_bits_targets_values_flags_and_read_only_completion() {
                     expected.af = (expected.af & 0xFF00) | expected_flags;
                     expected.pc = 0x0102;
                     fetch_prefix(&mut cpu);
-                    let complete = cpu.complete_cycle(Some(0x40 + bit * 8 + target)).unwrap();
+                    let complete = cpu
+                        .complete_cycle(Some(0x40 + bit * 8 + target))
+                        .map(instruction_complete)
+                        .unwrap();
                     if target == 6 {
                         assert!(!complete);
                         assert!(matches!(
                             cpu.request_cycle(),
                             Ok(CycleAction::Read { addr: 0xC123 })
                         ));
-                        assert!(cpu.complete_cycle(Some(value)).unwrap());
+                        assert!(
+                            cpu.complete_cycle(Some(value))
+                                .map(instruction_complete)
+                                .unwrap()
+                        );
                     } else {
                         assert!(complete);
                     }
@@ -409,13 +485,21 @@ fn cb_bit_memory_wrap_retry_captured_address_and_continuation() {
         for bit in 0u8..8 {
             let mut cpu = cpu_with_a(0x55, 0xF0);
             cpu.registers.pc = pc;
-            assert!(!cpu.complete_cycle(Some(0xCB)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(0xCB))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             let before_decode = cpu.snapshot();
             assert!(
-                matches!(cpu.complete_cycle(None), Err(CpuError::MissingReadValue { addr }) if addr == pc.wrapping_add(1))
+                matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc.wrapping_add(1))
             );
             assert_eq!(cpu.snapshot(), before_decode);
-            assert!(!cpu.complete_cycle(Some(0x46 + bit * 8)).unwrap());
+            assert!(
+                !cpu.complete_cycle(Some(0x46 + bit * 8))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             cpu.registers.set_hl(0xD456);
             let before_read = cpu.snapshot();
             for _ in 0..2 {
@@ -424,12 +508,16 @@ fn cb_bit_memory_wrap_retry_captured_address_and_continuation() {
                     Ok(CycleAction::Read { addr: 0xC123 })
                 ));
                 assert!(matches!(
-                    cpu.complete_cycle(None),
+                    cpu.complete_cycle(None).map(instruction_complete),
                     Err(CpuError::MissingReadValue { addr: 0xC123 })
                 ));
                 assert_eq!(cpu.snapshot(), before_read);
             }
-            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some(0))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             let mut expected = before_read;
             expected.af = 0x55B0;
             assert_eq!(cpu.snapshot(), expected);
@@ -437,7 +525,11 @@ fn cb_bit_memory_wrap_retry_captured_address_and_continuation() {
             assert!(
                 matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
             );
-            assert!(cpu.complete_cycle(Some(0)).unwrap());
+            assert!(
+                cpu.complete_cycle(Some(0))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             expected.pc = expected.pc.wrapping_add(1);
             assert_eq!(cpu.snapshot(), expected);
         }
@@ -484,19 +576,26 @@ fn check_res_set(set: bool) {
                     }
                     fetch_prefix(&mut cpu);
                     let opcode = if set { 0xC0 } else { 0x80 } + bit * 8 + target;
-                    let complete = cpu.complete_cycle(Some(opcode)).unwrap();
+                    let complete = cpu
+                        .complete_cycle(Some(opcode))
+                        .map(instruction_complete)
+                        .unwrap();
                     if target == 6 {
                         assert!(!complete);
                         assert!(matches!(
                             cpu.request_cycle(),
                             Ok(CycleAction::Read { addr: 0xC123 })
                         ));
-                        assert!(!cpu.complete_cycle(Some(value)).unwrap());
+                        assert!(
+                            !cpu.complete_cycle(Some(value))
+                                .map(instruction_complete)
+                                .unwrap()
+                        );
                         assert!(
                             matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value }) if u16::from(value) == result),
                             "set={set}, bit={bit}, input={value:02X}, expected={result:02X}"
                         );
-                        assert!(cpu.complete_cycle(None).unwrap());
+                        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
                     } else {
                         assert!(complete);
                     }

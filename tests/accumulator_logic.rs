@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -80,18 +85,18 @@ fn every_logic_form_has_exact_read_traces_and_resumes_all_budgets() {
                         before.pc + 1
                     };
                     assert!(
-                        matches!(trace.action, CycleAction::Read { addr: actual } if actual == addr)
+                        matches!(trace.record.action, CycleAction::Read { addr: actual } if actual == addr)
                     );
                     assert_eq!(
-                        trace.read_value,
+                        trace.record.read_value,
                         Some(if cycle == 0 { opcode } else { right })
                     );
                     assert_eq!(
-                        (trace.tick_before, trace.tick_after),
+                        (trace.record.tick_before, trace.record.tick_after),
                         (ticks + 4 * cycle, ticks + 4 * (cycle + 1))
                     );
-                    assert_eq!(trace.complete, cycle + 1 == cycles);
-                    if !trace.complete {
+                    assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
+                    if !instruction_complete(trace.outcome) {
                         let mut pending = before;
                         pending.pc += 1;
                         assert_eq!(system.cpu_snapshot(), pending);

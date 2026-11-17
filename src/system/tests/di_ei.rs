@@ -1,3 +1,5 @@
+use crate::outcome_support::instruction_complete;
+
 use super::super::{InstructionStep, System};
 use crate::memory::Cartridge;
 
@@ -82,10 +84,14 @@ fn di_ei_sequences_have_single_fetch_cycles_and_preserve_registers() {
     let mut expected = system.cpu_snapshot();
     for (index, opcode) in bytes.into_iter().enumerate() {
         let trace = system.step_machine_cycle().unwrap();
-        assert!(matches!(trace.action, CycleAction::Read { addr } if addr == expected.pc));
-        assert_eq!(trace.read_value, Some(opcode));
+        assert!(matches!(trace.record.action, CycleAction::Read { addr } if addr == expected.pc));
+        assert_eq!(trace.record.read_value, Some(opcode));
         assert_eq!(
-            (trace.tick_before, trace.tick_after, trace.complete),
+            (
+                trace.record.tick_before,
+                trace.record.tick_after,
+                instruction_complete(trace.outcome)
+            ),
             (index as u64 * 4, (index as u64 + 1) * 4, true)
         );
         expected.pc += 1;

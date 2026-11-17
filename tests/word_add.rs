@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -71,20 +76,28 @@ fn word_add_has_read_idle_traces_and_resumes_every_budget() {
                 complete(&mut system, 3);
             }
             let fetch = system.step_machine_cycle().unwrap();
-            assert!(matches!(fetch.action, CycleAction::Read { addr } if addr == before.pc));
-            assert_eq!(fetch.read_value, Some(opcode));
+            assert!(matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc));
+            assert_eq!(fetch.record.read_value, Some(opcode));
             assert_eq!(
-                (fetch.tick_before, fetch.tick_after, fetch.complete),
+                (
+                    fetch.record.tick_before,
+                    fetch.record.tick_after,
+                    instruction_complete(fetch.outcome)
+                ),
                 (ticks, ticks + 4, false)
             );
             let mut pending = before;
             pending.pc += 1;
             assert_eq!(system.cpu_snapshot(), pending);
             let idle = system.step_machine_cycle().unwrap();
-            assert!(matches!(idle.action, CycleAction::Idle));
-            assert_eq!(idle.read_value, None);
+            assert!(matches!(idle.record.action, CycleAction::Idle));
+            assert_eq!(idle.record.read_value, None);
             assert_eq!(
-                (idle.tick_before, idle.tick_after, idle.complete),
+                (
+                    idle.record.tick_before,
+                    idle.record.tick_after,
+                    instruction_complete(idle.outcome)
+                ),
                 (ticks + 4, ticks + 8, true)
             );
             expected.pc -= 1;

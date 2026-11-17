@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::CycleAction,
     memory::Cartridge,
@@ -84,10 +89,17 @@ fn indirect_pair_transfers_have_exact_bus_traces_and_all_budget_resumes() {
                 complete(&mut system, 3);
                 complete(&mut system, 2);
                 let fetch = system.step_machine_cycle().unwrap();
-                assert!(matches!(fetch.action, CycleAction::Read { addr: 0x0105 }));
-                assert_eq!(fetch.read_value, Some(opcode));
+                assert!(matches!(
+                    fetch.record.action,
+                    CycleAction::Read { addr: 0x0105 }
+                ));
+                assert_eq!(fetch.record.read_value, Some(opcode));
                 assert_eq!(
-                    (fetch.tick_before, fetch.tick_after, fetch.complete),
+                    (
+                        fetch.record.tick_before,
+                        fetch.record.tick_after,
+                        instruction_complete(fetch.outcome)
+                    ),
                     (20, 24, false)
                 );
                 let mut pending = before;
@@ -96,17 +108,21 @@ fn indirect_pair_transfers_have_exact_bus_traces_and_all_budget_resumes() {
                 let data = system.step_machine_cycle().unwrap();
                 if store {
                     assert!(
-                        matches!(data.action, CycleAction::Write { addr: actual, value: 0x5A } if actual == addr)
+                        matches!(data.record.action, CycleAction::Write { addr: actual, value: 0x5A } if actual == addr)
                     );
-                    assert_eq!(data.read_value, None);
+                    assert_eq!(data.record.read_value, None);
                 } else {
                     assert!(
-                        matches!(data.action, CycleAction::Read { addr: actual } if actual == addr)
+                        matches!(data.record.action, CycleAction::Read { addr: actual } if actual == addr)
                     );
-                    assert_eq!(data.read_value, Some(read));
+                    assert_eq!(data.record.read_value, Some(read));
                 }
                 assert_eq!(
-                    (data.tick_before, data.tick_after, data.complete),
+                    (
+                        data.record.tick_before,
+                        data.record.tick_after,
+                        instruction_complete(data.outcome)
+                    ),
                     (24, 28, true)
                 );
                 expected.pc -= 1;

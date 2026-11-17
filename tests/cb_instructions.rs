@@ -1,3 +1,8 @@
+#[path = "support/outcomes.rs"]
+mod outcome_support;
+use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
+use outcome_support::instruction_complete;
+
 use gameboy_emu::{
     cpu::{CpuSnapShot, CycleAction},
     memory::Cartridge,
@@ -69,27 +74,34 @@ fn every_cb_encoding_has_exact_bus_trace_timing_and_result() {
                     match cycle {
                         0 | 1 => {
                             assert!(
-                                matches!(trace.action, CycleAction::Read { addr } if addr == 0x010A + cycle as u16)
+                                matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x010A + cycle as u16)
                             );
                             assert_eq!(
-                                trace.read_value,
+                                trace.record.read_value,
                                 Some(if cycle == 0 { 0xCB } else { opcode })
                             );
                         }
                         2 => {
-                            assert!(matches!(trace.action, CycleAction::Read { addr: 0xC123 }));
-                            assert_eq!(trace.read_value, Some(value));
+                            assert!(matches!(
+                                trace.record.action,
+                                CycleAction::Read { addr: 0xC123 }
+                            ));
+                            assert_eq!(trace.record.read_value, Some(value));
                         }
                         3 => {
                             assert!(
-                                matches!(trace.action, CycleAction::Write { addr: 0xC123, value: actual } if actual == oracle::result(opcode, value, flags).0)
+                                matches!(trace.record.action, CycleAction::Write { addr: 0xC123, value: actual } if actual == oracle::result(opcode, value, flags).0)
                             );
-                            assert_eq!(trace.read_value, None);
+                            assert_eq!(trace.record.read_value, None);
                         }
                         _ => unreachable!(),
                     }
                     assert_eq!(
-                        (trace.tick_before, trace.tick_after, trace.complete),
+                        (
+                            trace.record.tick_before,
+                            trace.record.tick_after,
+                            instruction_complete(trace.outcome)
+                        ),
                         (start + cycle * 4, start + (cycle + 1) * 4, cycle + 1 == n)
                     );
                     if cycle == 0 || (cycle == 1 && n > 2) {
@@ -190,13 +202,19 @@ fn cb_second_opcode_read_crosses_hram_into_ie_and_wraps_pc() {
     }
     let start = system.elapsed_ticks();
     let prefix = system.step_machine_cycle().unwrap();
-    assert!(matches!(prefix.action, CycleAction::Read { addr: 0xFFFE }));
-    assert_eq!(prefix.read_value, Some(0xCB));
-    assert!(!prefix.complete);
+    assert!(matches!(
+        prefix.record.action,
+        CycleAction::Read { addr: 0xFFFE }
+    ));
+    assert_eq!(prefix.record.read_value, Some(0xCB));
+    assert!(!instruction_complete(prefix.outcome));
     let second = system.step_machine_cycle().unwrap();
-    assert!(matches!(second.action, CycleAction::Read { addr: 0xFFFF }));
-    assert_eq!(second.read_value, Some(0xFF)); // IE explicitly supplies the CB subopcode
-    assert!(second.complete); // SET 7,A
+    assert!(matches!(
+        second.record.action,
+        CycleAction::Read { addr: 0xFFFF }
+    ));
+    assert_eq!(second.record.read_value, Some(0xFF)); // IE explicitly supplies the CB subopcode
+    assert!(instruction_complete(second.outcome)); // SET 7,A
     assert_eq!(system.cpu_snapshot().pc, 0);
     assert_eq!(system.cpu_snapshot().af, 0x80B0);
     assert_eq!(system.elapsed_ticks(), start + 8);
