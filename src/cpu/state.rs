@@ -177,16 +177,36 @@ pub(super) enum ExecutionState {
         addr: u16,
         cb_type: CbType,
     },
+    InterruptEntry {
+        pc: u16,
+        sp: u16,
+        interrupt: Interrupt,
+    },
+    InterruptWait {
+        pc: u16,
+        sp: u16,
+        interrupt: Interrupt,
+    },
+    InterruptPushHigh {
+        pc_high: u8,
+        pc_low: u8,
+        sp: u16,
+        interrupt: Interrupt,
+    },
+    InterruptPushLow {
+        pc_low: u8,
+        sp: u16,
+        interrupt: Interrupt,
+    },
+    InterruptJump {
+        interrupt: Interrupt,
+    },
     Faulted(CpuFault),
 }
 
 pub(super) enum CycleTransition {
     Continue(ExecutionState),
     InstructionFinished,
-    // Temporary: constructed once interrupt-entry execution is implemented.
-    #[allow(dead_code)]
-    InterruptEntryFinished {
-        interrupt: Interrupt,
-    },
+    InterruptEntryFinished { interrupt: Interrupt },
     Faulted(CpuFault),
 }

@@ -18,6 +18,7 @@ mod conditional_returns;
 mod decimal_adjust;
 mod di_ei;
 mod hl_auto_update;
+mod interrupt_entry;
 mod ldh_transfers;
 mod load_sp_from_hl;
 mod memory_inc_dec;

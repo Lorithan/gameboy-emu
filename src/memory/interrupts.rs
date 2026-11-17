@@ -35,22 +35,16 @@ impl InterruptController {
         self.interrupt_flag |= 1 << bit;
     }
 
-    // Temporary: production callers arrive with interrupt entry and peripherals.
-    #[allow(dead_code)]
     pub fn acknowledge_interrupt(&mut self, interrupt: Interrupt) {
         let bit = interrupt.bit_index();
         self.interrupt_flag &= !(1 << bit);
     }
 
-    // Temporary: production callers arrive with interrupt entry and peripherals.
-    #[allow(dead_code)]
     pub fn pending_interrupts(&self) -> u8 {
         self.interrupt_enable & self.interrupt_flag & 0x1F
     }
 }
 
-// Temporary: production sources arrive with interrupt entry and peripherals.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Interrupt {
     VBlank,
@@ -61,8 +55,6 @@ pub(crate) enum Interrupt {
 }
 
 impl Interrupt {
-    // Temporary: used by the staged interrupt request/acknowledgment hooks.
-    #[allow(dead_code)]
     fn bit_index(self) -> u8 {
         match self {
             Interrupt::VBlank => 0,

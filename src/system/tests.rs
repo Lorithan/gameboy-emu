@@ -1382,4 +1382,5 @@ fn store_sp_absolute_changes_only_each_completed_mapped_byte_and_aliases() {
     }
 }
 
+mod interrupt_entry;
 mod interrupt_registers;

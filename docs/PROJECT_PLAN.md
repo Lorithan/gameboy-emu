@@ -1,4 +1,9 @@
 # Game Boy emulator project plan
+## Current checkpoint - interrupt entry complete, 2026-11-17
+
+The user completed the first-stage #39 interrupt-entry implementation and removed obsolete staged dead-code allowances. All 349 tests pass (249 unit, 100 integration), with nine focused entry tests also passing after all-flag coverage. Formatting, strict Clippy and whitespace checks pass after allowance cleanup. No external ROM suite ran. This checkpoint supersedes earlier next-task/unimplemented notes below; see [entry evidence](tasks/INTERRUPT_ENTRY.md). Source/vector capture and acknowledgment at acceptance remain the documented approximation.
+
+The user requested a local commit. Next planning work is #40: research and specify hardware late source selection, IE stack-write cancellation, acknowledgment and cancellation outcomes before implementation. RETI, HALT/STOP, peripherals, frontend and required-read extraction remain separately scoped. Keep M2 open.
 
 ## Current next task - 2026-11-17
 
@@ -242,3 +247,9 @@ Current next task is the interrupt-entry architecture contract: sampling boundar
 The first slice of #39 is verified locally: private CycleTransition with centralized execution-state application, public CycleOutcome, successful CycleTrace plus CycleRecord failure diagnostics, and explicit bounded-step interrupt completion. User implemented application changes; assistant migrated tests and added two direct public API checks. All 341 tests pass (241 unit, 100 integration), formatting/strict Clippy/whitespace checks pass; no external ROM suite ran. User approved the staged-variant dead-code allowance and redundant-return cleanup. Changes are uncommitted. See [slice evidence](tasks/INTERRUPT_ENTRY.md).
 
 Current next implementation: CPU acceptance and captured five-cycle entry states, followed by System coordination under the #39 contract. Interrupt acceptance/entry is not implemented yet; #39 stays open. Required-read extraction, RETI, HALT, STOP and hardware late-selection #40 remain separate.
+
+## Interrupt-entry validation checkpoint - 2026-11-17
+
+CPU acceptance, five entry states and System pending/acknowledgment coordination under #39 are implemented and verified locally. All 349 tests pass (249 unit, 100 integration); focused entry tests also cover all flags, formatting/strict Clippy/whitespace checks pass. No correctness defect found within the specified coarse model. No external ROM suite ran. See [acceptance evidence](tasks/INTERRUPT_ENTRY.md). The transition refactor was committed as 24f9739; entry implementation and tests are uncommitted. #39 remains open pending checkpoint review/commit. Remove obsolete staged dead-code allowances where production callers now exist before closing the checkpoint.
+
+Hardware late selection/IE stack-write cancellation remains #40. RETI and HALT/STOP remain separate contracts; frontend/peripherals and required-read extraction remain deferred.

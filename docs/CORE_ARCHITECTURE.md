@@ -130,3 +130,7 @@ The #38 proposal above is now implemented: Bus owns a private controller, maps F
 ## Transition/outcome refactor checkpoint - 2026-11-17
 
 Private CycleTransition and ExecutionState live in cpu/state.rs. Completion handlers return transitions; the public wrapper applies execution-state changes, latches faults and performs instruction-only delayed-EI bookkeeping. Public CycleOutcome carries progress or completed instruction/entry, with a numeric vector for entry. CycleTrace holds a CycleRecord and successful outcome; SystemError::CpuCompletionError holds the failed CycleRecord. Bounded stepping matches the plain outcome and reports InterruptEntered distinctly. This refactor slice passes 341 tests; actual interrupt acceptance/entry remains to be implemented under #39.
+
+## Interrupt-entry implementation - 2026-11-17
+
+The first-stage #39 entry model is implemented. CPU accepts only at enabled FetchOpcode boundaries, captures source/PC/SP, disables IME and runs two waits, two captured stack writes and one vector transfer. System offers Bus pending masks and acknowledges only a newly accepted source before querying the action. Entry completion is distinct from instruction completion; handler execution starts on the next cycle. Immediate source capture/IF acknowledgment remains the documented approximation pending #40. Detailed CPU/System test evidence is in [INTERRUPT_ENTRY.md](tasks/INTERRUPT_ENTRY.md).

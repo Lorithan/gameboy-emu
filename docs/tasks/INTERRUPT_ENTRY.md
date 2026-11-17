@@ -2,7 +2,7 @@
 
 GitHub task: [#39](https://github.com/Lorithan/gameboy-emu/issues/39), M2. Hardware-accuracy follow-up: [#40](https://github.com/Lorithan/gameboy-emu/issues/40).
 
-Status: design selected by user on 2026-11-17; implementation not started. This document fixes the first-stage behavior. Names below are suggested; ownership, ordering, observable outcomes and invariants are the contract.
+Status: first-stage implementation verified on 2026-11-17 and ready for the requested commit. This document fixes the first-stage behavior. Names below are suggested; ownership, ordering, observable outcomes and invariants are the contract.
 
 ## Scope and baseline
 
@@ -116,3 +116,23 @@ No emulator implementation or automated tests changed while specifying this cont
 The user implemented the private state-transition and public outcome/trace refactor. Assistant migrated the regression tests and added two public API tests. Full suite: 341 tests pass (241 unit, 100 integration). Formatting and strict Clippy pass after user-approved temporary dead-code allowance on InterruptEntryFinished and removal of a redundant return in the fault arm. The two direct public API tests were rerun after those cleanups and pass. Whitespace checks pass. No external ROM suite ran. Changes are uncommitted.
 
 All execution-state assignments in cycle completion now occur in the wrapper. Existing instruction timing, results, captured operands, retryability, sticky faults and delayed-EI regression checks remain green. The shared test-only completion adapter rejects unexpected entry; it does not add production compatibility operators. Failed-cycle tests now inspect CycleRecord, which intentionally has no success outcome. This validates the refactor slice, not interrupt-entry behavior. Next user implementation: explicit CPU acceptance and captured entry states, then System pending/acknowledgment wiring. #39 remains open.
+
+## CPU entry slice - 2026-11-17
+
+User implemented try_accept_interrupt and five captured CPU entry states. Assistant added three CPU tests: all 256 pending masks across Disabled/Delayed/Enabled IME, rejection during representative immediate/CB/CALL/PUSH/fault states, exact repeated action queries and per-cycle snapshots/outcomes, all 65,536 return PCs and a separate all-65,536 SP sweep, each vector and representative stack boundaries, next handler-opcode continuation, and captured PC/SP under test-only mutation. Focused tests pass; all 244 library tests pass. Test source formatting and diff whitespace checks pass. No production behavior was changed by the assistant.
+
+CPU progression matches the first-stage contract by inspection and tests. This does not validate System acknowledgment, budgets, elapsed entry ticks or real Bus write effects: System acceptance wiring is not implemented yet. Full all-target tests and strict Clippy were not run for this intermediate slice. cargo check --lib passes with expected unused production acceptance/entry warnings until System wiring arrives. No ROM suite ran, and no commit was made. Next: wire System acceptance/one-time acknowledgment before request_cycle, preserving zero-budget behavior and the explicit entry-completion result.
+
+## System integration evidence - 2026-11-17
+
+User wired pending-mask sampling and newly accepted source acknowledgment before request_cycle. Assistant added six System tests and replaced the temporary #38 no-dispatch assertion. Coverage includes all 1,024 low-bit IF/IE pairs with upper IE bits set; all five vectors; zero/partial/exact/excess entry budgets; exact five-cycle actions/ticks/outcomes and per-call resume counts; next handler-opcode continuation; and full 65,536-address expected-memory comparisons at every pause.
+
+Stack targets cover ROM/unmapped memory, WRAM and echo, HRAM, wrapping, IF and IE writes. Expected effects include the one-time IF acknowledgment and each completed stack byte. Re-requesting the selected source and adding a higher-priority request after acceptance proves acknowledgment is not repeated and the vector remains captured. Tests explicitly record this first-stage approximation rather than claiming hardware ie_push behavior. Delayed-EI followers include immediate, CB register/BIT/modify-memory and EI; DI cancellation and requests arriving mid-instruction while IME is already enabled are covered. Sticky faults and zero-budget calls preserve pending requests and state.
+
+CPU acceptance/progression coverage also checks all sixteen flag combinations for every source, all pending byte masks/IME states, all return PCs and a separate exhaustive SP sweep. No external ROM binaries were introduced or run. #40 remains required for hardware late selection/cancellation. No interrupt-entry commit has been made yet.
+
+Validation: all 349 tests pass (249 unit, 100 integration). The nine focused CPU/System entry tests also pass after adding all-flag coverage. Formatting, strict Clippy and diff whitespace checks pass. No correctness defect found within the first-stage contract. Remove now-obsolete temporary dead-code allowances on APIs/variants with production callers during checkpoint cleanup; the peripheral-only request hook can retain its allowance. #39 remains open pending the reviewed checkpoint; #40 is unchanged.
+
+## Checkpoint cleanup - 2026-11-17
+
+The user removed obsolete dead-code allowances; only the two peripheral request_interrupt hooks retain them. Fresh formatting, strict Clippy and whitespace checks pass after this attribute-only cleanup. Behavioral evidence remains the 349-test full run plus the nine focused entry tests after all-flag coverage. The user requested this checkpoint be committed. #39 is complete within its explicitly limited first-stage model; #40 still tracks hardware late-selection/cancellation behavior. Earlier unimplemented/pending-cleanup notes are historical.

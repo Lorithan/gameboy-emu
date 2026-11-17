@@ -9,10 +9,13 @@ use std::ops::{Shl, Shr};
 
 pub use registers::Registers;
 
-use crate::cpu::{
-    opcode::*,
-    registers::*,
-    state::{CycleTransition, ExecutionState},
+use crate::{
+    cpu::{
+        opcode::*,
+        registers::*,
+        state::{CycleTransition, ExecutionState},
+    },
+    memory::Interrupt,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -156,6 +159,14 @@ impl CPU {
                 addr: stack_addr,
                 value: return_addr_low,
             }),
+            InterruptPushHigh { pc_high, sp, .. } => Ok(CycleAction::Write {
+                addr: sp,
+                value: pc_high,
+            }),
+            InterruptPushLow { pc_low, sp, .. } => Ok(CycleAction::Write {
+                addr: sp,
+                value: pc_low,
+            }),
             Push { .. }
             | ApplyJump { .. }
             | Call { .. }
@@ -164,6 +175,9 @@ impl CPU {
             | DelaySpOffset { .. }
             | ApplySpOffset { .. }
             | TransferHLtoSP { .. }
+            | InterruptEntry { .. }
+            | InterruptWait { .. }
+            | InterruptJump { .. }
             | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
@@ -196,6 +210,32 @@ impl CPU {
                 Err(CpuError::UnsupportedOpcode(err))
             }
         }
+    }
+
+    pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> Option<Interrupt> {
+        if matches!(self.state, FetchOpcode) && self.interrupt_state == InterruptState::Enabled {
+            let pending = pending & 0x1F; // Only the lower 5 bits are relevant
+            if pending != 0 {
+                let interrupt = match pending.trailing_zeros() {
+                    0 => Interrupt::VBlank,
+                    1 => Interrupt::LCDStat,
+                    2 => Interrupt::Timer,
+                    3 => Interrupt::Serial,
+                    4 => Interrupt::Joypad,
+                    _ => unreachable!(),
+                };
+
+                self.state = InterruptEntry {
+                    pc: self.registers.pc,
+                    sp: self.registers.sp,
+                    interrupt,
+                };
+                self.interrupt_state = InterruptState::Disabled;
+                return Some(interrupt);
+            }
+        }
+
+        None
     }
 
     fn complete_cycle_inner(
@@ -849,6 +889,42 @@ impl CPU {
                     value: sp_high,
                 };
                 Ok(CycleTransition::Continue(next_state))
+            }
+            InterruptEntry { pc, sp, interrupt } => {
+                let next_state = InterruptWait { pc, sp, interrupt };
+                Ok(CycleTransition::Continue(next_state))
+            }
+            InterruptWait { pc, sp, interrupt } => {
+                let next_state = InterruptPushHigh {
+                    pc_high: (pc >> 8) as u8,
+                    pc_low: (pc & 0xFF) as u8,
+                    sp: sp.wrapping_sub(1),
+                    interrupt,
+                };
+                Ok(CycleTransition::Continue(next_state))
+            }
+            InterruptPushHigh {
+                pc_low,
+                sp,
+                interrupt,
+                ..
+            } => {
+                self.registers.set_sp(sp);
+                let next_state = InterruptPushLow {
+                    pc_low,
+                    sp: sp.wrapping_sub(1),
+                    interrupt,
+                };
+                Ok(CycleTransition::Continue(next_state))
+            }
+            InterruptPushLow { sp, interrupt, .. } => {
+                self.registers.set_sp(sp);
+                let next_state = InterruptJump { interrupt };
+                Ok(CycleTransition::Continue(next_state))
+            }
+            InterruptJump { interrupt } => {
+                self.registers.set_pc(interrupt.vector_address());
+                Ok(CycleTransition::InterruptEntryFinished { interrupt })
             }
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }

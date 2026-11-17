@@ -59,14 +59,10 @@ impl Bus {
         self.interrupt_controller.request_interrupt(interrupt);
     }
 
-    // Temporary: production callers arrive with interrupt entry and peripherals.
-    #[allow(dead_code)]
     pub(crate) fn acknowledge_interrupt(&mut self, interrupt: Interrupt) {
         self.interrupt_controller.acknowledge_interrupt(interrupt);
     }
 
-    // Temporary: production callers arrive with interrupt entry and peripherals.
-    #[allow(dead_code)]
     pub(crate) fn pending_interrupts(&self) -> u8 {
         self.interrupt_controller.pending_interrupts()
     }

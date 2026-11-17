@@ -112,18 +112,3 @@ fn interrupt_register_transfers_have_exact_cycles_and_resumable_writes() {
         }
     }
 }
-
-#[test]
-fn enabled_ime_and_pending_request_do_not_dispatch_before_entry_is_implemented() {
-    let mut s = machine(&[0xFB, 0, 0, 0]);
-    s.memory.write(0xFF0F, 0x1F);
-    s.memory.write(0xFFFF, 0xFF);
-    for _ in 0..4 {
-        s.step_instruction(1).unwrap();
-    }
-    assert_eq!(s.cpu.test_interrupt_status(), (false, true));
-    assert_eq!(s.cpu_snapshot().pc, 0x104);
-    assert_eq!(s.cpu_snapshot().sp, 0xFFFE);
-    assert_eq!(s.memory.pending_interrupts(), 0x1F);
-    assert_eq!(s.elapsed_ticks(), 16);
-}
