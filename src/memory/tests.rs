@@ -1,5 +1,100 @@
 use super::{Bus, Cartridge};
 
+#[test]
+fn interrupt_registers_exhaustive_readback_and_eligibility() {
+    let (mut bus, _) = fixture();
+    assert_eq!((bus.read(0xFF0F), bus.read(0xFFFF)), (0xE1, 0));
+    for flags in 0u8..=255 {
+        for enable in 0u8..=255 {
+            bus.write(0xFF0F, flags);
+            bus.write(0xFFFF, enable);
+            for _ in 0..2 {
+                assert_eq!(bus.read(0xFF0F), flags % 32 + 224);
+                assert_eq!(bus.read(0xFFFF), enable);
+                assert_eq!(bus.pending_interrupts(), (flags & enable) % 32);
+            }
+        }
+    }
+}
+
+#[test]
+fn interrupt_requests_and_acknowledgments_preserve_other_sources() {
+    use super::Interrupt;
+    fn source(index: u8) -> Interrupt {
+        match index {
+            0 => Interrupt::VBlank,
+            1 => Interrupt::LCDStat,
+            2 => Interrupt::Timer,
+            3 => Interrupt::Serial,
+            4 => Interrupt::Joypad,
+            _ => panic!("invalid test source"),
+        }
+    }
+    let (mut bus, _) = fixture();
+    for flags in 0u8..32 {
+        for enable in 0u8..=255 {
+            for index in 0..5 {
+                let mask = 2u8.pow(u32::from(index));
+                bus.write(0xFF0F, flags);
+                bus.write(0xFFFF, enable);
+                for _ in 0..2 {
+                    bus.request_interrupt(source(index));
+                    assert_eq!(bus.read(0xFF0F), (flags | mask) + 224);
+                    assert_eq!(bus.pending_interrupts(), (flags | mask) & enable & 31);
+                    assert_eq!(bus.read(0xFFFF), enable);
+                }
+                for _ in 0..2 {
+                    bus.acknowledge_interrupt(source(index));
+                    assert_eq!(bus.read(0xFF0F), (flags & !mask) + 224);
+                    assert_eq!(bus.pending_interrupts(), flags & !mask & enable & 31);
+                    assert_eq!(bus.read(0xFFFF), enable);
+                }
+            }
+        }
+    }
+    bus.write(0xFFFF, 0);
+    bus.write(0xFF0F, 0);
+    bus.request_interrupt(Interrupt::Timer);
+    assert_eq!(bus.pending_interrupts(), 0);
+    bus.write(0xFFFF, 4);
+    assert_eq!(bus.pending_interrupts(), 4);
+}
+
+#[test]
+fn interrupt_register_writes_have_no_aliases_and_instances_are_independent() {
+    let (mut bus, _) = fixture();
+    let (other, _) = fixture();
+    bus.write(0xC123, 0x87);
+    bus.write(0xFFFE, 0x64);
+    for target in [0xFF0Fu16, 0xFFFF] {
+        let original: Vec<_> = (0u16..=65535).map(|a| bus.read(a)).collect();
+        for value in 0u8..=255 {
+            bus.write(target, value);
+            for addr in 0u16..=65535 {
+                let expected = if addr == target {
+                    if target == 0xFF0F {
+                        value % 32 + 224
+                    } else {
+                        value
+                    }
+                } else {
+                    original[usize::from(addr)]
+                };
+                assert_eq!(
+                    bus.read(addr),
+                    expected,
+                    "target {target:04X}, address {addr:04X}"
+                );
+            }
+        }
+    }
+    for addr in [0xFF0E, 0xFF10, 0xFF7F] {
+        bus.write(addr, 0);
+        assert_eq!(bus.read(addr), 255);
+    }
+    assert_eq!((other.read(0xFF0F), other.read(0xFFFF)), (0xE1, 0));
+}
+
 fn fixture() -> (Bus, Vec<u8>) {
     let mut rom = vec![0; 32_768];
     rom[0x014D] = 0xE7;
@@ -69,7 +164,7 @@ fn every_unimplemented_address_ignores_writes_without_corrupting_storage() {
     bus.write(0xC000, 0x35);
     bus.write(0xDFFF, 0x76);
     for address in 0u16..=u16::MAX {
-        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFF | 0xFF0F) {
             continue;
         }
         assert_eq!(bus.read(address), 0xFF, "address {address:#06X}");
@@ -98,6 +193,8 @@ fn full_address_space_routes_to_expected_storage() {
             0xC000..=0xDFFF => expected_ram[usize::from(address - 0xC000)],
             0xE000..=0xFDFF => expected_ram[usize::from(address - 0xE000)],
             0xFF80..=0xFFFE => expected_hram[usize::from(address - 0xFF80)],
+            0xFF0F => 0xE1,
+            0xFFFF => 0,
             _ => 0xFF,
         };
         assert_eq!(bus.read(address), expected, "address {address:#06X}");
@@ -160,10 +257,8 @@ fn high_ram_has_no_aliases_to_work_ram_echo_rom_or_neighbor_registers() {
         bus.write(0xE000 + offset, 0x72);
         assert_eq!(bus.read(0xFF80 + offset), 0xA6);
     }
-    for address in [0xFF7F, 0xFFFF] {
-        bus.write(address, 0x42);
-        assert_eq!(bus.read(address), 0xFF);
-    }
+    bus.write(0xFF7F, 0x42);
+    assert_eq!(bus.read(0xFF7F), 0xFF);
     assert_eq!(bus.read(0xFF80), 0xA6);
     assert_eq!(bus.read(0xFFFE), 0xA6);
     assert_eq!(bus.cart.rom(), rom.as_slice());

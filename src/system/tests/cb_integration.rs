@@ -38,7 +38,7 @@ fn cb_memory_variants_change_only_completed_target_and_echo_alias() {
                     let mut expected = original.clone();
                     if cycles == 4
                         && phase == 4
-                        && matches!(target, 0xC000..=0xFDFF | 0xFF80..=0xFFFE)
+                        && matches!(target, 0xC000..=0xFDFF | 0xFF80..=0xFFFF)
                     {
                         expected[usize::from(target)] = result;
                         if (0xC000..=0xDDFF).contains(&target) {

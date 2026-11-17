@@ -62,7 +62,13 @@ Target the ordinary DMG boot variant, excluding DMG0/MGB/SGB. Skip boot ROM exec
 
 The source notes checksum-dependent half-carry/carry flags, so a universal F=0xB0 is insufficient. Keep this initialization in a named profile rather than conflating it with a generic Default implementation. Tests can construct explicit CPU states independently of boot profiles.
 
-The current Bus is not a full post-boot machine: device registers and HRAM still use fallback behavior. Before running software that uses the stack, implement HRAM. Before adding timer/interrupt or PPU behavior, specify device startup state and internal timing phase from relevant references. Observable register values alone do not specify complete device state. Continue deterministic zero WRAM as the documented project approximation.
+The current Bus is not a full post-boot machine: HRAM is implemented at FF80-FFFE, but device registers still use fallback behavior. Before adding timer/interrupt or PPU behavior, specify device startup state and internal timing phase from relevant references. Observable register values alone do not specify complete device state. Continue deterministic zero WRAM as the documented project approximation.
+
+## Interrupt-register boundary - 2026-11-16
+
+Agreed: Bus owns InterruptController, CPU owns private IME, and System coordinates them; CPU never borrows Bus. The next scoped task is [#38](https://github.com/Lorithan/gameboy-emu/issues/38), with register rules, proposed visibility/interfaces and acceptance criteria in [INTERRUPT_REGISTERS.md](tasks/INTERRUPT_REGISTERS.md). Controller storage and Bus mapping are not implemented yet. Source enum and method names remain proposals. This task does not change CPU stepping or implement interrupt service.
+
+The sourced DMG cartridge-entry register profile is IF=E1 and IE=00. IF high bits always read one; IE high bits retain written values but do not enable sources. Eligibility is IF & IE & 1F, independent of CPU IME. Register reads/pending inspection are pure; requests set one IF bit, acknowledgments clear one IF bit. Simultaneous request/write timing and interrupt-entry acknowledgment ordering remain for later scheduling contracts.
 
 ## Next small implementation tasks, after review
 
@@ -114,3 +120,7 @@ Two new tests exercise all flag combinations through Registers, checking getters
 The user introduced a pure internal DecodedOpcode enum with Nop, LoadImmediate(destination), and Unknown, converted from a raw byte. CPU retains execution-state transitions and error-address context; the decoder does not touch Bus, registers, or time. This separates byte interpretation from cycle execution without a per-opcode type hierarchy.
 
 Two decoder tests verify all eight supported mappings and rejection of every other byte. The complete suite has 81 passing tests (65 unit, 16 integration); formatting passes. Strict Clippy still reports existing unread CpuFault fields and unused pair setters. Keeping the raw byte in a local before decoding would avoid the safe-but-unnecessary later read_value.unwrap in the Unknown branch; no behavior bug was found in this refactor. Application logic was left unchanged by the assistant.
+
+## Interrupt-register implementation checkpoint - 2026-11-17
+
+The #38 proposal above is now implemented: Bus owns a private controller, maps FF0F/FFFF, and forwards crate-visible request_interrupt, pending_interrupts and acknowledge_interrupt operations. Interrupt is crate-visible through memory; the controller is confined to memory. The named post_boot constructor stores IF=01 and IE=00; IF reads E1 initially. CPU/System production stepping is unchanged. Acceptance evidence and temporary dead-code allowance removal conditions are in [INTERRUPT_REGISTERS.md](tasks/INTERRUPT_REGISTERS.md). Interrupt entry and device scheduling remain unimplemented and need their own contracts.

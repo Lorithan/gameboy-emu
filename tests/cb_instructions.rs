@@ -181,9 +181,11 @@ fn cb_memory_flags_drive_taken_and_untaken_branches() {
     assert_eq!(system.elapsed_ticks(), 144);
 }
 #[test]
-fn cb_second_opcode_read_crosses_hram_into_unmapped_ie_and_wraps_pc() {
-    let mut system = program(&[0x21, 0xFE, 0xFF, 0x36, 0xCB, 0x3E, 0, 0xC3, 0xFE, 0xFF]);
-    for n in [3, 3, 2, 4] {
+fn cb_second_opcode_read_crosses_hram_into_ie_and_wraps_pc() {
+    let mut system = program(&[
+        0x21, 0xFE, 0xFF, 0x36, 0xCB, 0x3E, 0xFF, 0xE0, 0xFF, 0x3E, 0, 0xC3, 0xFE, 0xFF,
+    ]);
+    for n in [3, 3, 2, 3, 2, 4] {
         complete(&mut system, n);
     }
     let start = system.elapsed_ticks();
@@ -193,7 +195,7 @@ fn cb_second_opcode_read_crosses_hram_into_unmapped_ie_and_wraps_pc() {
     assert!(!prefix.complete);
     let second = system.step_machine_cycle().unwrap();
     assert!(matches!(second.action, CycleAction::Read { addr: 0xFFFF }));
-    assert_eq!(second.read_value, Some(0xFF)); // current Bus returns FF for IE
+    assert_eq!(second.read_value, Some(0xFF)); // IE explicitly supplies the CB subopcode
     assert!(second.complete); // SET 7,A
     assert_eq!(system.cpu_snapshot().pc, 0);
     assert_eq!(system.cpu_snapshot().af, 0x80B0);

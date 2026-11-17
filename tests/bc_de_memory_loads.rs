@@ -35,7 +35,7 @@ fn indirect_pair_transfers_have_exact_bus_traces_and_all_budget_resumes() {
                 0,
                 0xD3,
             ];
-            let read = if addr <= 0x7FFF || matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+            let read = if addr <= 0x7FFF || matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
                 0
             } else {
                 0xFF

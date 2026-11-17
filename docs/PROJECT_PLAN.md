@@ -1,4 +1,12 @@
 # Game Boy emulator project plan
+
+## Current checkpoint - 2026-11-16
+
+This checkpoint supersedes historical next-task and publication notes below. Local and live GitHub main match 6a634f8; all four handoff commits are present. Fresh verification passes 334 tests (236 unit, 98 integration), formatting and strict Clippy. No external ROM suite was run. DI/EI issue #37 is closed; coverage is 241/244 legal non-prefix base encodings and all 256 CB encodings.
+
+Current next task: [#38 - Interrupt controller and IF/IE Bus mapping](https://github.com/Lorithan/gameboy-emu/issues/38), under M2, specified in [INTERRUPT_REGISTERS.md](tasks/INTERRUPT_REGISTERS.md). Implementation has not started. Agreed ownership: Bus owns the controller, CPU owns IME, System connects them without CPU borrowing Bus. Proposed interface names/types remain open to user review. DMG post-boot IF reads E1 and IE reads 00; IF unused bits read one, while IE retains all eight written bits and only its low five participate in eligibility.
+
+User implements the controller/Bus task; assistant owns acceptance tests and migration of stale unmapped-IF/IE expectations. Interrupt sampling/entry, acknowledgment timing, RETI, HALT and STOP require subsequent contracts. No peripherals, broad refactors, ROM fixtures or frontend setup in this task.
 ## DI/EI completion checkpoint - 2026-11-14
 
 This checkpoint supersedes earlier next-task notes. DI/EI (#37) are complete locally: private cycle-completion helper, CPU-owned IME state and delayed enable pass review. The last full run passed all 334 tests (236 unit, 98 integration); after the visibility-only fix, all eight DI/EI tests, formatting and strict Clippy pass. See [DI_EI.md](tasks/DI_EI.md) for evidence. Changes remain uncommitted; publication not checked. Coverage: 241/244 base plus 256/256 CB; RETI, HALT and STOP remain. Next: specify IF/IE and the CPU/System interrupt interface before interrupt dispatch, RETI and HALT implementation. STOP remains separate. No external ROM suite was run.
@@ -216,3 +224,9 @@ Initial implementation backlog:
 - [#3 — Establish cartridge ROM and work RAM bus behavior](https://github.com/Lorithan/gameboy-emu/issues/3), complete in checkpoint 85c6312.
 
 Checkpoint d0960a4 contains the core library, CPU registers/flags, System startup, public snapshots, and single-cycle execution/traces. Checkpoint 3a388e9 adds bounded instruction stepping and completes #5; GitHub main is verified to match it. The baseline is 73 passing tests with formatting passing. Remaining strict Clippy failures concern unread fault fields and unused register scaffolding. Physical edge accuracy, device startup, HRAM, and other instruction families remain later work.
+
+## Interrupt-register completion - 2026-11-17
+
+This supersedes the 2026-11-16 next-task statement: #38 IF/IE controller and Bus mapping is implemented and verified locally. All 339 tests pass (241 unit, 98 integration), formatting, strict Clippy and diff whitespace checks pass. No external ROM suite was run. See [acceptance evidence](tasks/INTERRUPT_REGISTERS.md). No correctness findings remain. User owns implementation; assistant added five tests, updated old fallback expectations and applied approved temporary dead-code allowances for staged production hooks. Publication of this work has not been verified.
+
+Current next task is the interrupt-entry architecture contract: sampling boundaries, priority, acknowledgment ordering, five-M-cycle entry, and a result that distinguishes interrupt service from instruction completion without advancing delayed-EI bookkeeping. Specify before implementation. RETI, HALT, STOP and peripherals remain separately scoped.

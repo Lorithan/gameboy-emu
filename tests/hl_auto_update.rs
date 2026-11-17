@@ -38,7 +38,7 @@ fn auto_update_transfers_have_exact_traces_and_single_updates_across_all_budgets
                 0,
                 0xD3,
             ];
-            let read = if addr <= 0x7FFF || matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFE) {
+            let read = if addr <= 0x7FFF || matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
                 0
             } else {
                 0xFF
