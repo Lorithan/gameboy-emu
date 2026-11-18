@@ -15,7 +15,7 @@ use crate::{
     cpu::{
         opcode::*,
         registers::*,
-        state::{CycleTransition, ExecutionState, InterruptSelection, ReturnKind},
+        state::{CycleTransition, ExecutionState, HaltBehavior, InterruptSelection, ReturnKind},
     },
     memory::Interrupt,
 };
@@ -68,6 +68,7 @@ pub struct CPU {
     registers: Registers,
     state: ExecutionState,
     interrupt_state: InterruptState,
+    suppress_next_opcode_increment: bool,
 }
 
 impl CPU {
@@ -76,6 +77,7 @@ impl CPU {
             registers,
             state: FetchOpcode,
             interrupt_state: InterruptState::Disabled,
+            suppress_next_opcode_increment: false,
         }
     }
 
@@ -167,6 +169,7 @@ impl CPU {
             | InterruptEntry { .. }
             | InterruptWait { .. }
             | InterruptJump { .. }
+            | Halted
             | Unary16 { .. } => Ok(CycleAction::Idle),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
@@ -189,16 +192,12 @@ impl CPU {
             }));
         }
 
-        match self.complete_cycle_inner(response)? {
+        let outcome = match self.complete_cycle_inner(response)? {
             CycleTransition::Continue(next_state) => {
                 self.state = next_state;
                 Ok(CycleOutcome::InProgress)
             }
             CycleTransition::InstructionFinished => {
-                if enable_was_pending && self.interrupt_state == InterruptState::Delayed {
-                    self.interrupt_state = InterruptState::Enabled;
-                }
-
                 self.state = FetchOpcode;
                 Ok(CycleOutcome::InstructionComplete)
             }
@@ -221,17 +220,44 @@ impl CPU {
                 self.state = FetchOpcode;
                 Ok(CycleOutcome::InterruptEntryCancelled)
             }
+            CycleTransition::HaltFinished(behavior) => {
+                match behavior {
+                    HaltBehavior::Sleep => {
+                        self.state = Halted;
+                    }
+                    HaltBehavior::SuppressNextIncrement => {
+                        self.state = FetchOpcode;
+                        self.suppress_next_opcode_increment = true;
+                    }
+                }
+                Ok(CycleOutcome::InstructionComplete)
+            }
             CycleTransition::Faulted(err) => {
                 self.state = Faulted(err);
                 Err(CpuError::UnsupportedOpcode(err))
             }
+        }?;
+
+        if outcome == CycleOutcome::InstructionComplete
+            && enable_was_pending
+            && self.interrupt_state == InterruptState::Delayed
+        {
+            self.interrupt_state = InterruptState::Enabled;
         }
+
+        Ok(outcome)
     }
 
     pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> bool {
         if matches!(self.state, FetchOpcode) && self.interrupt_state == InterruptState::Enabled {
             let pending = pending & 0x1F; // Only the lower 5 bits are relevant
+
             if pending != 0 {
+                if self.suppress_next_opcode_increment {
+                    self.registers.pc = self.registers.pc.wrapping_sub(1);
+                    self.suppress_next_opcode_increment = false;
+                }
+
                 self.state = InterruptEntry {
                     pc: self.registers.pc,
                     sp: self.registers.sp,
@@ -244,12 +270,20 @@ impl CPU {
         false
     }
 
+    pub(crate) fn wake_if_pending(&mut self, pending: u8) {
+        let pending = pending & 0x1F;
+
+        if matches!(self.state, Halted) && pending != 0 {
+            self.state = FetchOpcode;
+        }
+    }
+
     fn complete_cycle_inner(
         &mut self,
         response: CycleResponse,
     ) -> Result<CycleTransition, CpuError> {
         match self.state {
-            FetchOpcode => self.read_opcode(response.read_value()?),
+            FetchOpcode => self.read_opcode(response.read_value()?, response.pending_interrupts()?),
             DecodeCbOpcode => {
                 let value = response.read_value()?;
                 self.registers.increment_pc();
@@ -809,15 +843,20 @@ impl CPU {
                     Ok(CycleTransition::InterruptEntryCancelled)
                 }
             },
+            Halted => Ok(CycleTransition::Continue(Halted)),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
 
-    fn read_opcode(&mut self, response: u8) -> Result<CycleTransition, CpuError> {
+    fn read_opcode(&mut self, response: u8, pending: u8) -> Result<CycleTransition, CpuError> {
         let opcode = DecodedOpcode::from(response);
 
         let op_addr = self.registers.pc;
-        self.registers.increment_pc();
+        if self.suppress_next_opcode_increment {
+            self.suppress_next_opcode_increment = false;
+        } else {
+            self.registers.increment_pc();
+        }
 
         match opcode {
             DecodedOpcode::Nop => Ok(CycleTransition::InstructionFinished),
@@ -1201,6 +1240,17 @@ impl CPU {
                     kind: ReturnKind::Interrupt,
                 };
                 Ok(CycleTransition::Continue(next_state))
+            }
+            DecodedOpcode::Halt => {
+                let behavior = if pending & 0x1F == 0
+                    || matches!(self.interrupt_state, InterruptState::Enabled)
+                {
+                    HaltBehavior::Sleep
+                } else {
+                    HaltBehavior::SuppressNextIncrement
+                };
+
+                Ok(CycleTransition::HaltFinished(behavior))
             }
             DecodedOpcode::Unknown => {
                 let fault = CpuFault {

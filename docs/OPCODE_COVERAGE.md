@@ -1,4 +1,7 @@
 # Opcode coverage checkpoint - 2026-11-08
+## Current HALT checkpoint - 2026-11-18
+
+HALT (76) now passes focused waiting/wake/bug/EI/CB/RST acceptance tests and the full 371-test suite. Coverage is 243/244 non-prefix base plus 256/256 CB = 499/500 encodings. Only STOP (10) remains. This is implemented/tested coverage, not a claim of complete CPU/hardware accuracy; no external ROM suite ran. See [HALT evidence](tasks/HALT.md). Older unsupported-HALT statements below are historical.
 ## Current RETI checkpoint - 2026-11-18
 
 RETI (D9) is implemented using shared typed return states and enables IME at final instruction completion. Focused acceptance includes immediate pending interrupt entry before the returned-to opcode. Coverage is 242/244 legal non-prefix base instructions plus 256/256 CB = 498/500 encodings. Remaining base instructions: HALT (76), STOP (10). CB prefix dispatch is not a standalone instruction. IF/IE and late interrupt entry are implemented; older device/interrupt-absence statements below are historical. See [RETI evidence](tasks/RETI.md); no external ROM suite has been run.

@@ -71,7 +71,7 @@ fn inc_dec_opcode_mapping_is_explicit_for_every_register() {
             matches!(DecodedOpcode::from(dec), DecodedOpcode::Unary { operation: UnaryOperation::Decrement, target: Target::Register(register) } if register == target)
         );
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Unknown));
+    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
 }
 
 fn check_every_value_and_flags(increment: bool) {

@@ -81,7 +81,7 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
             )),
         }
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Unknown));
+    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
 }
 
 #[test]

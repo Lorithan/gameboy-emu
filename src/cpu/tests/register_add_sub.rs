@@ -63,7 +63,7 @@ fn add_sub_register_mappings_and_exclusions_are_explicit() {
             matches!(DecodedOpcode::from(sub), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
         );
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Unknown));
+    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
 }
 
 fn check_all_pairs(add: bool) {

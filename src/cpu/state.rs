@@ -216,14 +216,23 @@ pub(super) enum ExecutionState {
     InterruptJump {
         interrupt: InterruptSelection,
     },
+    Halted,
     Faulted(CpuFault),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) enum HaltBehavior {
+    Sleep,
+    SuppressNextIncrement,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CycleTransition {
     Continue(ExecutionState),
     InstructionFinished,
     InterruptEntryFinished { interrupt: Interrupt },
     InterruptSelectionResolved { interrupt: InterruptSelection },
     InterruptEntryCancelled,
+    HaltFinished(HaltBehavior),
     Faulted(CpuFault),
 }

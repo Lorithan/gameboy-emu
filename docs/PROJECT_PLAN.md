@@ -1,4 +1,9 @@
 # Game Boy emulator project plan
+## Current checkpoint - HALT complete, 2026-11-18
+
+#42 HALT/wake/HALT-bug behavior is implemented and verified: all 371 tests pass (271 unit, 100 integration), ten focused HALT tests pass, formatting/strict Clippy/whitespace checks pass. System wake precedes acceptance; HALT completion matures delayed EI once while waiting idles do not. One-shot opcode suppression, wrapping, rejected acceptance, CB/RST/repeated-HALT and EI;HALT buffered-handler return addresses are covered. See [evidence](tasks/HALT.md). No external ROM suite ran and no physical device-edge accuracy is claimed.
+
+Coverage is 243/244 legal non-prefix base plus all 256 CB (499/500). Next task: specify STOP and its clock/wake/device prerequisites before implementation. M2 remains open for the remaining instruction and hardware ROM validation evidence. This checkpoint supersedes older incomplete-HALT statements below. Frontend, peripherals and unrelated refactors remain separately scoped.
 ## Current checkpoint - HALT read-response slice, 2026-11-18
 
 #42's read-response migration is verified: Read now carries value plus pending_interrupts, sampled by System after the read. All 362 tests pass (262 unit, 100 integration), four focused protocol tests pass, formatting/strict Clippy/whitespace checks pass. No external ROM suite ran. Existing behavior is unchanged and HALT is still unsupported. See [slice evidence](tasks/HALT.md).

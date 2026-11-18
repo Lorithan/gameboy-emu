@@ -123,7 +123,7 @@ fn explicit_transfer_matrix_decodes_every_direction_and_excludes_halt() {
                 ) => {
                     assert_eq!(from, expected)
                 }
-                (None, None, DecodedOpcode::Unknown) => assert_eq!(opcode, 0x76),
+                (None, None, DecodedOpcode::Halt) => assert_eq!(opcode, 0x76),
                 _ => panic!("wrong operation for opcode {opcode:02X}"),
             }
         }

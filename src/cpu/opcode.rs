@@ -184,6 +184,7 @@ pub(super) enum DecodedOpcode {
     DisableInterrupts,
     EnabledInterrupts,
     ReturnFromInterrupt,
+    Halt,
     Unknown,
 }
 
@@ -399,7 +400,7 @@ impl From<u8> for DecodedOpcode {
                 destination: Target::Register(Register::A),
             },
             0x3F => DecodedOpcode::ComplementCarry,
-            0x76 => DecodedOpcode::Unknown, // HALT currently unimplemented
+            0x76 => DecodedOpcode::Halt,
             0x40..=0x7F => DecodedOpcode::Load {
                 destination: Target::from_bits(byte >> 3),
                 source: Target::from_bits(byte),

@@ -19,6 +19,7 @@ mod conditional_returns;
 mod cycle_protocol;
 mod decimal_adjust;
 mod di_ei;
+mod halt;
 mod hl_auto_update;
 mod interrupt_entry;
 mod ldh_transfers;

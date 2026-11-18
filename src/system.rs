@@ -77,6 +77,7 @@ impl System {
     pub fn step_machine_cycle(&mut self) -> Result<CycleTrace, SystemError> {
         // Handle any pending interrupts before executing the next CPU cycle.
         let pending_interrupts = self.memory.pending_interrupts();
+        self.cpu.wake_if_pending(pending_interrupts);
         self.cpu.try_accept_interrupt(pending_interrupts);
 
         let action = match self.cpu.request_cycle() {

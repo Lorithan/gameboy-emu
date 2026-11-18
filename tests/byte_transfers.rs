@@ -229,15 +229,15 @@ fn mixed_transfers_can_change_hl_after_using_it_as_a_pointer() {
 }
 
 #[test]
-fn halt_remains_an_unsupported_sticky_fault_without_a_memory_transfer() {
-    let mut system = machine(0x76, false);
+fn stop_remains_an_unsupported_sticky_fault_without_a_memory_transfer() {
+    let mut system = machine(0x10, false);
     let before = system.cpu_snapshot();
     let start = system.elapsed_ticks();
-    let error = system.step_machine_cycle().expect_err("HALT is deferred");
+    let error = system.step_machine_cycle().expect_err("STOP is deferred");
     match error {
         SystemError::CpuCompletionError(CpuError::UnsupportedOpcode(_), trace) => {
             assert!(matches!(trace.action, CycleAction::Read { addr } if addr == before.pc));
-            assert_eq!(trace.read_value, Some(0x76));
+            assert_eq!(trace.read_value, Some(0x10));
             assert_eq!((trace.tick_before, trace.tick_after), (start, start + 4));
         }
         _ => panic!("expected unsupported opcode completion"),

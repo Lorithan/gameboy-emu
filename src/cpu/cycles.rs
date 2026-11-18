@@ -49,6 +49,18 @@ impl CycleResponse {
         }
     }
 
+    pub fn pending_interrupts(&self) -> Result<u8, UnexpectedCycleResponse> {
+        match self {
+            CycleResponse::Read {
+                pending_interrupts, ..
+            } => Ok(*pending_interrupts),
+            _ => Err(UnexpectedCycleResponse {
+                expected: CycleKind::Read,
+                received: self.kind(),
+            }),
+        }
+    }
+
     pub fn interrupt_sample(&self) -> Result<InterruptSample, UnexpectedCycleResponse> {
         match self {
             CycleResponse::WriteDone { interrupt_sample } => Ok(*interrupt_sample),

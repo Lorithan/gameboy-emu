@@ -129,7 +129,7 @@ fn every_other_byte_remains_explicitly_unknown() {
         if [0x86, 0x96, 0xC6, 0xD6].contains(&byte) {
             continue;
         }
-        if (0x40..=0x7F).contains(&byte) && byte != 0x76 {
+        if (0x40..=0x7F).contains(&byte) {
             continue;
         }
         if [
