@@ -1,4 +1,9 @@
 # Game Boy emulator project plan
+## Current checkpoint - RETI complete, 2026-11-18
+
+#41 RETI is implemented and verified: all 361 tests pass (261 unit, 100 integration), all six focused RETI tests pass, formatting/strict Clippy/whitespace checks pass. Typed return mode shares stack reads/final return handling with RET, enabling IME at final RETI completion. Synthetic chained interrupt handlers run before the returned-to opcode as required. See [acceptance evidence](tasks/RETI.md). No application correctness fixes were needed during review. No external ROM suite ran.
+
+Coverage is 242/244 legal non-prefix base plus all 256 CB (498/500). Next: specify HALT, wake-up with/without IME and the HALT bug before user implementation. STOP and peripheral/physical-edge timing remain separate. This checkpoint supersedes older pending-RETI statements below; keep M2 open.
 
 ## Current next task - RETI, 2026-11-18
 

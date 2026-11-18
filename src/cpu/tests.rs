@@ -29,6 +29,7 @@ mod register_add_sub;
 mod register_inc_dec;
 mod relative_jumps;
 mod restarts;
+mod reti;
 mod signed_sp_offsets;
 mod stack_push_pop;
 mod store_sp_absolute;

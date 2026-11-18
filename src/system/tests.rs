@@ -2,6 +2,7 @@ use crate::outcome_support::instruction_complete;
 
 mod cb_integration;
 mod di_ei;
+mod reti;
 
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};

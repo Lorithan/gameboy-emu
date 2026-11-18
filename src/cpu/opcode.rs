@@ -183,6 +183,7 @@ pub(super) enum DecodedOpcode {
     DecodeCbOpcode,
     DisableInterrupts,
     EnabledInterrupts,
+    ReturnFromInterrupt,
     Unknown,
 }
 
@@ -487,6 +488,7 @@ impl From<u8> for DecodedOpcode {
             0xD8 => DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::C,
             },
+            0xD9 => DecodedOpcode::ReturnFromInterrupt,
             0xDA => DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::C,
             },

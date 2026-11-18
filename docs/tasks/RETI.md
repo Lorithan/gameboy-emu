@@ -2,7 +2,7 @@
 
 GitHub task: [#41](https://github.com/Lorithan/gameboy-emu/issues/41), M2 - CPU execution.
 
-Status: specified 2026-11-18; implementation not started. Required behavior below is sourced; private type/state names are architectural proposals for user review. User owns implementation; assistant owns tests/docs/review.
+Status: implemented and verified on 2026-11-18. Required behavior below is sourced; the completion section records the selected private representation. User owns implementation; assistant owns tests/docs/review.
 
 ## Scope and baseline
 
@@ -73,3 +73,15 @@ Example: with S=FFFC, bytes 34 and 12 at FFFC/FFFD, RETI finishes at PC=1234, SP
 - [Mooneye reti_timing source](https://raw.githubusercontent.com/Gekkio/mooneye-test-suite/main/acceptance/reti_timing.s): hardware-tested cycle ordering. Its DMA/PPU-dependent execution is outside today's implemented devices.
 
 Mooneye sources consulted as references only; no source copied, ROM binary imported or ROM suite run. Coarse internal commit points are project conventions consistent with observable instruction boundaries, not a physical-edge claim.
+
+## Implementation and acceptance evidence - 2026-11-18
+
+User implemented D9 ReturnFromInterrupt with ReturnKind::{Normal, Interrupt}. Shared ReadReturnLow/ReadReturnHigh carry the mode into FinishReturn; normal/conditional RET use Normal, and only Interrupt sets IME Enabled at the final idle. ApplyJump stays separate for JR/JP. The response/transition/event APIs and System scheduling are unchanged.
+
+Assistant added six tests (three CPU, three System), minimal module wiring and updated the two decoder expectations that treated D9 as unsupported. CPU tests cover all 65,536 target addresses and a separate all-65,536 SP sweep with opcode PC=FFFF, all sixteen F patterns and all three initial IME states for RET/RETI, exact actions/intermediate snapshots, repeated queries, wrong response kinds at every phase and correct retry, plus captured SP/low byte/return mode under test-only mutation. Normal RET retains existing delayed-EI maturity.
+
+System tests cover every zero/partial/exact/excess budget, full-address-space memory preservation and stack reads through WRAM, echo, HRAM, IF/IE, ROM/unmapped boundaries and FFFF wrap. Pending Timer entry begins on the next call after RETI from Disabled or Delayed without fetching the returned-to opcode. A synthetic EI;INC B program services VBlank then Serial handlers through RETI before executing a second mainline INC B; it restores/re-pushes the same return PC, updates D/E once each and takes 92 ticks in total. With no remaining request, the second RETI resumes the mainline normally.
+
+The first focused run caught an incorrect expected total in the new synthetic test (88 versus the correct 92); that oracle was corrected. Initial regression also found a second stale D9-unsupported classification; updated independently. No application correctness fix was required. The six focused RETI tests pass; formatting, strict Clippy and diff whitespace checks pass. No ROM source/binaries were imported and no external suite ran; DMA/PPU timing and physical edge accuracy remain unverified.
+
+Final verification: all 361 tests pass (261 unit, 100 integration), including all six focused RETI tests. Formatting, strict Clippy and whitespace checks pass. #41 is complete; next specify HALT/wake/HALT-bug behavior, with STOP separately scoped. M2 remains open for remaining instructions and ROM validation evidence.

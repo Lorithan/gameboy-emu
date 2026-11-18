@@ -15,7 +15,7 @@ use crate::{
     cpu::{
         opcode::*,
         registers::*,
-        state::{CycleTransition, ExecutionState, InterruptSelection},
+        state::{CycleTransition, ExecutionState, InterruptSelection, ReturnKind},
     },
     memory::Interrupt,
 };
@@ -117,7 +117,7 @@ impl CPU {
             | ReadMemoryAndUpdateHL { addr, .. }
             | PopLow { addr, .. }
             | PopHigh { addr, .. }
-            | ReadReturnLow { addr }
+            | ReadReturnLow { addr, .. }
             | ReadReturnHigh { addr, .. }
             | ReadOperation { addr, .. }
             | ReadHLForCbOpcode { addr, .. }
@@ -159,6 +159,7 @@ impl CPU {
             | ApplyJump { .. }
             | Call { .. }
             | ReturnConditional { .. }
+            | FinishReturn { .. }
             | Addition16 { .. }
             | DelaySpOffset { .. }
             | ApplySpOffset { .. }
@@ -575,27 +576,41 @@ impl CPU {
 
                 Ok(CycleTransition::InstructionFinished)
             }
-            ReadReturnLow { addr } => {
+            ReadReturnLow { addr, kind } => {
                 let low = response.read_value()?;
                 self.registers.set_sp(addr.wrapping_add(1));
 
                 let next_state = ReadReturnHigh {
                     addr: addr.wrapping_add(1),
                     low,
+                    kind,
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            ReadReturnHigh { addr, low } => {
+            ReadReturnHigh { addr, low, kind } => {
                 let high = response.read_value()?;
                 self.registers.set_sp(addr.wrapping_add(1));
 
                 let jump_addr = (high as u16) << 8 | low as u16;
-                let next_state = ApplyJump { target: jump_addr };
+                let next_state = FinishReturn {
+                    target: jump_addr,
+                    kind,
+                };
                 Ok(CycleTransition::Continue(next_state))
+            }
+            FinishReturn { target: addr, kind } => {
+                self.registers.set_pc(addr);
+                if matches!(kind, ReturnKind::Interrupt) {
+                    self.interrupt_state = InterruptState::Enabled;
+                }
+                Ok(CycleTransition::InstructionFinished)
             }
             ReturnConditional { taken, addr } => {
                 if taken {
-                    let next_state = ReadReturnLow { addr };
+                    let next_state = ReadReturnLow {
+                        addr,
+                        kind: ReturnKind::Normal,
+                    };
                     Ok(CycleTransition::Continue(next_state))
                 } else {
                     Ok(CycleTransition::InstructionFinished)
@@ -1013,6 +1028,7 @@ impl CPU {
             DecodedOpcode::Return => {
                 let next_state = ReadReturnLow {
                     addr: self.registers.sp,
+                    kind: ReturnKind::Normal,
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
@@ -1178,6 +1194,13 @@ impl CPU {
                 }
 
                 Ok(CycleTransition::InstructionFinished)
+            }
+            DecodedOpcode::ReturnFromInterrupt => {
+                let next_state = ReadReturnLow {
+                    addr: self.registers.sp,
+                    kind: ReturnKind::Interrupt,
+                };
+                Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Unknown => {
                 let fault = CpuFault {

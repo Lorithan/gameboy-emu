@@ -1,4 +1,7 @@
 # Opcode coverage checkpoint - 2026-11-08
+## Current RETI checkpoint - 2026-11-18
+
+RETI (D9) is implemented using shared typed return states and enables IME at final instruction completion. Focused acceptance includes immediate pending interrupt entry before the returned-to opcode. Coverage is 242/244 legal non-prefix base instructions plus 256/256 CB = 498/500 encodings. Remaining base instructions: HALT (76), STOP (10). CB prefix dispatch is not a standalone instruction. IF/IE and late interrupt entry are implemented; older device/interrupt-absence statements below are historical. See [RETI evidence](tasks/RETI.md); no external ROM suite has been run.
 
 Audited current decoder at 68e8cfe by compiling a temporary executable that imports the actual opcode and register modules and enumerates all 256 byte inputs. Compared unknown bytes with gbdev Opcodes.json. This counts implemented encodings, not hardware accuracy or completion of CPU/device milestone gates.
 

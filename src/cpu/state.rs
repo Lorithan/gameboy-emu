@@ -12,6 +12,12 @@ pub(super) enum InterruptSelection {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReturnKind {
+    Normal,
+    Interrupt,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum ExecutionState {
     FetchOpcode,
@@ -121,10 +127,16 @@ pub(super) enum ExecutionState {
     },
     ReadReturnLow {
         addr: u16,
+        kind: ReturnKind,
     },
     ReadReturnHigh {
         addr: u16,
         low: u8,
+        kind: ReturnKind,
+    },
+    FinishReturn {
+        target: u16,
+        kind: ReturnKind,
     },
     ReturnConditional {
         taken: bool,

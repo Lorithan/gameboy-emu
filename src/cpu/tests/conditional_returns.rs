@@ -30,7 +30,10 @@ fn conditional_return_mappings_are_independent_and_leave_c9_unchanged() {
         }
     }
     assert!(matches!(DecodedOpcode::from(0xC9), DecodedOpcode::Return));
-    assert!(matches!(DecodedOpcode::from(0xD9), DecodedOpcode::Unknown));
+    assert!(matches!(
+        DecodedOpcode::from(0xD9),
+        DecodedOpcode::ReturnFromInterrupt
+    ));
 }
 
 #[test]
