@@ -95,7 +95,10 @@ impl System {
                 let value = self.memory.read(addr);
                 read_value = Some(value);
 
-                self.cpu.complete_cycle(CycleResponse::Read(value))
+                self.cpu.complete_cycle(CycleResponse::Read {
+                    value,
+                    pending_interrupts: self.memory.pending_interrupts(),
+                })
             }
             crate::cpu::CycleAction::Write { addr, value } => {
                 let flag_before_bus = self.memory.read(0xFF0F);

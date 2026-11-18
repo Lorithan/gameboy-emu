@@ -5,7 +5,10 @@ use crate::cpu::{
 
 fn responses() -> [CycleResponse; 3] {
     [
-        CycleResponse::Read(0xA5),
+        CycleResponse::Read {
+            value: 0xA5,
+            pending_interrupts: 0,
+        },
         CycleResponse::WriteDone {
             interrupt_sample: InterruptSample {
                 enable_after_bus: 0xFF,
@@ -66,7 +69,10 @@ fn response_mismatches_preserve_every_instruction_phase_and_ime() {
                         0
                     };
                     let response = match cpu.request_cycle().unwrap() {
-                        CycleAction::Read { .. } => CycleResponse::Read(data),
+                        CycleAction::Read { .. } => CycleResponse::Read {
+                            value: data,
+                            pending_interrupts: 0,
+                        },
                         CycleAction::Write { .. } => responses()[1],
                         CycleAction::Idle => CycleResponse::IdleDone,
                     };
@@ -152,7 +158,11 @@ fn ordinary_write_completion_ignores_interrupt_sample_values() {
         },
     ] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
-        cpu.complete_cycle(CycleResponse::Read(0x77)).unwrap(); // LD (HL),A
+        cpu.complete_cycle(CycleResponse::Read {
+            value: 0x77,
+            pending_interrupts: 0,
+        })
+        .unwrap(); // LD (HL),A
         assert_eq!(
             cpu.complete_cycle(CycleResponse::WriteDone {
                 interrupt_sample: sample
@@ -166,7 +176,7 @@ fn ordinary_write_completion_ignores_interrupt_sample_values() {
         expected = Some(cpu.snapshot());
     }
     for response in responses() {
-        if let CycleResponse::Read(value) = response {
+        if let CycleResponse::Read { value, .. } = response {
             assert_eq!(response.read_value().unwrap(), value);
         } else {
             let error = response.read_value().unwrap_err();
@@ -174,6 +184,46 @@ fn ordinary_write_completion_ignores_interrupt_sample_values() {
                 (error.expected, error.received),
                 (CycleKind::Read, response.kind())
             );
+        }
+    }
+}
+
+#[test]
+fn ordinary_read_cycles_ignore_all_pending_masks_without_accepting_interrupts() {
+    for pending in 0u8..=255 {
+        for ime in [
+            InterruptState::Disabled,
+            InterruptState::Delayed,
+            InterruptState::Enabled,
+        ] {
+            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+            cpu.interrupt_state = ime;
+            // Immediate operand, indirect data, and both CB fetch stages.
+            let mut reference = cpu.clone();
+            for value in [0x3E, 0x42, 0x7E, 0xA5, 0xCB, 0x00] {
+                let response = CycleResponse::Read {
+                    value,
+                    pending_interrupts: pending,
+                };
+                assert_eq!(response.kind(), CycleKind::Read);
+                assert_eq!(response.read_value().unwrap(), value);
+                assert_eq!(
+                    cpu.request_cycle().unwrap(),
+                    reference.request_cycle().unwrap()
+                );
+                assert_eq!(
+                    cpu.complete_cycle(response).unwrap(),
+                    reference
+                        .complete_cycle(CycleResponse::Read {
+                            value,
+                            pending_interrupts: 0
+                        })
+                        .unwrap()
+                );
+                assert_eq!(cpu.snapshot(), reference.snapshot());
+                assert_eq!(cpu.interrupt_state, reference.interrupt_state);
+                assert_eq!(format!("{:?}", cpu.state), format!("{:?}", reference.state));
+            }
         }
     }
 }

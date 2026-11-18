@@ -32,7 +32,10 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
             CycleKind::Read
         };
         for wrong in [
-            CycleResponse::Read(0xFF),
+            CycleResponse::Read {
+                value: 0xFF,
+                pending_interrupts: 0,
+            },
             CycleResponse::IdleDone,
             CycleResponse::WriteDone {
                 interrupt_sample: InterruptSample {
@@ -56,9 +59,18 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
             assert_eq!(cpu.interrupt_state, ime);
         }
         let response = match cycle {
-            0 => CycleResponse::Read(opcode),
-            1 => CycleResponse::Read(target as u8),
-            2 => CycleResponse::Read((target / 256) as u8),
+            0 => CycleResponse::Read {
+                value: opcode,
+                pending_interrupts: 0,
+            },
+            1 => CycleResponse::Read {
+                value: target as u8,
+                pending_interrupts: 0,
+            },
+            2 => CycleResponse::Read {
+                value: (target / 256) as u8,
+                pending_interrupts: 0,
+            },
             _ => CycleResponse::IdleDone,
         };
         assert_eq!(
@@ -123,16 +135,28 @@ fn reti_and_ret_preserve_flags_and_differ_only_in_explicit_ime_effect() {
 fn reti_captures_return_mode_stack_address_and_low_byte() {
     let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
     cpu.registers.sp = 0xFFFF;
-    cpu.complete_cycle(CycleResponse::Read(0xD9)).unwrap();
+    cpu.complete_cycle(CycleResponse::Read {
+        value: 0xD9,
+        pending_interrupts: 0,
+    })
+    .unwrap();
     cpu.registers.sp = 0x4321;
     assert_eq!(
         cpu.request_cycle().unwrap(),
         CycleAction::Read { addr: 0xFFFF }
     );
-    cpu.complete_cycle(CycleResponse::Read(0x34)).unwrap();
+    cpu.complete_cycle(CycleResponse::Read {
+        value: 0x34,
+        pending_interrupts: 0,
+    })
+    .unwrap();
     cpu.registers.sp = 0xBEEF;
     assert_eq!(cpu.request_cycle().unwrap(), CycleAction::Read { addr: 0 });
-    cpu.complete_cycle(CycleResponse::Read(0x12)).unwrap();
+    cpu.complete_cycle(CycleResponse::Read {
+        value: 0x12,
+        pending_interrupts: 0,
+    })
+    .unwrap();
     assert_eq!(cpu.snapshot().sp, 1);
     assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
     cpu.complete_cycle(CycleResponse::IdleDone).unwrap();

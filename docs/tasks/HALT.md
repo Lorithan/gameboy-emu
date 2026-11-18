@@ -2,7 +2,7 @@
 
 GitHub task: [#42](https://github.com/Lorithan/gameboy-emu/issues/42), M2 - CPU execution.
 
-Status: specified 2026-11-18; implementation has not started. Behavior requirements are sourced below; proposed API/state names and coarse timing choices need user review before implementation. User writes application code; assistant owns tests/docs/review.
+Status: read-response sampling slice implemented by the user on 2026-11-18 and under regression validation. HALT decoding, halted execution, wake-up and the fetch bug are not implemented yet. Behavior requirements are sourced below; remaining proposed state names and coarse timing choices need review before dependent implementation. User writes application code; assistant owns tests/docs/review.
 
 Baseline a40668f: prior verified suite 361 tests (261 unit, 100 integration), formatting/strict Clippy pass; not rerun for this specification. Coverage remains 242/244 non-prefix base plus 256 CB until HALT is verified. STOP is separate.
 
@@ -93,3 +93,11 @@ With EI;HALT and no pending source during HALT completion, HALT enters Halted, t
 - [SameSuite ei_delay_halt](https://raw.githubusercontent.com/LIJI32/SameSuite/master/interrupt/ei_delay_halt.asm): stacked return-address/counter expectations for buffered requests and EI/HALT.
 
 Sources are references only; no ROMs/source fixtures copied or run. This task fixes observable coarse-model behavior and does not establish physical bus-edge, timer or PPU accuracy. Baseline checks were not rerun for this documentation-only design work.
+
+## Read-response migration verified - 2026-11-18
+
+User changed CycleResponse::Read to { value, pending_interrupts }, updated the response helpers and samples Bus pending interrupts in System after the read, following the four-tick advancement. CPU behavior remains unchanged; no HALT decode/state/wake/suppression yet. Assistant migrated the shared response builder and direct typed-read tests, then added one test covering all 256 pending masks under all three IME states across ordinary opcode, immediate operand, indirect data and CB reads. Such samples do not trigger acceptance or change existing instruction state/results/IME.
+
+All 362 tests pass (262 unit, 100 integration); all four focused cycle-protocol tests pass. Formatting, strict Clippy and whitespace checks pass. Sample ordering was reviewed in System; ordinary handlers currently ignore the mask, so HALT's end-to-end use of that sample remains to be tested in later slices. No external ROM suite ran, no application logic was changed by the assistant, and no dependencies/build configuration changed. This checkpoint verifies the read protocol only; coverage remains 242/244 base plus all CB.
+
+Next user implementation: Halted execution and a HALT-specific instruction-completion transition, with central EI maturation shared by all InstructionComplete outcomes. Halted IdleDone remains Halted/InProgress and does not count as another instruction. Review wake polling and bug/EI handling before marking #42 complete.

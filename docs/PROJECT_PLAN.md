@@ -1,4 +1,9 @@
 # Game Boy emulator project plan
+## Current checkpoint - HALT read-response slice, 2026-11-18
+
+#42's read-response migration is verified: Read now carries value plus pending_interrupts, sampled by System after the read. All 362 tests pass (262 unit, 100 integration), four focused protocol tests pass, formatting/strict Clippy/whitespace checks pass. No external ROM suite ran. Existing behavior is unchanged and HALT is still unsupported. See [slice evidence](tasks/HALT.md).
+
+Next: implement Halted idles and HALT-specific instruction completion with shared EI bookkeeping, then wake polling and fetch-suppression/EI interactions per #42. User owns application implementation; assistant owns tests/docs/review. Coverage stays 242/244 base and 256/256 CB. #42 stays open.
 
 ## Current next design review - HALT, 2026-11-18
 

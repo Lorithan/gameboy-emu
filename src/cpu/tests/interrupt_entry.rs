@@ -240,7 +240,10 @@ fn late_selection_exhausts_ie_if_samples_and_preserves_cancellation_state() {
             assert_eq!(cpu.snapshot().sp, 0xFFFC);
             let before = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(CycleResponse::Read(0)),
+                cpu.complete_cycle(CycleResponse::Read {
+                    value: 0,
+                    pending_interrupts: 0
+                }),
                 Err(CpuError::UnexpectedCycleResponse(_))
             ));
             assert_eq!(cpu.snapshot(), before);

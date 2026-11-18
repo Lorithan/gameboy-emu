@@ -146,3 +146,7 @@ The first-stage #39 entry model is implemented. CPU accepts only at enabled Fetc
 ## CycleResponse implementation checkpoint - 2026-11-17
 
 CPU re-exports its public cycle protocol from cpu/cycles.rs. complete_cycle accepts Read(u8), WriteDone with a mandatory InterruptSample, or IdleDone; response-kind validation precedes handler mutation. System samples IF before writes and IE afterward. MissingReadValue is replaced by UnexpectedCycleResponse; failure diagnostics still use CycleRecord. This migration passes 352 tests. Completion effects, late selection and cancellation remain unimplemented; current entry still acknowledges at acceptance under #39.
+
+## Read-response sampling implemented - 2026-11-18
+
+CycleResponse::Read now carries { value, pending_interrupts }; System samples pending sources after the read. Existing read_value/kind helpers and non-HALT behavior are preserved; all 362 tests pass. HALT decoding, Halted state, wake-up and the one-shot fetch effect are still future #42 work. Read samples do not acknowledge requests or replace the separate boundary acceptance operation.

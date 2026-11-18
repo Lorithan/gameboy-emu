@@ -12,7 +12,10 @@ pub fn response(action: Result<CycleAction, CpuError>, data: Option<u8>) -> Cycl
         },
         Ok(CycleAction::Idle) => CycleResponse::IdleDone,
         _ => match data {
-            Some(value) => CycleResponse::Read(value),
+            Some(value) => CycleResponse::Read {
+                value,
+                pending_interrupts: 0,
+            },
             None => CycleResponse::IdleDone,
         },
     }
