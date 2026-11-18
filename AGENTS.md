@@ -6,5 +6,6 @@
 - Give explanations, references, and hints appropriate to the current task. Provide implementation solutions only when requested.
 - Keep work in small, independently reviewable issues. Define expected behavior and evidence of completion before implementation begins.
 - Report what was actually checked. A passing build or an empty test run does not demonstrate emulator correctness.
+- When asked to commit, also push the commit to the configured remote and verify the remote branch matches local HEAD. The user has authorized this as the default workflow to prevent lost checkpoints and repeated work. Report any push failure; never force-push or overwrite divergent remote work without explicit authorization.
 - Consult docs/PROJECT_PLAN.md for proposed scope, milestone gates, and the current next task. Keep it aligned with GitHub once a repository is connected.
 - Do not add ROM binaries to the repository as part of planning. Record test source, version, license, and expected results before introducing fixtures.
