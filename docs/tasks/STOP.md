@@ -2,7 +2,7 @@
 
 Core task: [#43](https://github.com/Lorithan/gameboy-emu/issues/43), M2. Device follow-up: [#44](https://github.com/Lorithan/gameboy-emu/issues/44), dependent on M3 divider/timer and M4 joypad work.
 
-Status: user accepted the no-cycle stepping direction on 2026-11-18. CPU CycleRequest and System MachineStep migrations are implemented and reviewed below; STOP decoding/standby behavior remain pending. The remaining contract describes the next implementation slices. User owns application implementation; assistant owns tests, documentation and review.
+Status: core standby implemented by the user and acceptance verified on 2026-11-18. The padding-increment review finding is resolved; all 379 tests pass. #43 is complete for this declared approximation. Divider/joypad and finer STOP behavior remain #44. User owns application implementation; assistant owns tests, documentation and review. Historical proposal/review notes below are superseded by completion evidence.
 
 Baseline: published b9c765e, 371 previously passing tests (271 unit, 100 integration), formatting and strict Clippy passing. STOP is currently unsupported; coverage remains 243/244 legal non-prefix base plus all 256 CB encodings. No emulator tests were rerun for this documentation-only proposal.
 
@@ -117,3 +117,21 @@ Assistant migrated System-step tests through a test-only helper requiring a real
 This checkpoint verifies existing clocked execution under both new result wrappers. ExecutionState::Stopped does not exist yet, so no-cycle polling and NoCycleRequested rejection are reviewed structurally but not exercised. Add those tests when standby becomes reachable; do not claim STOP support from this checkpoint.
 
 Next user slice: STOP decode, private Stopped/StopFinished, public StopEntered, shared delayed-EI completion bookkeeping and bounded handling of the entry event. StopEntered is a real instruction-completing cycle; a later MachineStep::Stopped is a no-cycle poll. The former counts its entry cycle, the latter does not. Follow the ordinary-standby approximation above; divider/joypad integration stays in #44.
+
+## STOP acceptance review - 2026-11-18
+
+State/transition/event wiring, stopped completion rejection, System entry versus polling counts and shared delayed-EI handling are implemented. One correctness finding remains: the decoded STOP arm returns StopFinished immediately, so only the shared opcode increment happens. Ordinary entry retains P+1 rather than the required P+2; with HALT fetch suppression it retains P rather than P+1. Reuse the existing wrapping increment in the STOP-specific arm, preserving the shared fetch path and adding no bus cycle. The user owns this application fix.
+
+Assistant added eight tests in cpu/tests/stop.rs and system/tests/stop.rs covering entry/register preservation, flags/IME/pending-mask combinations, invalid-response atomicity, all stopped response kinds, wake/acceptance guards, fetch suppression composition, full-memory preservation, entry/poll traces, zero/large budgets, EI/DI, interrupt-before-STOP/RETI and HRAM/IE/ROM PC boundaries. Hardware conditional STOP cases remain explicitly outside this deterministic approximation.
+
+Existing decoder/protocol/EI tests now recognize STOP as supported and its event as instruction completion in the applicable oracle; the old unsupported-STOP integration case now uses invalid D3. The full run initially passed 372 tests (272 unit, all 100 integration) and failed seven: six padding-related acceptance failures and one stale all-base EI oracle. After migrating that oracle, its focused test passes. The focused STOP run passes two tests and fails six, all at padding PC assertions. Full suite was not repeated after that final test-only migration. Library check, formatting, strict Clippy and whitespace checks pass. No external ROM ran.
+
+Acceptance and coverage promotion remain pending the padding fix and subsequent checks. The passing stopped-guard and EI/DI tests do not establish complete STOP behavior; #44 and M2's external validation gate remain open.
+
+## Core standby completion verified - 2026-11-18
+
+User added the STOP-specific wrapping PC increment, retaining the shared fetch/suppression path. All eight focused STOP tests now pass, including ordinary P+2, suppressed P+1 and FFFE/FFFF wrap cases. Fresh full verification passes all 379 tests (279 unit, 100 integration), formatting, strict Clippy and whitespace checks. The earlier six acceptance failures and stale test expectations are resolved. No application behavior was changed by the assistant.
+
+Evidence covers one opcode-read entry cycle/four ticks, padding skipped without another bus action, registers/flags/SP preservation, private stopped state and one StopEntered event, shared delayed-EI promotion, immutable/retry-safe requests, rejection of all completion kinds while stopped, no interrupt wake/acknowledgment during polling, zero/positive/large budgets, no-cycle polls, full-memory preservation, interrupt-before-fetch/RETI and HALT-suppression composition. The latter and nonzero-padding/pending-at-entry fallbacks verify the declared model only, not conditional hardware behavior.
+
+Implemented encoding coverage is now 244/244 legal non-prefix base plus 256/256 CB = 500/500, excluding the CB dispatch byte and eleven invalid base slots. STOP's core approximation has no emulated wake path yet. Divider reset/pause, selected JOYP wake, hardware prefetch/conditional entry and oscillator behavior remain #44. No external ROM source/binary was imported or run. Keep M2 open for its ROM-validation evidence; next planning work is a pinned/licensed CPU ROM subset and a bounded headless validation contract with explicit device prerequisites and success/failure reporting.

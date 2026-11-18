@@ -185,6 +185,8 @@ pub(super) enum DecodedOpcode {
     EnabledInterrupts,
     ReturnFromInterrupt,
     Halt,
+
+    Stop,
     Unknown,
 }
 
@@ -245,6 +247,7 @@ impl From<u8> for DecodedOpcode {
                     through_carry: false,
                 },
             },
+            0x10 => DecodedOpcode::Stop,
             0x11 => DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
             },

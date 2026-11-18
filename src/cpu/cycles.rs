@@ -21,6 +21,7 @@ pub enum CycleOutcome {
     InterruptSelectionCancelled,
     InterruptEntryComplete { vector: u16 },
     InterruptEntryCancelled,
+    StopEntered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

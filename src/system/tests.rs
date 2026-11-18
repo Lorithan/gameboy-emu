@@ -6,6 +6,7 @@ mod cb_integration;
 mod di_ei;
 mod halt;
 mod reti;
+mod stop;
 
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};

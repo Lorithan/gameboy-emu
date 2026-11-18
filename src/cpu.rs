@@ -182,6 +182,7 @@ impl CPU {
             | InterruptJump { .. }
             | Halted
             | Unary16 { .. } => Ok(CycleRequest::Execute(CycleAction::Idle)),
+            Stopped => Ok(CycleRequest::Stopped),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -244,14 +245,20 @@ impl CPU {
                 }
                 Ok(CycleOutcome::InstructionComplete)
             }
+            CycleTransition::StopFinished => {
+                self.state = Stopped;
+                Ok(CycleOutcome::StopEntered)
+            }
             CycleTransition::Faulted(err) => {
                 self.state = Faulted(err);
                 Err(CpuError::UnsupportedOpcode(err))
             }
         }?;
 
-        if outcome == CycleOutcome::InstructionComplete
-            && enable_was_pending
+        if matches!(
+            outcome,
+            CycleOutcome::InstructionComplete | CycleOutcome::StopEntered
+        ) && enable_was_pending
             && self.interrupt_state == InterruptState::Delayed
         {
             self.interrupt_state = InterruptState::Enabled;
@@ -856,6 +863,7 @@ impl CPU {
                 }
             },
             Halted => Ok(CycleTransition::Continue(Halted)),
+            Stopped => Err(CpuError::NoCycleRequested),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -1263,6 +1271,10 @@ impl CPU {
                 };
 
                 Ok(CycleTransition::HaltFinished(behavior))
+            }
+            DecodedOpcode::Stop => {
+                self.registers.increment_pc();
+                Ok(CycleTransition::StopFinished)
             }
             DecodedOpcode::Unknown => {
                 let fault = CpuFault {

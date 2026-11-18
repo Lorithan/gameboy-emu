@@ -170,6 +170,12 @@ impl System {
                             ticks: self.elapsed_ticks - starting_ticks,
                         });
                     }
+                    CycleOutcome::StopEntered => {
+                        return Ok(InstructionStep::Stopped {
+                            mcycles: cycle + 1,
+                            ticks: self.elapsed_ticks - starting_ticks,
+                        });
+                    }
                     CycleOutcome::InterruptSelected { .. }
                     | CycleOutcome::InProgress
                     | CycleOutcome::InterruptSelectionCancelled => {}

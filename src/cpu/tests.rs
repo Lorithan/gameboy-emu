@@ -34,6 +34,7 @@ mod restarts;
 mod reti;
 mod signed_sp_offsets;
 mod stack_push_pop;
+mod stop;
 mod store_sp_absolute;
 mod word_add;
 mod word_inc_dec;

@@ -217,6 +217,7 @@ pub(super) enum ExecutionState {
         interrupt: InterruptSelection,
     },
     Halted,
+    Stopped,
     Faulted(CpuFault),
 }
 
@@ -234,5 +235,6 @@ pub(super) enum CycleTransition {
     InterruptSelectionResolved { interrupt: InterruptSelection },
     InterruptEntryCancelled,
     HaltFinished(HaltBehavior),
+    StopFinished,
     Faulted(CpuFault),
 }

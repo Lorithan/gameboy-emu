@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
-use crate::cpu::{InterruptState, opcode::DecodedOpcode};
+use crate::cpu::{CycleOutcome, InterruptState, opcode::DecodedOpcode};
 
 #[test]
 fn di_ei_decode_and_cpu_startup() {
@@ -159,10 +159,15 @@ fn delayed_enable_waits_for_final_cycle_of_every_supported_base_instruction() {
                 }
                 CycleAction::Write { .. } | CycleAction::Idle => None,
             };
-            completed = cpu
+            let outcome = cpu
                 .complete_cycle(response(cpu.request_cycle().map(expect_execute), data))
-                .map(instruction_complete)
                 .unwrap();
+            completed = if opcode == 0x10 {
+                assert_eq!(outcome, CycleOutcome::StopEntered);
+                true
+            } else {
+                instruction_complete(outcome)
+            };
             if completed {
                 assert_eq!(
                     cpu.interrupt_state,

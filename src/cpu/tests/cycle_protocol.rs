@@ -78,6 +78,16 @@ fn response_mismatches_preserve_every_instruction_phase_and_ime() {
                         CycleAction::Idle => CycleResponse::IdleDone,
                     };
                     match cpu.complete_cycle(response) {
+                        Ok(CycleOutcome::StopEntered) => {
+                            assert!(!cb);
+                            assert_eq!(opcode, 0x10);
+                            assert!(matches!(
+                                cpu.request_cycle(),
+                                Ok(crate::cpu::CycleRequest::Stopped)
+                            ));
+                            finished = true;
+                            break;
+                        }
                         Ok(CycleOutcome::InstructionComplete) => {
                             finished = true;
                             break;
