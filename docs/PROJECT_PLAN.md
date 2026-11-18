@@ -1,4 +1,8 @@
 # Game Boy emulator project plan
+## Current next design review - external CPU ROM validation, 2026-11-18
+
+[#45](https://github.com/Lorithan/gameboy-emu/issues/45) proposes a first pinned Mooneye bits/reg_f fixture and test-only bounded runner in [CPU_ROM_VALIDATION.md](tasks/CPU_ROM_VALIDATION.md). Source audit suggests current fallback I/O can support its fast report path; this is unexecuted. The proposed observer uses FF01 trace writes plus register signatures, with explicit failure/timeout/stopped outcomes. Assistant owns test infrastructure; user owns any application fixes. Before fixtures, finish artifact/digest/component provenance. No ROM binaries, application changes or dependencies added; no emulator tests rerun for this documentation-only task. Published baseline remains 6df35c5 with 379 passing tests. Keep M2 open; #44 STOP devices remains separate.
+
 ## Current checkpoint - core STOP complete, 2026-11-18
 
 [#43 core STOP standby](https://github.com/Lorithan/gameboy-emu/issues/43) is implemented and verified: all 379 tests pass (279 unit, 100 integration), including eight focused STOP tests; formatting, strict Clippy and whitespace checks pass. The user fixed the padding increment using the shared wrapping helper. Entry, no-cycle polling, PC wrap/suppression, EI/DI, interrupt-before-fetch/RETI and memory preservation are covered. See [completion evidence](tasks/STOP.md#core-standby-completion-verified---2026-11-18). Earlier padding/unimplemented-state notes below are historical.
