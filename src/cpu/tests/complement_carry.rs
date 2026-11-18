@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::opcode::DecodedOpcode;
@@ -36,7 +37,7 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
                         );
                         assert_eq!(cpu.snapshot(), before);
                     }
@@ -49,7 +50,7 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                     expected.af = u16::from(value) * 256 + u16::from(expected_flags);
                     expected.pc = pc.wrapping_add(1);
                     assert!(
-                        cpu.complete_cycle(Some(opcode))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -60,7 +61,7 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                     // Second application restores A for Cpl and C for Ccf;
                     // N/H follow the instruction rules rather than reverting.
                     assert!(
-                        cpu.complete_cycle(Some(opcode))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                             .map(instruction_complete)
                             .unwrap()
                     );

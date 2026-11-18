@@ -1,6 +1,7 @@
 use crate::cpu::{
     CPU, CpuError, CycleAction, CycleOutcome, ExecutionState, InterruptState, Registers,
 };
+use crate::response_support::response;
 
 #[test]
 fn interrupt_acceptance_masks_prioritizes_and_rejects_without_mutation() {
@@ -31,7 +32,7 @@ fn interrupt_acceptance_masks_prioritizes_and_rejects_without_mutation() {
     // Reject while Enabled even in the middle of an instruction or a fault.
     for opcode in [0x3E, 0xCB, 0xCD, 0xC5, 0xD3] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0));
-        let _ = cpu.complete_cycle(Some(opcode));
+        let _ = cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)));
         cpu.interrupt_state = InterruptState::Enabled;
         let snapshot = cpu.snapshot();
         let state = format!("{:?}", cpu.state);
@@ -84,7 +85,9 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
             assert_eq!(cpu.snapshot(), before);
             assert!(cpu.try_accept_interrupt(31).is_none());
         }
-        let outcome = cpu.complete_cycle(None).unwrap();
+        let outcome = cpu
+            .complete_cycle(response(cpu.request_cycle(), None))
+            .unwrap();
         assert_eq!(
             outcome,
             if cycle == 4 {
@@ -108,7 +111,8 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
         CycleAction::Read { addr: vector }
     );
     assert_eq!(
-        cpu.complete_cycle(Some(0)).unwrap(),
+        cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+            .unwrap(),
         CycleOutcome::InstructionComplete
     );
     assert_eq!(cpu.snapshot().pc, vector + 1);
@@ -140,7 +144,11 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
     cpu.registers.pc = 0xDEAD;
     cpu.registers.sp = 0xBEEF;
     for _ in 0..2 {
-        assert_eq!(cpu.complete_cycle(None).unwrap(), CycleOutcome::InProgress);
+        assert_eq!(
+            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                .unwrap(),
+            CycleOutcome::InProgress
+        );
     }
     assert_eq!(
         cpu.request_cycle().unwrap(),
@@ -149,7 +157,8 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
             value: 0xA5
         }
     );
-    cpu.complete_cycle(None).unwrap();
+    cpu.complete_cycle(response(cpu.request_cycle(), None))
+        .unwrap();
     cpu.registers.sp = 0x4321;
     assert_eq!(
         cpu.request_cycle().unwrap(),
@@ -158,11 +167,13 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
             value: 0x3C
         }
     );
-    cpu.complete_cycle(None).unwrap();
+    cpu.complete_cycle(response(cpu.request_cycle(), None))
+        .unwrap();
     assert_eq!(cpu.snapshot().sp, 0xFFFE);
     assert_eq!(cpu.snapshot().pc, 0xDEAD);
     assert_eq!(
-        cpu.complete_cycle(None).unwrap(),
+        cpu.complete_cycle(response(cpu.request_cycle(), None))
+            .unwrap(),
         CycleOutcome::InterruptEntryComplete { vector: 0x58 }
     );
     assert_eq!(cpu.snapshot().pc, 0x58);

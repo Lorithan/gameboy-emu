@@ -1,5 +1,7 @@
 # DMG core architecture
 
+Latest approved design (user approval 2026-11-17; implementation pending): [late selection contract](tasks/LATE_INTERRUPT_SELECTION.md), #40. CycleResponse would use Read(u8), WriteDone { interrupts: InterruptSample }, and IdleDone variants, making samples mandatory only on write responses; CycleCompletion would contain the public outcome plus an acknowledgment effect. The CPU would validate inputs before mutation; System would supply samples for every write cycle without inspecting private CPU phases. Public source visibility, response/errors and outcome changes are approved under that contract; helper names and private representation remain user implementation choices. Hardware-tested IE cancellation and unverified IF edge/collision timing remain distinct; current code still implements #39.
+
 Interrupt-entry design selected 2026-11-17: [#39 contract](tasks/INTERRUPT_ENTRY.md). System offers pending masks before machine-cycle action queries; CPU explicitly accepts only at an enabled instruction boundary, owns five captured entry stages, and reports instruction/entry completion distinctly. System acknowledges through Bus, with no CPU Bus borrow and immutable request_cycle queries. Source/vector capture and acknowledgment at acceptance are the first-stage project approximation; [#40](https://github.com/Lorithan/gameboy-emu/issues/40) tracks known hardware late-selection/IE-write differences. This is specified, not implemented.
 
 Status: library, registers, snapshots, and System construction are implemented. The first execution interface and explicit initial timing convention are specified in [task #5](tasks/FIRST_CPU_CYCLES.md). This is an M-cycle model, not a pin/edge-accurate implementation. Issue #1 stays open for architecture review and staged device initialization.
@@ -134,3 +136,7 @@ Private CycleTransition and ExecutionState live in cpu/state.rs. Completion hand
 ## Interrupt-entry implementation - 2026-11-17
 
 The first-stage #39 entry model is implemented. CPU accepts only at enabled FetchOpcode boundaries, captures source/PC/SP, disables IME and runs two waits, two captured stack writes and one vector transfer. System offers Bus pending masks and acknowledges only a newly accepted source before querying the action. Entry completion is distinct from instruction completion; handler execution starts on the next cycle. Immediate source capture/IF acknowledgment remains the documented approximation pending #40. Detailed CPU/System test evidence is in [INTERRUPT_ENTRY.md](tasks/INTERRUPT_ENTRY.md).
+
+## CycleResponse implementation checkpoint - 2026-11-17
+
+CPU re-exports its public cycle protocol from cpu/cycles.rs. complete_cycle accepts Read(u8), WriteDone with a mandatory InterruptSample, or IdleDone; response-kind validation precedes handler mutation. System samples IF before writes and IE afterward. MissingReadValue is replaced by UnexpectedCycleResponse; failure diagnostics still use CycleRecord. This migration passes 352 tests. Completion effects, late selection and cancellation remain unimplemented; current entry still acknowledges at acceptance under #39.

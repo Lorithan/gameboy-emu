@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode, registers::Flag};
 const CASES: [(u8, bool, usize); 2] = [(0xF8, true, 3), (0xE8, false, 4)];
@@ -14,19 +15,21 @@ fn machine(sp: u16, flags: u8, pc: u16) -> CPU {
 }
 fn finish(cpu: &mut CPU, opcode: u8, raw: u8, cycles: usize) {
     assert!(
-        !cpu.complete_cycle(Some(opcode))
+        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
             .map(instruction_complete)
             .unwrap()
     );
     assert!(
-        !cpu.complete_cycle(Some(raw))
+        !cpu.complete_cycle(response(cpu.request_cycle(), Some(raw)))
             .map(instruction_complete)
             .unwrap()
     );
     for cycle in 2..cycles {
         assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
         assert_eq!(
-            cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                .map(instruction_complete)
+                .unwrap(),
             cycle + 1 == cycles
         );
     }
@@ -45,13 +48,13 @@ fn signed_sp_operand_read_advances_pc_and_next_fetch_skips_operand() {
         for pc in [0x0100u16, 0xFFFE, 0xFFFF] {
             let mut cpu = machine(0x1000, 0xF0, pc);
             assert!(
-                !cpu.complete_cycle(Some(opcode))
+                !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                     .map(instruction_complete)
                     .unwrap()
             );
             assert_eq!(cpu.snapshot().pc, pc.wrapping_add(1));
             assert!(
-                !cpu.complete_cycle(Some(0))
+                !cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
                     .map(instruction_complete)
                     .unwrap()
             );
@@ -62,7 +65,9 @@ fn signed_sp_operand_read_advances_pc_and_next_fetch_skips_operand() {
             );
             for cycle in 2..cycles {
                 assert_eq!(
-                    cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        .map(instruction_complete)
+                        .unwrap(),
                     cycle + 1 == cycles
                 );
             }
@@ -70,7 +75,7 @@ fn signed_sp_operand_read_advances_pc_and_next_fetch_skips_operand() {
                 matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(2))
             );
             assert!(
-                cpu.complete_cycle(Some(0))
+                cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
                     .map(instruction_complete)
                     .unwrap()
             );
@@ -156,12 +161,12 @@ fn signed_sp_retries_are_atomic_and_original_sp_survives_all_idle_cycles() {
         let mut cpu = machine(0x1001, 0xF0, 0x0100);
         let before = cpu.snapshot();
         assert!(matches!(
-            cpu.complete_cycle(None).map(instruction_complete),
-            Err(CpuError::MissingReadValue { addr: 0x0100 })
+            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0x0100 })
         ));
         assert_eq!(cpu.snapshot(), before);
         assert!(
-            !cpu.complete_cycle(Some(opcode))
+            !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                 .map(instruction_complete)
                 .unwrap()
         );
@@ -172,14 +177,14 @@ fn signed_sp_retries_are_atomic_and_original_sp_survives_all_idle_cycles() {
                 Ok(CycleAction::Read { addr: 0x0101 })
             ));
             assert!(matches!(
-                cpu.complete_cycle(None).map(instruction_complete),
-                Err(CpuError::MissingReadValue { addr: 0x0101 })
+                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0x0101 })
             ));
             assert_eq!(cpu.snapshot(), pending);
         }
         cpu.registers.sp = 0x4321;
         assert!(
-            !cpu.complete_cycle(Some(0xFF))
+            !cpu.complete_cycle(response(cpu.request_cycle(), Some(0xFF)))
                 .map(instruction_complete)
                 .unwrap()
         );
@@ -190,7 +195,9 @@ fn signed_sp_retries_are_atomic_and_original_sp_survives_all_idle_cycles() {
                 assert_eq!(cpu.snapshot(), ready);
             }
             assert_eq!(
-                cpu.complete_cycle(None).map(instruction_complete).unwrap(),
+                cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    .map(instruction_complete)
+                    .unwrap(),
                 cycle + 1 == cycles
             );
             if cycle + 1 < cycles {

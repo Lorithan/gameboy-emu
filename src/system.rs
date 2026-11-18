@@ -1,5 +1,8 @@
 use crate::{
-    cpu::{CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, Registers},
+    cpu::{
+        CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, CycleResponse, InterruptSample,
+        Registers,
+    },
     memory::{Bus, Cartridge},
 };
 
@@ -85,16 +88,24 @@ impl System {
         self.elapsed_ticks += 4;
 
         let outcome = match action {
-            crate::cpu::CycleAction::Idle => self.cpu.complete_cycle(None),
+            crate::cpu::CycleAction::Idle => self.cpu.complete_cycle(CycleResponse::IdleDone),
             crate::cpu::CycleAction::Read { addr } => {
                 let value = self.memory.read(addr);
                 read_value = Some(value);
 
-                self.cpu.complete_cycle(Some(value))
+                self.cpu.complete_cycle(CycleResponse::Read(value))
             }
             crate::cpu::CycleAction::Write { addr, value } => {
+                let flag_before_bus = self.memory.read(0xFF0F);
                 self.memory.write(addr, value);
-                self.cpu.complete_cycle(None)
+                let enable_after_bus = self.memory.read(0xFFFF);
+                let interrupt_sample = InterruptSample {
+                    enable_after_bus,
+                    flags_before_bus: flag_before_bus,
+                };
+
+                self.cpu
+                    .complete_cycle(CycleResponse::WriteDone { interrupt_sample })
             }
         };
 

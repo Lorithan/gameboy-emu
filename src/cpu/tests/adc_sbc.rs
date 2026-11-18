@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
@@ -68,14 +69,14 @@ fn reference(
 fn finish(cpu: &mut CPU, opcode: u8, source: Source, right: u8) {
     let register = matches!(source, Source::Register(_));
     assert_eq!(
-        cpu.complete_cycle(Some(opcode))
+        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
             .map(instruction_complete)
             .expect("opcode"),
         register
     );
     if !register {
         assert!(
-            cpu.complete_cycle(Some(right))
+            cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
                 .map(instruction_complete)
                 .expect("operand")
         );
@@ -195,11 +196,11 @@ fn pending_carry_reads_preserve_captured_inputs_across_retry_and_pc_wrap() {
                     let mut cpu = machine(0x42, 0x0F, source, combination << 4, start);
                     let before = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: start }))
                     );
                     assert_eq!(cpu.snapshot(), before);
                     assert!(
-                        !cpu.complete_cycle(Some(opcode))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                             .map(instruction_complete)
                             .expect("opcode")
                     );
@@ -222,7 +223,7 @@ fn pending_carry_reads_preserve_captured_inputs_across_retry_and_pc_wrap() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
                         );
                         assert_eq!(cpu.snapshot(), pending);
                     }
@@ -231,7 +232,7 @@ fn pending_carry_reads_preserve_captured_inputs_across_retry_and_pc_wrap() {
                         expected.pc = expected.pc.wrapping_add(1);
                     }
                     assert!(
-                        cpu.complete_cycle(Some(0x0F))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(0x0F)))
                             .map(instruction_complete)
                             .expect("retry operand")
                     );
@@ -258,8 +259,8 @@ fn carry_boundaries_ignore_stale_znh_flags_and_wrap_opcode_pc() {
                         let mut cpu = machine(left, right, source, combination << 4, 0xFFFF);
                         let before = cpu.snapshot();
                         assert!(matches!(
-                            cpu.complete_cycle(None).map(instruction_complete),
-                            Err(CpuError::MissingReadValue { addr: 0xFFFF })
+                            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
                         ));
                         assert_eq!(cpu.snapshot(), before);
                         let mut expected =

@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CycleAction, ExecutionState, Registers,
@@ -26,7 +27,7 @@ fn unconditional_jump_handles_every_displacement_flags_and_pc_boundaries() {
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    !cpu.complete_cycle(Some(0x18))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(0x18)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -39,11 +40,11 @@ fn unconditional_jump_handles_every_displacement_flags_and_pc_boundaries() {
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 assert!(
-                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    !cpu.complete_cycle(Some(raw))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(raw)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -53,7 +54,11 @@ fn unconditional_jump_handles_every_displacement_flags_and_pc_boundaries() {
                     assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
                     assert_eq!(cpu.snapshot(), expected);
                 }
-                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                assert!(
+                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 // Independent wide arithmetic oracle, rather than wrapping_add_signed.
                 let displacement = if raw < 128 {
                     i32::from(raw)
@@ -82,7 +87,7 @@ fn false_condition_completes_at_displacement_without_idle_or_extra_pc_increment(
         let mut expected = cpu.snapshot();
         expected.pc = operand_pc.wrapping_add(1);
         assert!(
-            cpu.complete_cycle(Some(0x80))
+            cpu.complete_cycle(response(cpu.request_cycle(), Some(0x80)))
                 .map(instruction_complete)
                 .unwrap(),
             "untaken branch must complete on operand read"
@@ -98,12 +103,12 @@ fn false_condition_completes_at_displacement_without_idle_or_extra_pc_increment(
 fn internal_jump_cycle_uses_captured_target() {
     let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
     assert!(
-        !cpu.complete_cycle(Some(0x18))
+        !cpu.complete_cycle(response(cpu.request_cycle(), Some(0x18)))
             .map(instruction_complete)
             .unwrap()
     );
     assert!(
-        !cpu.complete_cycle(Some(0xFE))
+        !cpu.complete_cycle(response(cpu.request_cycle(), Some(0xFE)))
             .map(instruction_complete)
             .unwrap()
     );
@@ -113,7 +118,11 @@ fn internal_jump_cycle_uses_captured_target() {
     let mut expected = cpu.snapshot();
     expected.pc = 0x0100;
     assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
-    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+    assert!(
+        cpu.complete_cycle(response(cpu.request_cycle(), None))
+            .map(instruction_complete)
+            .unwrap()
+    );
     assert_eq!(cpu.snapshot(), expected);
 }
 
@@ -152,11 +161,11 @@ fn conditional_jumps_cover_all_offsets_flags_wraps_and_captured_decisions() {
                     let mut cpu = CPU::from_registers(registers);
                     let initial = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: start }))
                     );
                     assert_eq!(cpu.snapshot(), initial);
                     assert!(
-                        !cpu.complete_cycle(Some(byte))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -168,14 +177,14 @@ fn conditional_jumps_cover_all_offsets_flags_wraps_and_captured_decisions() {
                     cpu.registers.set_af(0x4200 | (raw_flags ^ 0x90));
                     expected.af ^= 0x90;
                     assert!(
-                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
                     );
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(
                         matches!(cpu.request_cycle().unwrap(), CycleAction::Read { addr } if addr == expected.pc)
                     );
                     assert_eq!(
-                        cpu.complete_cycle(Some(operand))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(operand)))
                             .map(instruction_complete)
                             .unwrap(),
                         !taken
@@ -184,7 +193,11 @@ fn conditional_jumps_cover_all_offsets_flags_wraps_and_captured_decisions() {
                     assert_eq!(cpu.snapshot(), expected);
                     if taken {
                         assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
-                        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                        assert!(
+                            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                                .map(instruction_complete)
+                                .unwrap()
+                        );
                         let signed = if operand < 128 {
                             i32::from(operand)
                         } else {

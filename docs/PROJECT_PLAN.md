@@ -1,4 +1,8 @@
 # Game Boy emulator project plan
+
+## Current next task - approved late-selection design, 2026-11-17
+
+[#40 late interrupt selection](https://github.com/Lorithan/gameboy-emu/issues/40) now has a [proposed contract](tasks/LATE_INTERRUPT_SELECTION.md). Review CycleResponse::{Read(u8), WriteDone { interrupts: InterruptSample }, IdleDone}, explicit completion/acknowledgment effects, response-kind validation and cancellation outcomes before user implementation. The user approved CycleResponse and the wider sampled-input/completion-effect design. The user approved the revised proposal on 2026-11-17; implementation has not started. Begin with the response/effect protocol migration, preserving instruction behavior before changing entry selection. Every write response carries mandatory samples; ordinary writes ignore them, and read/idle responses carry no samples. System need not inspect private CPU phases. The schedule latches IE after the high stack write and combines it with IF sampled before the low write, then acknowledges after that low write. Hardware-tested IE cases and less-certain IF collision ordering are distinguished explicitly. The implemented #39 early-ack/captured-source behavior remains unchanged until this proposal is approved and implemented. RETI follows as a separate instruction task.
 ## Current checkpoint - interrupt entry complete, 2026-11-17
 
 The user completed the first-stage #39 interrupt-entry implementation and removed obsolete staged dead-code allowances. All 349 tests pass (249 unit, 100 integration), with nine focused entry tests also passing after all-flag coverage. Formatting, strict Clippy and whitespace checks pass after allowance cleanup. No external ROM suite ran. This checkpoint supersedes earlier next-task/unimplemented notes below; see [entry evidence](tasks/INTERRUPT_ENTRY.md). Source/vector capture and acknowledgment at acceptance remain the documented approximation.
@@ -253,3 +257,9 @@ Current next implementation: CPU acceptance and captured five-cycle entry states
 CPU acceptance, five entry states and System pending/acknowledgment coordination under #39 are implemented and verified locally. All 349 tests pass (249 unit, 100 integration); focused entry tests also cover all flags, formatting/strict Clippy/whitespace checks pass. No correctness defect found within the specified coarse model. No external ROM suite ran. See [acceptance evidence](tasks/INTERRUPT_ENTRY.md). The transition refactor was committed as 24f9739; entry implementation and tests are uncommitted. #39 remains open pending checkpoint review/commit. Remove obsolete staged dead-code allowances where production callers now exist before closing the checkpoint.
 
 Hardware late selection/IE stack-write cancellation remains #40. RETI and HALT/STOP remain separate contracts; frontend/peripherals and required-read extraction remain deferred.
+
+## Response-protocol validation - 2026-11-17
+
+The #40 CycleResponse migration slice is implemented and verified: all 352 tests pass (252 unit, 100 integration), formatting/strict Clippy/whitespace checks pass. A lost signed JR conversion found by regression tests was fixed by the user; obsolete MissingReadValue is removed. Assistant migrated tests and added three response-protocol checks. No external ROM suite ran. Changes uncommitted. See [evidence](tasks/LATE_INTERRUPT_SELECTION.md).
+
+Remaining #40 work: explicit CycleCompletion effects/private transitions, late source selection, cancellation, and System acknowledgment integration. Current entry still follows #39; do not treat sampled register construction alone as late-selection correctness.

@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
 fn machine(flags: u8, pc: u16) -> CPU {
@@ -27,7 +28,7 @@ fn absolute_a_every_target_address_uses_little_endian_without_early_effects() {
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                 );
                 assert!(
-                    !cpu.complete_cycle(Some(byte))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -38,14 +39,18 @@ fn absolute_a_every_target_address_uses_little_endian_without_early_effects() {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: 0x5A }) if actual == addr)
                 );
-                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                assert!(
+                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
             } else {
                 assert!(
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                 );
                 let value = (addr % 256) as u8;
                 assert!(
-                    cpu.complete_cycle(Some(value))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(value)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -72,12 +77,12 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }
                     assert!(
-                        !cpu.complete_cycle(Some(byte))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -103,17 +108,21 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                             Ok(CycleAction::Read { addr: 0xC134 })
                         ));
                         assert!(matches!(
-                            cpu.complete_cycle(None).map(instruction_complete),
-                            Err(CpuError::MissingReadValue { addr: 0xC134 })
+                            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xC134 })
                         ));
                     }
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 if store {
-                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                    assert!(
+                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                 } else {
                     assert!(
-                        cpu.complete_cycle(Some(0x69))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(0x69)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -124,7 +133,7 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(3))
                 );
                 assert!(
-                    cpu.complete_cycle(Some(0))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
                         .map(instruction_complete)
                         .unwrap()
                 );

@@ -1,3 +1,4 @@
+mod cycles;
 mod opcode;
 mod registers;
 mod state;
@@ -7,6 +8,7 @@ mod tests;
 
 use std::ops::{Shl, Shr};
 
+pub use cycles::*;
 pub use registers::Registers;
 
 use crate::{
@@ -37,20 +39,6 @@ pub struct CpuSnapShot {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CycleAction {
-    Idle,
-    Read { addr: u16 },
-    Write { addr: u16, value: u8 },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CycleOutcome {
-    InProgress,
-    InstructionComplete,
-    InterruptEntryComplete { vector: u16 },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpcodeEncoding {
     Base(u8),
     Cb(u8),
@@ -65,7 +53,7 @@ pub struct CpuFault {
 #[derive(Debug, Clone, Copy)]
 pub enum CpuError {
     UnsupportedOpcode(CpuFault),
-    MissingReadValue { addr: u16 },
+    UnexpectedCycleResponse(UnexpectedCycleResponse),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,10 +171,24 @@ impl CPU {
         }
     }
 
-    pub fn complete_cycle(&mut self, read_value: Option<u8>) -> Result<CycleOutcome, CpuError> {
+    pub fn complete_cycle(&mut self, response: CycleResponse) -> Result<CycleOutcome, CpuError> {
         let enable_was_pending = self.interrupt_state == InterruptState::Delayed;
 
-        match self.complete_cycle_inner(read_value)? {
+        let expected_kind = match self.request_cycle()? {
+            CycleAction::Idle => CycleKind::Idle,
+            CycleAction::Read { .. } => CycleKind::Read,
+            CycleAction::Write { .. } => CycleKind::Write,
+        };
+        let actual_kind = response.kind();
+
+        if expected_kind != actual_kind {
+            return Err(CpuError::UnexpectedCycleResponse(UnexpectedCycleResponse {
+                expected: expected_kind,
+                received: actual_kind,
+            }));
+        }
+
+        match self.complete_cycle_inner(response)? {
             CycleTransition::Continue(next_state) => {
                 self.state = next_state;
                 Ok(CycleOutcome::InProgress)
@@ -240,19 +242,12 @@ impl CPU {
 
     fn complete_cycle_inner(
         &mut self,
-        read_value: Option<u8>,
+        response: CycleResponse,
     ) -> Result<CycleTransition, CpuError> {
         match self.state {
-            FetchOpcode => self.read_opcode(read_value),
+            FetchOpcode => self.read_opcode(response.read_value()?),
             DecodeCbOpcode => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let value = response.read_value()?;
                 self.registers.increment_pc();
 
                 let (target, cb_type) = match DecodedCbOpcode::try_from(value) {
@@ -309,12 +304,7 @@ impl CPU {
                 }
             }
             ReadHLForCbOpcode { addr, cb_type } => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let value = response.read_value()?;
 
                 match cb_type {
                     CbType::Transform(operation) => {
@@ -346,14 +336,7 @@ impl CPU {
                 }
             }
             ReadDisplacement { taken } => {
-                let value = match read_value {
-                    Some(byte) => byte as i8,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let value = response.read_value()? as i8;
                 self.registers.increment_pc();
                 if taken {
                     let next_state = ExecutionState::ApplyJump {
@@ -369,32 +352,19 @@ impl CPU {
 
                 Ok(CycleTransition::InstructionFinished)
             }
-            ReadImmediate8 { target } => match target {
-                Destination::Register(register) => self.store_immediate(register, read_value),
-                Destination::Memory(addr) => {
-                    let value = match read_value {
-                        Some(byte) => byte,
-                        None => {
-                            return Err(CpuError::MissingReadValue {
-                                addr: self.registers.pc,
-                            });
-                        }
-                    };
-
-                    self.registers.increment_pc();
-                    let next_state = ExecutionState::WriteMemory { addr, value };
-                    Ok(CycleTransition::Continue(next_state))
-                }
-            },
-            ReadImmediate16Low { destination } => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
+            ReadImmediate8 { target } => {
+                let value = response.read_value()?;
+                match target {
+                    Destination::Register(register) => self.store_immediate(register, value),
+                    Destination::Memory(addr) => {
+                        self.registers.increment_pc();
+                        let next_state = ExecutionState::WriteMemory { addr, value };
+                        Ok(CycleTransition::Continue(next_state))
                     }
-                };
+                }
+            }
+            ReadImmediate16Low { destination } => {
+                let value = response.read_value()?;
 
                 self.registers.increment_pc();
                 let next_state = ReadImmediate16High {
@@ -404,31 +374,17 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadImmediate16High { destination, low } => {
-                self.store_immediate_word(destination, low, read_value)
+                self.store_immediate_word(destination, low, response.read_value()?)
             }
             ReadJumpLow { taken } => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let value = response.read_value()?;
 
                 self.registers.increment_pc();
                 let next_state = ReadJumpHigh { taken, low: value };
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadJumpHigh { taken, low } => {
-                let value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let value = response.read_value()?;
 
                 self.registers.increment_pc();
 
@@ -441,9 +397,11 @@ impl CPU {
                     Ok(CycleTransition::InstructionFinished)
                 }
             }
-            ReadMemory { destination, addr } => self.store_fetched(destination, addr, read_value),
+            ReadMemory { destination, .. } => {
+                self.store_fetched(destination, response.read_value()?)
+            }
             ReadMemoryAndUpdateHL { addr, operation } => {
-                self.store_fetched(Register::A, addr, read_value)?;
+                self.store_fetched(Register::A, response.read_value()?)?;
                 let hl = match operation {
                     UnaryOperation::Increment => addr.wrapping_add(1),
                     UnaryOperation::Decrement => addr.wrapping_sub(1),
@@ -453,12 +411,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadOperation { addr, operation } => {
-                let mut value = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let mut value = response.read_value()?;
                 value = match operation {
                     UnaryOperation::Increment => self.increment(value),
                     UnaryOperation::Decrement => self.decrement(value),
@@ -471,14 +424,7 @@ impl CPU {
                 value: left,
                 operation,
             } => {
-                let right = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let right = response.read_value()?;
 
                 self.execute_accumulator(operation, left, right);
 
@@ -486,16 +432,11 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadMemoryAccumulator {
-                addr,
                 value: left,
                 operation,
+                ..
             } => {
-                let right = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let right = response.read_value()?;
 
                 self.execute_accumulator(operation, left, right);
 
@@ -532,12 +473,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             PopLow { addr, target } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let low = response.read_value()?;
 
                 self.registers.sp = addr.wrapping_add(1);
                 let next_state = PopHigh {
@@ -548,12 +484,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             PopHigh { addr, low, target } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let high = response.read_value()?;
 
                 let value = (high as u16) << 8 | low as u16;
 
@@ -568,14 +499,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadCallLow { taken, stack_addr } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let low = response.read_value()?;
 
                 self.registers.increment_pc();
                 let next_state = ReadCallHigh {
@@ -590,14 +514,7 @@ impl CPU {
                 low,
                 stack_addr,
             } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let high = response.read_value()?;
                 self.registers.increment_pc();
 
                 let jump_addr = (high as u16) << 8 | low as u16;
@@ -656,12 +573,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadReturnLow { addr } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let low = response.read_value()?;
                 self.registers.set_sp(addr.wrapping_add(1));
 
                 let next_state = ReadReturnHigh {
@@ -671,12 +583,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadReturnHigh { addr, low } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue { addr });
-                    }
-                };
+                let high = response.read_value()?;
                 self.registers.set_sp(addr.wrapping_add(1));
 
                 let jump_addr = (high as u16) << 8 | low as u16;
@@ -715,14 +622,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadSpOffset { sp, hl } => {
-                let offset = match read_value {
-                    Some(byte) => byte as i8,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let offset = response.read_value()? as i8;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let next_state = if hl {
@@ -737,28 +637,14 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadAbsoluteLow => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let low = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let next_state = ReadAbsoluteHigh { low };
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadAbsoluteHigh { low } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let high = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let addr = ((high as u16) << 8) | low as u16;
@@ -770,28 +656,14 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             StoreAToAbsoluteLow { value } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let low = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let next_state = StoreAToAbsoluteHigh { value, low };
                 Ok(CycleTransition::Continue(next_state))
             }
             StoreAToAbsoluteHigh { value, low } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let high = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let addr = ((high as u16) << 8) | low as u16;
@@ -820,14 +692,7 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadHighMemoryImmediate { store } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let low = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let addr = (0xFF00) | low as u16;
@@ -847,28 +712,15 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             ReadLowToStoreSp { sp } => {
-                let low = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let low = response.read_value()?;
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let next_state = ReadHighToStoreSp { sp, low };
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadHighToStoreSp { sp, low } => {
-                let high = match read_value {
-                    Some(byte) => byte,
-                    None => {
-                        return Err(CpuError::MissingReadValue {
-                            addr: self.registers.pc,
-                        });
-                    }
-                };
+                let high = response.read_value()?;
+
                 self.registers.pc = self.registers.pc.wrapping_add(1);
 
                 let addr = (high as u16) << 8 | low as u16;
@@ -930,15 +782,8 @@ impl CPU {
         }
     }
 
-    fn read_opcode(&mut self, read_value: Option<u8>) -> Result<CycleTransition, CpuError> {
-        let (opcode, byte) = match read_value {
-            Some(byte) => (DecodedOpcode::from(byte), byte),
-            None => {
-                return Err(CpuError::MissingReadValue {
-                    addr: self.registers.pc,
-                });
-            }
-        };
+    fn read_opcode(&mut self, response: u8) -> Result<CycleTransition, CpuError> {
+        let opcode = DecodedOpcode::from(response);
 
         let op_addr = self.registers.pc;
         self.registers.increment_pc();
@@ -1320,7 +1165,7 @@ impl CPU {
             }
             DecodedOpcode::Unknown => {
                 let fault = CpuFault {
-                    opcode: OpcodeEncoding::Base(byte),
+                    opcode: OpcodeEncoding::Base(response),
                     addr: op_addr,
                 };
                 Ok(CycleTransition::Faulted(fault))
@@ -1331,17 +1176,8 @@ impl CPU {
     fn store_immediate(
         &mut self,
         register: Register,
-        read_value: Option<u8>,
+        value: u8,
     ) -> Result<CycleTransition, CpuError> {
-        let value = match read_value {
-            Some(byte) => byte,
-            None => {
-                return Err(CpuError::MissingReadValue {
-                    addr: self.registers.pc,
-                });
-            }
-        };
-
         self.set_register(register, value);
 
         self.registers.increment_pc();
@@ -1351,16 +1187,8 @@ impl CPU {
     fn store_fetched(
         &mut self,
         destination: Register,
-        addr: u16,
-        read_value: Option<u8>,
+        value: u8,
     ) -> Result<CycleTransition, CpuError> {
-        let value = match read_value {
-            Some(byte) => byte,
-            None => {
-                return Err(CpuError::MissingReadValue { addr });
-            }
-        };
-
         self.set_register(destination, value);
 
         Ok(CycleTransition::InstructionFinished)
@@ -1394,18 +1222,9 @@ impl CPU {
         &mut self,
         destination: Register16,
         low: u8,
-        read_value: Option<u8>,
+        value: u8,
     ) -> Result<CycleTransition, CpuError> {
-        let high_value = match read_value {
-            Some(byte) => byte,
-            None => {
-                return Err(CpuError::MissingReadValue {
-                    addr: self.registers.pc,
-                });
-            }
-        };
-
-        let value = (high_value as u16) << 8 | low as u16;
+        let value = (value as u16) << 8 | low as u16;
 
         match destination {
             Register16::BC => self.registers.set_bc(value),

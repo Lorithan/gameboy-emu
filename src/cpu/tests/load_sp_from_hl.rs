@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
 fn machine(hl: u16, flags: u8, pc: u16) -> CPU {
@@ -22,13 +23,17 @@ fn load_sp_from_hl_all_values_commit_on_idle_and_continue_to_next_opcode() {
         let mut expected = cpu.snapshot();
         expected.pc += 1;
         assert!(
-            !cpu.complete_cycle(Some(0xF9))
+            !cpu.complete_cycle(response(cpu.request_cycle(), Some(0xF9)))
                 .map(instruction_complete)
                 .unwrap()
         );
         assert_eq!(cpu.snapshot(), expected);
         assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
-        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+        assert!(
+            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                .map(instruction_complete)
+                .unwrap()
+        );
         expected.sp = hl;
         assert_eq!(cpu.snapshot(), expected);
         assert!(matches!(
@@ -36,7 +41,7 @@ fn load_sp_from_hl_all_values_commit_on_idle_and_continue_to_next_opcode() {
             Ok(CycleAction::Read { addr: 0x0101 })
         ));
         assert!(
-            cpu.complete_cycle(Some(0))
+            cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
                 .map(instruction_complete)
                 .unwrap()
         );
@@ -51,12 +56,12 @@ fn load_sp_from_hl_captures_source_with_all_flags_retries_and_pc_wrap() {
             let mut cpu = machine(hl, flags, 0xFFFF);
             let before = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(None).map(instruction_complete),
-                Err(CpuError::MissingReadValue { addr: 0xFFFF })
+                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
             ));
             assert_eq!(cpu.snapshot(), before);
             assert!(
-                !cpu.complete_cycle(Some(0xF9))
+                !cpu.complete_cycle(response(cpu.request_cycle(), Some(0xF9)))
                     .map(instruction_complete)
                     .unwrap()
             );
@@ -69,7 +74,11 @@ fn load_sp_from_hl_captures_source_with_all_flags_retries_and_pc_wrap() {
                 assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
                 assert_eq!(cpu.snapshot(), changed);
             }
-            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+            assert!(
+                cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             let mut expected = changed;
             expected.sp = hl;
             assert_eq!(cpu.snapshot(), expected);

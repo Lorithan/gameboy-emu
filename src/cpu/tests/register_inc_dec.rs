@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
@@ -81,7 +82,7 @@ fn check_every_value_and_flags(increment: bool) {
                 let mut cpu = machine(target, value, combination << 4, 0x0100);
                 let reference = expected(cpu.snapshot(), target, value, increment);
                 assert!(
-                    cpu.complete_cycle(Some(opcode))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .expect("register arithmetic")
                 );
@@ -123,13 +124,13 @@ fn inc_dec_opcode_reads_can_be_retried_at_the_pc_wrap_boundary() {
                     Ok(CycleAction::Read { addr: 0xFFFF })
                 ));
                 assert!(matches!(
-                    cpu.complete_cycle(None).map(instruction_complete),
-                    Err(CpuError::MissingReadValue { addr: 0xFFFF })
+                    cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                    Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
             }
             assert!(
-                cpu.complete_cycle(Some(opcode))
+                cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                     .map(instruction_complete)
                     .expect("retry opcode")
             );

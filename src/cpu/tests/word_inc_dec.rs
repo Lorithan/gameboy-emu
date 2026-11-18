@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
 use crate::cpu::CpuSnapShot;
@@ -78,13 +79,17 @@ fn word_inc_dec_exhaustive_values_commit_only_on_idle_and_preserve_flags() {
             let mut pending = cpu.snapshot();
             pending.pc += 1;
             assert!(
-                !cpu.complete_cycle(Some(opcode))
+                !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                     .map(instruction_complete)
                     .unwrap()
             );
             assert_eq!(cpu.snapshot(), pending);
             assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
-            assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+            assert!(
+                cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    .map(instruction_complete)
+                    .unwrap()
+            );
             assert_eq!(
                 cpu.snapshot(),
                 expected(pending, target, result(value, increment)),
@@ -102,12 +107,12 @@ fn word_inc_dec_capture_values_through_requests_retries_and_pc_wrap() {
                 let mut cpu = machine(target, value, flags, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(matches!(
-                    cpu.complete_cycle(None).map(instruction_complete),
-                    Err(CpuError::MissingReadValue { addr: 0xFFFF })
+                    cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                    Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
                 assert!(
-                    !cpu.complete_cycle(Some(opcode))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -121,7 +126,11 @@ fn word_inc_dec_capture_values_through_requests_retries_and_pc_wrap() {
                     assert!(matches!(cpu.request_cycle(), Ok(CycleAction::Idle)));
                     assert_eq!(cpu.snapshot(), changed);
                 }
-                assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                assert!(
+                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        .map(instruction_complete)
+                        .unwrap()
+                );
                 assert_eq!(
                     cpu.snapshot(),
                     expected(pending, target, result(value, increment))
@@ -137,27 +146,35 @@ fn word_inc_dec_completion_resumes_opcode_fetch_and_runs_inverse() {
         let mut cpu = machine(target, 0xFFFF, 0xF0, 0x0100);
         let before = cpu.snapshot();
         assert!(
-            !cpu.complete_cycle(Some(opcode))
+            !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                 .map(instruction_complete)
                 .unwrap()
         );
-        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+        assert!(
+            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                .map(instruction_complete)
+                .unwrap()
+        );
         assert!(
             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: 0x0101 })),
             "opcode {opcode:02X} must leave its idle state after completion"
         );
         let inverse = if increment { opcode + 8 } else { opcode - 8 };
         assert!(
-            !cpu.complete_cycle(Some(inverse))
+            !cpu.complete_cycle(response(cpu.request_cycle(), Some(inverse)))
                 .map(instruction_complete)
                 .unwrap()
         );
-        assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+        assert!(
+            cpu.complete_cycle(response(cpu.request_cycle(), None))
+                .map(instruction_complete)
+                .unwrap()
+        );
         let mut expected = before;
         expected.pc += 2;
         assert_eq!(cpu.snapshot(), expected);
         assert!(
-            cpu.complete_cycle(Some(0x00))
+            cpu.complete_cycle(response(cpu.request_cycle(), Some(0x00)))
                 .map(instruction_complete)
                 .unwrap()
         );

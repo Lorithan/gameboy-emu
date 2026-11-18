@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
@@ -75,7 +76,7 @@ fn all_operand_pairs_match_reference_and_finish_at_the_correct_pc() {
             for right in 0u8..=255 {
                 let mut cpu = machine(left, (left ^ right) & 0xF0, 0x0100);
                 let before = cpu.snapshot();
-                cpu.complete_cycle(Some(opcode))
+                cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                     .map(instruction_complete)
                     .expect("opcode read");
                 let mut pending = before;
@@ -90,7 +91,7 @@ fn all_operand_pairs_match_reference_and_finish_at_the_correct_pc() {
                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                 );
                 assert!(
-                    cpu.complete_cycle(Some(right))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
                         .map(instruction_complete)
                         .expect("operand read")
                 );
@@ -120,11 +121,11 @@ fn retries_wrap_pc_and_preserve_captured_a_address_and_initial_flags() {
                 let mut cpu = machine(0x42, combination << 4, start);
                 let before = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: start }))
                 );
                 assert_eq!(cpu.snapshot(), before);
                 assert!(
-                    !cpu.complete_cycle(Some(opcode))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .expect("retry opcode")
                 );
@@ -142,12 +143,12 @@ fn retries_wrap_pc_and_preserve_captured_a_address_and_initial_flags() {
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr: actual }) if actual == address)
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
                     );
                     assert_eq!(cpu.snapshot(), pending);
                 }
                 assert!(
-                    cpu.complete_cycle(Some(0x10))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0x10)))
                         .map(instruction_complete)
                         .expect("retry operand")
                 );
@@ -175,12 +176,12 @@ fn boundary_operands_overwrite_every_initial_flag_combination_for_each_source_ki
                     expected.pc += if immediate { 2 } else { 1 };
                     expected = reference(expected, left, right, add);
                     assert!(
-                        !cpu.complete_cycle(Some(opcode))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                             .map(instruction_complete)
                             .expect("opcode")
                     );
                     assert!(
-                        cpu.complete_cycle(Some(right))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
                             .map(instruction_complete)
                             .expect("operand")
                     );

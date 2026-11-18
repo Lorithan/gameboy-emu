@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
@@ -78,7 +79,7 @@ fn check_all_pairs(add: bool) {
                 let mut cpu = machine(left, right, source, flags, 0x0100);
                 let expected = reference(cpu.snapshot(), left, right, add);
                 assert!(
-                    cpu.complete_cycle(Some(opcode))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .expect("binary arithmetic")
                 );
@@ -110,7 +111,7 @@ fn self_source_reads_original_a_twice_and_overwrites_all_initial_flags() {
                 let mut cpu = machine(value, value, Register::A, combination << 4, 0x0100);
                 let expected = reference(cpu.snapshot(), value, value, add);
                 assert!(
-                    cpu.complete_cycle(Some(opcode))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .expect("self-source arithmetic")
                 );
@@ -138,13 +139,13 @@ fn boundaries_overwrite_all_flags_and_opcode_retry_wraps_pc() {
                                 Ok(CycleAction::Read { addr: 0xFFFF })
                             ));
                             assert!(matches!(
-                                cpu.complete_cycle(None).map(instruction_complete),
-                                Err(CpuError::MissingReadValue { addr: 0xFFFF })
+                                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
                             ));
                             assert_eq!(cpu.snapshot(), before);
                         }
                         assert!(
-                            cpu.complete_cycle(Some(opcode))
+                            cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                                 .map(instruction_complete)
                                 .expect("retry arithmetic opcode")
                         );

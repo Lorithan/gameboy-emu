@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CpuSnapShot, CycleAction, Registers,
@@ -95,7 +96,7 @@ fn comparison_all_operand_pairs_change_only_flags_and_pc() {
                 let before = cpu.snapshot();
                 let register = matches!(source, Source::Register(_));
                 assert_eq!(
-                    cpu.complete_cycle(Some(opcode))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .expect("opcode"),
                     register
@@ -113,7 +114,7 @@ fn comparison_all_operand_pairs_change_only_flags_and_pc() {
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        cpu.complete_cycle(Some(right))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
                             .map(instruction_complete)
                             .expect("operand")
                     );
@@ -148,7 +149,7 @@ fn self_comparison_preserves_every_a_value_and_overwrites_all_flags() {
             expected.af = u16::from(value) << 8 | 0xC0;
             expected.pc += 1;
             assert!(
-                cpu.complete_cycle(Some(0xBF))
+                cpu.complete_cycle(response(cpu.request_cycle(), Some(0xBF)))
                     .map(instruction_complete)
                     .expect("CP A,A")
             );
@@ -170,12 +171,12 @@ fn comparison_boundaries_ignore_carry_and_retain_reads_across_retry_and_wrap() {
                         let mut cpu = machine(left, right, source, combination << 4, start);
                         let before = cpu.snapshot();
                         assert!(
-                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == start)
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: start }))
                         );
                         assert_eq!(cpu.snapshot(), before);
                         let register = matches!(source, Source::Register(_));
                         assert_eq!(
-                            cpu.complete_cycle(Some(opcode))
+                            cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                                 .map(instruction_complete)
                                 .expect("retry opcode"),
                             register
@@ -199,12 +200,12 @@ fn comparison_boundaries_ignore_carry_and_retain_reads_across_retry_and_wrap() {
                                     matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                                 );
                                 assert!(
-                                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == address)
+                                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
                                 );
                                 assert_eq!(cpu.snapshot(), expected);
                             }
                             assert!(
-                                cpu.complete_cycle(Some(right))
+                                cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
                                     .map(instruction_complete)
                                     .expect("retry operand")
                             );

@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CycleAction, Registers,
@@ -50,7 +51,7 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
                 let mut cpu = machine(offset, value, value & 0xF0, 0x0100);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    !cpu.complete_cycle(Some(opcode))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -62,7 +63,7 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
                         Ok(CycleAction::Read { addr: 0x0101 })
                     ));
                     assert!(
-                        !cpu.complete_cycle(Some(offset))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(offset)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -74,13 +75,17 @@ fn ldh_all_offsets_and_bytes_use_the_high_page_and_preserve_flags() {
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value: actual }) if addr == address && actual == value)
                     );
-                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                    assert!(
+                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                 } else {
                     assert!(
                         matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        cpu.complete_cycle(Some(255 - value))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(255 - value)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -102,11 +107,11 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                 let mut cpu = machine(0x80, 0x5A, flags, pc);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == pc)
+                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    !cpu.complete_cycle(Some(opcode))
+                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
                         .map(instruction_complete)
                         .unwrap()
                 );
@@ -122,12 +127,12 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                             matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(None).map(instruction_complete), Err(CpuError::MissingReadValue { addr }) if addr == expected.pc)
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }
                     assert!(
-                        !cpu.complete_cycle(Some(0x80))
+                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(0x80)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -149,17 +154,21 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                             Ok(CycleAction::Read { addr: 0xFF80 })
                         ));
                         assert!(matches!(
-                            cpu.complete_cycle(None).map(instruction_complete),
-                            Err(CpuError::MissingReadValue { addr: 0xFF80 })
+                            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
+                            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFF80 })
                         ));
                     }
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 if store {
-                    assert!(cpu.complete_cycle(None).map(instruction_complete).unwrap());
+                    assert!(
+                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                            .map(instruction_complete)
+                            .unwrap()
+                    );
                 } else {
                     assert!(
-                        cpu.complete_cycle(Some(0x69))
+                        cpu.complete_cycle(response(cpu.request_cycle(), Some(0x69)))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -167,7 +176,7 @@ fn ldh_captured_address_and_store_data_survive_retries_and_pc_wrap() {
                 }
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    cpu.complete_cycle(Some(0))
+                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
                         .map(instruction_complete)
                         .unwrap()
                 );
