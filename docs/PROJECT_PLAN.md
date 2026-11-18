@@ -1,4 +1,10 @@
 # Game Boy emulator project plan
+
+## Current next design review - HALT, 2026-11-18
+
+[#42 HALT](https://github.com/Lorithan/gameboy-emu/issues/42) is specified in [HALT.md](tasks/HALT.md). Before implementation, review mandatory pending-mask data on read responses, a Halted state and instruction-completion transition, wake polling before ordinary interrupt acceptance, and one-shot opcode increment suppression. The EI;HALT return-address translation into our non-prefetch M-cycle model is explicit and requires review. These are proposals, not yet approved implementation details. Baseline a40668f retains 361-test verification; no new emulator tests were run for this documentation-only task.
+
+Implement in slices: read-response migration first, then ordinary HALT/wake, then the bug and EI/RST/CB interactions. User owns application implementation; assistant owns tests/docs/review. Do not claim HALT complete until the interaction cases pass. Coverage remains 242/244 base plus all CB; STOP is separately scoped. Physical edge/device timing and external ROM validation remain unverified.
 ## Current checkpoint - RETI complete, 2026-11-18
 
 #41 RETI is implemented and verified: all 361 tests pass (261 unit, 100 integration), all six focused RETI tests pass, formatting/strict Clippy/whitespace checks pass. Typed return mode shares stack reads/final return handling with RET, enabling IME at final RETI completion. Synthetic chained interrupt handlers run before the returned-to opcode as required. See [acceptance evidence](tasks/RETI.md). No application correctness fixes were needed during review. No external ROM suite ran.
