@@ -1,4 +1,10 @@
 # Game Boy emulator project plan
+
+## Current next task - RETI, 2026-11-18
+
+[#41 RETI](https://github.com/Lorithan/gameboy-emu/issues/41) is specified in [RETI.md](tasks/RETI.md). Implement D9 as four cycles (opcode read, low stack read, high stack read, final idle), restoring PC/SP and enabling IME at final completion with no following-instruction delay. Proposed architecture carries a typed return mode through shared return states and a return-specific final idle; exact private names remain user choices. User implements; assistant owns acceptance tests/review. Baseline is published 11a2eca with the prior 355-test validation. RETI is not implemented yet; coverage remains 241/244 non-prefix base and 256/256 CB.
+
+Begin with the decoded RETI operation and return-mode/final-state representation. Preserve RET/conditional-return and JR/JP timing. Tests will verify immediate pending-interrupt entry before the returned-to opcode, all budget/retry/wrap/capture cases and existing regressions. No external ROM imported/run. HALT/STOP and finer device/IF collision timing remain separate. This supersedes older next-task statements below.
 ## Current checkpoint - late interrupt selection complete, 2026-11-18
 
 #40 late selection/cancellation is implemented and verified: all 355 tests pass (255 unit, 100 integration), 13 focused entry tests pass, formatting/strict Clippy/whitespace checks pass. CPU latches IE after the upper stack write and resolves against IF sampled before the lower write; System acknowledges only the cycle-4 InterruptSelected event. Cancellation completes both writes/five cycles, lands at 0000, leaves IME disabled and reports a distinct result. The public enum event replaces the proposed CycleCompletion struct. See [acceptance evidence](tasks/LATE_INTERRUPT_SELECTION.md). Synthetic hardware-derived IE cases pass; no external ROM suite ran and no physical edge/IF collision accuracy is claimed.
