@@ -1,0 +1,101 @@
+# STOP: core standby and device prerequisites
+
+Core task: [#43](https://github.com/Lorithan/gameboy-emu/issues/43), M2. Device follow-up: [#44](https://github.com/Lorithan/gameboy-emu/issues/44), dependent on M3 divider/timer and M4 joypad work.
+
+Status: proposed architecture, 2026-11-18. Review this contract before implementing dependent changes. User owns application implementation; assistant owns tests, documentation and review. Names below are proposals; the required distinctions matter more than their spelling.
+
+Baseline: published b9c765e, 371 previously passing tests (271 unit, 100 integration), formatting and strict Clippy passing. STOP is currently unsupported; coverage remains 243/244 legal non-prefix base plus all 256 CB encodings. No emulator tests were rerun for this documentation-only proposal.
+
+## Scope and evidence
+
+STOP is not another HALT. Pan Docs describes wake through selected P10-P13 joypad lines and conditional STOP/HALT/NOP/one-byte behavior. RGBDS documents the usual two-byte encoding, default padding 00, unchanged flags, and deliberately gives no fixed cycle count. Neither justifies a universal two-byte/two-M-cycle implementation.
+
+The CPU-internals reference describes clock suspension and fetch overlap, with different outcomes depending on WAKE and pending interrupts. Our current CPU model has no hardware prefetch pipeline or WAKE input. Translating ordinary standby into one opcode-read M-cycle and a skipped padding address is a **project approximation**, not evidence of exact STOP bus timing.
+
+Pan Docs also requires DIV reset on STOP and suspension until STOP ends. DIV and JOYP do not exist yet. Implement the core scheduling distinction now; integrate those device effects in #44. Keep the limits visible when reporting opcode coverage.
+
+## Proposed ownership and interfaces
+
+Keep CycleAction::{Read, Write, Idle} as actual clocked bus/internal actions. Idle still means one M-cycle; it must retain HALT's four-tick behavior.
+
+| Owner/location | Proposed type/change | Meaning |
+| --- | --- | --- |
+| CPU, cpu/cycles.rs | CycleRequest::{Execute(CycleAction), Stopped} | A real next cycle or no cycle while the clock is stopped |
+| CPU request_cycle | Result<CycleRequest, CpuError> | Immutable, repeatable query; faults retain existing error behavior |
+| CPU private state module | ExecutionState::Stopped, CycleTransition::StopFinished | Persistent standby and the one-time instruction transition into it |
+| CPU completion protocol | CycleOutcome::StopEntered | This instruction completed and entered standby; one event, rather than an outcome plus an independent boolean |
+| System, system.rs | MachineStep::{Cycle(CycleTrace), Stopped} | A real trace or a normal no-cycle result |
+| System step_machine_cycle | Result<MachineStep, SystemError> | Can report a stopped clock without manufacturing a CycleRecord |
+| System bounded wrapper | InstructionStep::Stopped { mcycles, ticks } | Stop running and report actual work consumed by this invocation |
+
+CPU owns execution state and IME. System owns scheduling and the accumulated elapsed_ticks counter. Bus will own divider/joypad state. Do not add a second stopped boolean to System or let CPU access Bus. No new CycleResponse variant is needed because there is no cycle to complete while stopped.
+
+Propose CpuError::NoCycleRequested for a caller that invokes complete_cycle while request_cycle reports Stopped. This is protocol misuse, not a normal step result. Reject every response in that state before mutation; never accept IdleDone as a polling operation. Preserve sticky fault precedence and existing wrong-kind validation for real cycles. The completion wrapper must gate the inner completion handler on a real request.
+
+## Proposed ordinary standby behavior
+
+For the supported ordinary case, an unsuppressed opcode fetch at P reads 10, advances the usual opcode PC, then skips the padding address with wrapping arithmetic. The resulting PC is P+2 modulo 65536. Preserve general registers, F and SP. There is no added padding read or extra Idle action in this approximation.
+
+The validated opcode completion yields StopFinished. The shared wrapper installs Stopped and emits StopEntered exactly once. Include StopEntered in shared instruction-boundary delayed-EI promotion: EI;STOP matures EI at STOP completion; polling never promotes it again. STOP does not independently enable or disable IME.
+
+Existing HALT suppression still belongs to the successful opcode-fetch path. Do not add a second suppression mechanism or recompute PC from P in a way that bypasses the existing latch. Its composition with STOP can be tested for internal consistency, but hardware HALT/STOP interaction remains unverified and belongs to #44.
+
+In this first approximation, every decoded 10 takes the same standby path. CPU does not read or validate the padding value. Documented ordinary examples use 10 00; nonzero-padding and pending-at-entry/held-input hardware branches are not supported by this model. This deterministic fallback must not be described as faithful behavior for those cases.
+
+Already stopped:
+
+- request_cycle returns Stopped without mutation.
+- System returns MachineStep::Stopped before tick advancement, bus access or CPU completion. No CycleRecord exists for that call.
+- Existing HALT wake and interrupt-acceptance guards must leave Stopped alone. Changing IE/IF, including a joypad interrupt flag, does not itself resume this model or acknowledge a source.
+- No public force-resume method or synthetic joypad device in #43. Until #44, the core can report standby but cannot resume from it through emulated input.
+
+## Bounded stepping contract
+
+| Situation | step_instruction result | Work counted |
+| --- | --- | --- |
+| max_mcycles = 0, any state | BudgetExhausted | 0 cycles, 0 ticks, no mutation |
+| Ordinary STOP entered by this call | Stopped | Actual cycles through StopEntered; normally 1 cycle, 4 ticks |
+| Already stopped, positive budget | Stopped | 0 cycles, 0 ticks |
+| HALT waiting, no eligible interrupt | BudgetExhausted | Existing clocked idles, 4 ticks each |
+
+On MachineStep::Cycle, use the existing event handling plus StopEntered. On MachineStep::Stopped, return immediately without counting an iteration as a cycle. A budget limits real cycles, not polling attempts. Never loop waiting for host input inside the headless core; a future frontend can keep processing host events while emulated time is suspended.
+
+## Alternatives and reasons
+
+- **Treat STOP as HALT:** small change, but advances clocks and applies the wrong wake condition. Reject for the standby contract.
+- **Use Option for requests and machine steps:** valid and smaller; None can represent no cycle. Named enum variants communicate why there is no cycle and support explicit matching. Recommend the named variants, without adding hypothetical pause reasons.
+- **Add Stopped to CpuError for normal requests:** avoids a successful-result wrapper, but makes ordinary guest standby a failed execution step. Reserve errors for actual faults/protocol misuse.
+- **Check is_stopped in System and leave request_cycle unchanged:** requires a second convention for direct CPU callers and still needs a defined request result in Stopped. Prefer one total CPU request protocol.
+- **Defer all STOP work until devices exist:** valid if device-complete behavior is preferred. The core slice is useful now because it settles no-cycle stepping independently; #44 remains required for real wake/divider behavior.
+
+## Implementation slices and acceptance
+
+1. **Request/step protocol migration, preserving current execution.** Add the request and machine-step result types, wrap all real cycles, update complete_cycle validation and bounded stepping. Assistant migrates tests while preserving independent oracles. All 371 existing tests must still pass; no STOP decode yet.
+2. **Standby entry.** Add STOP decode, private state/transition, StopEntered and shared EI bookkeeping. Add bounded stopped results and reject completion without a cycle. Assistant replaces STOP-as-unsupported expectations with a genuinely invalid opcode and retains sticky fault checks.
+3. **Verification and checkpoint.** Run focused tests, full suite, formatting, strict Clippy and whitespace checks. Record the implemented approximation, not just successful compilation.
+
+Acceptance cases for the assistant:
+
+- Independent 10 decode classification; preserve all invalid slots and every other opcode's meaning.
+- All initial flags and IME states, PC wrapping at FFFE/FFFF, ordinary P+2 advancement, unchanged registers/SP and memory. No padding bus read, write or extra idle in the declared model.
+- Repeated request queries and wrong-kind opcode responses preserve PC/state/IME/latches. Every response while stopped fails atomically with NoCycleRequested; sticky faults still report their original error.
+- One StopEntered event/real trace on entry; repeated stopped machine steps have no trace, tick movement, memory change, EI promotion or acknowledgment.
+- Zero, one and excess instruction budgets; already-stopped positive budgets return immediately. Contrast HALT's actual idle traces and tick consumption.
+- EI;STOP, DI;STOP and pending requests after entry; enabled IME cannot bypass Stopped. Existing pre-fetch interrupt acceptance still wins before fetching a prospective STOP when eligible.
+- Preserve HALT suppression consumption in the shared fetch path, while labeling HALT/STOP composition as model consistency, not hardware conformance.
+- Existing instruction/interrupt entry, cancellation, RETI, cycle protocol, trace, wrapping and full-memory regression checks retain their oracles.
+
+Closing #43 means core standby is implemented and verified. It does not close #44, M2's ROM-validation gate, or establish complete CPU correctness. If the decode count reaches 500/500, qualify it with STOP's device and edge-behavior limitations.
+
+## Device follow-up (#44)
+
+Specify the one-shot divider-reset effect at StopEntered without resetting elapsed_ticks. Connect selected JOYP lines to a CPU wake operation through System; do not reuse HALT's IE&IF wake test. Define clock domains, host-input delivery while stopped, held inputs, pending-at-entry branches, resumed PC, wake timing and IME/IF behavior before implementing them. Revisit prefetch/bus observability and HALT/STOP interactions against evidence. Distinguish deterministic supported behavior from revision-specific oscillator/glitch behavior. CGB speed switching remains out of scope.
+
+External validation needs versioned test selection, DMG target, source/license, success protocol, prerequisites and bounded execution before importing any fixtures. No ROM source/binary has been copied or run for this task.
+
+## Sources consulted 2026-11-18
+
+- [Pan Docs power consumption / STOP](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Reducing_Power_Consumption.md): normal encoding, selected joypad wake and conditional behavior; its linked diagram needs review before device-complete branch implementation.
+- [RGBDS gbz80 STOP](https://raw.githubusercontent.com/gbdev/rgbds/master/man/gbz80.7): two-byte encoding, default 00 padding, unaffected flags and deliberately unspecified fixed cycles.
+- [SonoSooS CPU internals, NOP and STOP](https://gist.github.com/SonoSooS/c0055300670d678b5ae8433e20bea595): fetch overlap, clock suspension, WAKE/pending cases and wake glitch discussion. Used as research context, not a substitute for hardware validation.
+- [Pan Docs timer/divider registers](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_and_Divider_Registers.md): DIV reset and pause during STOP.

@@ -1,4 +1,10 @@
 # Game Boy emulator project plan
+## Current next design review - STOP, 2026-11-18
+
+[#43 core STOP standby](https://github.com/Lorithan/gameboy-emu/issues/43) is proposed in [STOP.md](tasks/STOP.md). Settle a CPU request result and System step result that distinguish real cycles from a stopped clock before decoding STOP. Proposed StopEntered represents instruction completion plus standby entry; shared delayed-EI bookkeeping includes it. Bounded callers return Stopped without manufacturing idle cycles. First implementation slice is the protocol migration with existing execution preserved; the user owns application changes and the assistant owns test migration/review.
+
+This is a proposal for ordinary core standby, not approved or implemented device-complete STOP. [#44](https://github.com/Lorithan/gameboy-emu/issues/44) tracks DIV reset/pause, selected joypad-line wake and hardware conditional/wake behavior after M3/M4 prerequisites. No force-resume API or fake peripherals in #43. Baseline remains b9c765e and the previous 371-test verification; no emulator tests rerun for this documentation-only work. Coverage stays 499/500; M2 remains open for instruction and ROM evidence. This supersedes older next-task notes below.
+
 ## Current checkpoint - HALT complete, 2026-11-18
 
 #42 HALT/wake/HALT-bug behavior is implemented and verified: all 371 tests pass (271 unit, 100 integration), ten focused HALT tests pass, formatting/strict Clippy/whitespace checks pass. System wake precedes acceptance; HALT completion matures delayed EI once while waiting idles do not. One-shot opcode suppression, wrapping, rejected acceptance, CB/RST/repeated-HALT and EI;HALT buffered-handler return addresses are covered. See [evidence](tasks/HALT.md). No external ROM suite ran and no physical device-edge accuracy is claimed.
