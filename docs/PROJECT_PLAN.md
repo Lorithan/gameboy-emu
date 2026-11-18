@@ -1,4 +1,8 @@
 # Game Boy emulator project plan
+## Current user focus - STOP device prerequisites, 2026-11-18
+
+User clarified that the requested next work is STOP divider reset and joypad wake, [#44](https://github.com/Lorithan/gameboy-emu/issues/44). The external-ROM proposal #45 remains available for later; no fixture or runner was introduced. Start by specifying divider ownership, tick advancement, FF04 reset/read behavior and startup, then headless JOYP selection/input/interrupt behavior, then ordinary STOP reset/pause/wake integration. See [roadmap](tasks/STOP.md#device-prerequisite-roadmap---2026-11-18). These device contracts require review before user implementation; the roadmap is not a claim of complete conditional STOP support. SDL2 remains deferred to M4. The last emulator verification remains 379 passing tests at 6df35c5; no tests rerun for this documentation-only clarification. M2's ROM-validation gate remains open.
+
 ## Current next design review - external CPU ROM validation, 2026-11-18
 
 [#45](https://github.com/Lorithan/gameboy-emu/issues/45) proposes a first pinned Mooneye bits/reg_f fixture and test-only bounded runner in [CPU_ROM_VALIDATION.md](tasks/CPU_ROM_VALIDATION.md). Source audit suggests current fallback I/O can support its fast report path; this is unexecuted. The proposed observer uses FF01 trace writes plus register signatures, with explicit failure/timeout/stopped outcomes. Assistant owns test infrastructure; user owns any application fixes. Before fixtures, finish artifact/digest/component provenance. No ROM binaries, application changes or dependencies added; no emulator tests rerun for this documentation-only task. Published baseline remains 6df35c5 with 379 passing tests. Keep M2 open; #44 STOP devices remains separate.
