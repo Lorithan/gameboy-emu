@@ -6,6 +6,12 @@ use crate::{
     memory::Interrupt,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum InterruptSelection {
+    Selected(Interrupt),
+    Cancelled,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum ExecutionState {
     FetchOpcode,
@@ -180,26 +186,23 @@ pub(super) enum ExecutionState {
     InterruptEntry {
         pc: u16,
         sp: u16,
-        interrupt: Interrupt,
     },
     InterruptWait {
         pc: u16,
         sp: u16,
-        interrupt: Interrupt,
     },
     InterruptPushHigh {
         pc_high: u8,
         pc_low: u8,
         sp: u16,
-        interrupt: Interrupt,
     },
     InterruptPushLow {
         pc_low: u8,
         sp: u16,
-        interrupt: Interrupt,
+        captured_enable: u8,
     },
     InterruptJump {
-        interrupt: Interrupt,
+        interrupt: InterruptSelection,
     },
     Faulted(CpuFault),
 }
@@ -208,5 +211,7 @@ pub(super) enum CycleTransition {
     Continue(ExecutionState),
     InstructionFinished,
     InterruptEntryFinished { interrupt: Interrupt },
+    InterruptSelectionResolved { interrupt: InterruptSelection },
+    InterruptEntryCancelled,
     Faulted(CpuFault),
 }

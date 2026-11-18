@@ -49,9 +49,40 @@ fn write_expected(memory: &mut [u8], addr: u16, value: u8) {
     }
 }
 
+fn selected_source(mask: u8) -> Option<Interrupt> {
+    [
+        (1, Interrupt::VBlank),
+        (2, Interrupt::LCDStat),
+        (4, Interrupt::Timer),
+        (8, Interrupt::Serial),
+        (16, Interrupt::Joypad),
+    ]
+    .into_iter()
+    .find(|(bit, _)| mask & bit != 0)
+    .map(|(_, source)| source)
+}
+
+fn expected_entry(original: &[u8], pc: u16, sp: u16, phase: u64) -> (Vec<u8>, Option<Interrupt>) {
+    let mut after_high = original.to_vec();
+    write_expected(&mut after_high, sp.wrapping_sub(1), (pc / 256) as u8);
+    let eligible = after_high[0xFFFF] & after_high[0xFF0F] & 31;
+    let selected = selected_source(eligible);
+    if phase < 3 {
+        return (original.to_vec(), selected);
+    }
+    if phase >= 4 {
+        write_expected(&mut after_high, sp.wrapping_sub(2), pc as u8);
+        if eligible != 0 {
+            let bit = (0..5).find(|i| eligible & (1 << i) != 0).unwrap();
+            after_high[0xFF0F] &= !(1 << bit);
+        }
+    }
+    (after_high, selected)
+}
+
 #[test]
 fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
-    for (mask, vector) in [(1, 0x40), (2, 0x48), (4, 0x50), (8, 0x58), (16, 0x60)] {
+    for mask in [1, 2, 4, 8, 16] {
         for sp in [
             0u16, 1, 0x8001, 0xC002, 0xE002, 0xFF10, 0xFF11, 0xFF81, 0xFFFE, 0xFFFF,
         ] {
@@ -61,6 +92,8 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                 s.memory.write(0xFF0F, 31);
                 s.memory.write(0xFFFF, mask);
                 let original: Vec<_> = (0u16..=65535).map(|a| s.memory.read(a)).collect();
+                let (_, selected) = expected_entry(&original, pc, sp, 5);
+                let vector = selected.map_or(0, |i| i.vector_address());
                 let before = s.cpu_snapshot();
                 let start = s.elapsed_ticks();
                 let result = s.step_instruction(budget).unwrap();
@@ -70,21 +103,21 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                         matches!(result, InstructionStep::BudgetExhausted { mcycles, ticks } if mcycles == budget && ticks == budget * 4)
                     );
                 } else {
-                    assert!(
-                        matches!(result, InstructionStep::InterruptEntered { vector: v, mcycles: 5, ticks: 20 } if v == vector)
-                    );
+                    assert!(match result {
+                        InstructionStep::InterruptEntered {
+                            vector: v,
+                            mcycles: 5,
+                            ticks: 20,
+                        } => selected.is_some() && v == vector,
+                        InstructionStep::InterruptEntryCancelled {
+                            mcycles: 5,
+                            ticks: 20,
+                        } => selected.is_none(),
+                        _ => false,
+                    });
                 }
                 for phase in completed..=5 {
-                    let mut expected_memory = original.clone();
-                    if phase > 0 {
-                        expected_memory[0xFF0F] = (31 - mask) + 224;
-                    }
-                    if phase >= 3 {
-                        write_expected(&mut expected_memory, sp.wrapping_sub(1), (pc / 256) as u8);
-                    }
-                    if phase >= 4 {
-                        write_expected(&mut expected_memory, sp.wrapping_sub(2), pc as u8);
-                    }
+                    let (expected_memory, _) = expected_entry(&original, pc, sp, phase);
                     for addr in 0u16..=65535 {
                         assert_eq!(
                             s.memory.read(addr),
@@ -130,7 +163,16 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                     assert_eq!(
                         trace.outcome,
                         if phase == 4 {
-                            CycleOutcome::InterruptEntryComplete { vector }
+                            if selected.is_some() {
+                                CycleOutcome::InterruptEntryComplete { vector }
+                            } else {
+                                CycleOutcome::InterruptEntryCancelled
+                            }
+                        } else if phase == 3 {
+                            match selected {
+                                Some(interrupt) => CycleOutcome::InterruptSelected { interrupt },
+                                None => CycleOutcome::InterruptSelectionCancelled,
+                            }
                         } else {
                             CycleOutcome::InProgress
                         }
@@ -150,22 +192,19 @@ fn interrupt_entry_resume_counts_and_acknowledgment_happen_once() {
     for pause in 1..5 {
         let mut s = ready(0x1234, 0xFFFE);
         s.memory.write(0xFF0F, 4);
-        s.memory.write(0xFFFF, 4);
+        s.memory.write(0xFFFF, 31);
         s.step_instruction(pause).unwrap();
-        assert_eq!(s.memory.read(0xFF0F), 0xE0);
-        // Model-specific: capture/ack at acceptance means later requests survive.
+        assert_eq!(s.memory.read(0xFF0F), if pause < 4 { 0xE4 } else { 0xE0 });
         s.memory.request_interrupt(Interrupt::Timer);
         s.memory.request_interrupt(Interrupt::VBlank);
-        s.memory.write(0xFFFF, 0);
+        let vector = if pause < 4 { 0x40 } else { 0x50 };
         assert!(
-            matches!(s.step_instruction(100).unwrap(), InstructionStep::InterruptEntered { vector: 0x50, mcycles, ticks } if mcycles == 5 - pause && ticks == (5 - pause) * 4)
+            matches!(s.step_instruction(100).unwrap(), InstructionStep::InterruptEntered { vector: v, mcycles, ticks } if v == vector && mcycles == 5 - pause && ticks == (5 - pause) * 4)
         );
-        assert_eq!(s.memory.read(0xFF0F), 0xE5);
-        assert_eq!(s.memory.read(0xFFFF), 0);
+        assert_eq!(s.memory.read(0xFF0F), if pause < 4 { 0xE4 } else { 0xE5 });
         assert_eq!(s.cpu.test_interrupt_status(), (false, false));
     }
 }
-
 #[test]
 fn system_interrupt_priority_uses_only_enabled_requested_low_bits() {
     for flags in 0u8..32 {
@@ -309,5 +348,99 @@ fn requests_arriving_mid_instruction_wait_even_when_ime_is_already_enabled() {
                 }
             ));
         }
+    }
+}
+
+#[test]
+fn ie_push_hardware_cases_preserve_five_cycles_and_distinct_cancellation() {
+    for (pc, sp, flags, enable, vector, final_if, final_ie) in [
+        (0x0200u16, 0u16, 4, 4, 0u16, 4, 2),
+        (0x0235, 1, 8, 8, 0x58, 0, 0x35),
+        (0x0200, 0, 3, 3, 0x48, 1, 2),
+    ] {
+        for pause in 0..=5 {
+            let mut s = ready(pc, sp);
+            s.memory.write(0xFF0F, flags);
+            s.memory.write(0xFFFF, enable);
+            let start = s.elapsed_ticks();
+            let first = s.step_instruction(pause).unwrap();
+            if pause < 4 {
+                assert_eq!(s.memory.read(0xFF0F), flags + 224);
+            }
+            let result = if pause < 5 {
+                assert!(
+                    matches!(first, InstructionStep::BudgetExhausted { mcycles, ticks } if mcycles == pause && ticks == pause * 4)
+                );
+                s.step_instruction(100).unwrap()
+            } else {
+                first
+            };
+            let count = if pause < 5 { 5 - pause } else { 5 };
+            if vector == 0 {
+                assert!(
+                    matches!(result, InstructionStep::InterruptEntryCancelled { mcycles, ticks } if mcycles == count && ticks == count * 4)
+                );
+            } else {
+                assert!(
+                    matches!(result, InstructionStep::InterruptEntered { vector: v, mcycles, ticks } if v == vector && mcycles == count && ticks == count * 4)
+                );
+            }
+            assert_eq!(s.elapsed_ticks() - start, 20);
+            assert_eq!(s.cpu_snapshot().pc, vector);
+            assert_eq!(s.cpu_snapshot().sp, sp.wrapping_sub(2));
+            assert_eq!(s.memory.read(0xFF0F), final_if + 224);
+            assert_eq!(s.memory.read(0xFFFF), final_ie);
+            assert_eq!(s.memory.read(0xFFFE), if sp == 0 { pc as u8 } else { 0 });
+            assert_eq!(s.cpu.test_interrupt_status(), (false, false));
+            // Mooneye round 2: cancellation does not re-enable IME.
+            s.memory.write(0xFF0F, 16);
+            s.memory.write(0xFFFF, 16);
+            assert!(matches!(
+                s.step_instruction(1).unwrap(),
+                InstructionStep::Complete {
+                    mcycles: 1,
+                    ticks: 4
+                }
+            ));
+            assert_eq!(s.memory.read(0xFF0F), 0xF0);
+            assert_eq!(s.cpu_snapshot().pc, vector + 1);
+        }
+    }
+}
+
+#[test]
+fn ie_latch_boundary_and_if_selection_boundary_are_independent() {
+    for pause in 1..5 {
+        let mut s = ready(0x1234, 0xFFFE);
+        s.memory.write(0xFF0F, 4);
+        s.memory.write(0xFFFF, 4);
+        s.step_instruction(pause).unwrap();
+        s.memory.write(0xFFFF, 0);
+        let result = s.step_instruction(100).unwrap();
+        if pause < 3 {
+            assert!(matches!(
+                result,
+                InstructionStep::InterruptEntryCancelled { .. }
+            ));
+            assert_eq!(s.cpu_snapshot().pc, 0);
+            assert_eq!(s.memory.read(0xFF0F), 0xE4);
+        } else {
+            assert!(matches!(
+                result,
+                InstructionStep::InterruptEntered { vector: 0x50, .. }
+            ));
+            assert_eq!(s.memory.read(0xFF0F), 0xE0);
+        }
+        // IF is sampled later than IE: clear it before selection to cancel.
+        let mut s = ready(0x1234, 0xFFFE);
+        s.memory.write(0xFF0F, 4);
+        s.memory.write(0xFFFF, 4);
+        s.step_instruction(pause).unwrap();
+        s.memory.write(0xFF0F, 0);
+        let result = s.step_instruction(100).unwrap();
+        assert_eq!(
+            matches!(result, InstructionStep::InterruptEntryCancelled { .. }),
+            pause < 4
+        );
     }
 }

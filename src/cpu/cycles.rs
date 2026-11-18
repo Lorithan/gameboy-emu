@@ -1,4 +1,4 @@
-use crate::cpu::CpuError;
+use crate::{cpu::CpuError, memory::Interrupt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleAction {
@@ -11,7 +11,10 @@ pub enum CycleAction {
 pub enum CycleOutcome {
     InProgress,
     InstructionComplete,
+    InterruptSelected { interrupt: Interrupt },
+    InterruptSelectionCancelled,
     InterruptEntryComplete { vector: u16 },
+    InterruptEntryCancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +44,16 @@ impl CycleResponse {
             CycleResponse::Read(value) => Ok(*value),
             _ => Err(UnexpectedCycleResponse {
                 expected: CycleKind::Read,
+                received: self.kind(),
+            }),
+        }
+    }
+
+    pub fn interrupt_sample(&self) -> Result<InterruptSample, UnexpectedCycleResponse> {
+        match self {
+            CycleResponse::WriteDone { interrupt_sample } => Ok(*interrupt_sample),
+            _ => Err(UnexpectedCycleResponse {
+                expected: CycleKind::Write,
                 received: self.kind(),
             }),
         }

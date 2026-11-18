@@ -1,7 +1,7 @@
 # Late interrupt selection and IE-write cancellation
 
 GitHub: [#40](https://github.com/Lorithan/gameboy-emu/issues/40), M2.
-Status: proposal approved by the user on 2026-11-17. Response-protocol migration is implemented and under regression validation; late selection, completion effects and cancellation outcomes are not implemented yet. #39's acceptance-time selection remains the running implementation. Follow the reviewed slices below; the user owns application implementation.
+Status: late selection, selection-event acknowledgment and cancellation are implemented by the user and under final regression review on 2026-11-18. This supersedes #39's acceptance-time selection/acknowledgment approximation. Follow the reviewed slices below; the user owns application implementation.
 
 ## Goal and evidence boundaries
 
@@ -21,17 +21,17 @@ The contract below is a proposed project-level schedule consistent with the cite
 - CPU later selects the source from sampled register values. System applies the returned acknowledgment through Bus.
 - Do not assume the source that caused entry is the eventual selected source.
 
-## Proposed inputs and effects
+## Approved inputs and selection events
 
 Approved design: one CycleResponse enum with mandatory interrupt samples on write completion. The late-selection schedule, completion effects, validation and cancellation outcomes below are the agreed task contract. Exact helper names and private representation remain implementation choices within that contract.
 
 Suggested public types:
-- CycleResponse::{Read(u8), WriteDone { interrupts: InterruptSample }, IdleDone}.
+- CycleResponse::{Read(u8), WriteDone { interrupt_sample: InterruptSample }, IdleDone}.
 - InterruptSample { enable_after_bus: u8, flags_before_bus: u8 }.
-- CycleCompletion { outcome: CycleOutcome, acknowledge: Option<Interrupt> }.
-- complete_cycle takes CycleResponse and returns Result<CycleCompletion, CpuError>.
+- CycleOutcome carries progress/completion and explicit interrupt selection/cancellation events; no separate CycleCompletion struct.
+- complete_cycle takes CycleResponse and returns Result<CycleOutcome, CpuError>.
 
-CycleResponse records how the driver serviced the CycleAction returned by request_cycle. The name describes that request/response relationship more precisely than the general CycleInputs. A successful read supplies Read(value), every completed write supplies WriteDone { interrupts: sample }, and a completed idle cycle supplies IdleDone. There is no outer CycleInputs struct, optional sample or generic None response. A write acknowledgment cannot omit the required samples, and a read or idle response cannot carry unused samples.
+CycleResponse records how the driver serviced the CycleAction returned by request_cycle. The name describes that request/response relationship more precisely than the general CycleInputs. A successful read supplies Read(value), every completed write supplies WriteDone { interrupt_sample: sample }, and a completed idle cycle supplies IdleDone. There is no outer CycleInputs struct, optional sample or generic None response. A write acknowledgment cannot omit the required samples, and a read or idle response cannot carry unused samples.
 
 The field names intentionally expose the sampling order. System collects flags_before_bus after advancing this cycle's four ticks but before its bus action. It collects enable_after_bus after servicing that action. These are samples for the current cycle, not long-lived shared references. Existing IF/IE reads are pure; no extra emulated bus action or tick is added.
 
@@ -40,10 +40,10 @@ System supplies samples for every write completion, including ordinary instructi
 | Pending action/phase | Response | Interrupt sample |
 | --- | --- | --- |
 | Ordinary read | Read(value) | Not carried |
-| Ordinary write | WriteDone { interrupts } | Mandatory; ignored by ordinary handler |
+| Ordinary write | WriteDone { interrupt_sample } | Mandatory; ignored by ordinary handler |
 | Ordinary idle or entry wait/jump | IdleDone | Not carried |
-| Entry upper stack write | WriteDone { interrupts } | Mandatory; consumes enable_after_bus |
-| Entry lower stack write | WriteDone { interrupts } | Mandatory; consumes flags_before_bus |
+| Entry upper stack write | WriteDone { interrupt_sample } | Mandatory; consumes enable_after_bus |
+| Entry lower stack write | WriteDone { interrupt_sample } | Mandatory; consumes flags_before_bus |
 
 ## Completion-input validation
 
@@ -59,7 +59,7 @@ Alternatives considered: an exclusive Read/InterruptSample/None enum cannot expr
 
 CPU uses enable_after_bus when completing the upper stack write and flags_before_bus when completing the lower stack write. The stored IE sample in the low-write state is combined with that later IF sample. Future devices must obey these documented coarse phases until a finer timing contract supersedes them.
 
-CycleCompletion lets the wrapper return one explicit external effect without a hidden acknowledgment field, drain operation or callback. No error result carries an acknowledgment. Most cycles return acknowledge=None; the source is emitted once during selection.
+User-approved refinement: InterruptSelected { interrupt } is the single acknowledgment event. The private InterruptSelectionResolved transition centrally installs InterruptJump and emits either InterruptSelected or InterruptSelectionCancelled. System acknowledges only the former before publishing the trace. This avoids invalid outcome/optional-acknowledgment combinations and hidden drain state. No error result carries an acknowledgment.
 
 Because complete_cycle is public, promote the existing small Interrupt source enum and its memory re-export to public visibility if using this proposal. Keep the controller and execution states private; bit_index remains private. This deliberately exposes a meaningful source identifier rather than duplicating vector-to-source conversion in System or leaking private types. Document source enum visibility as an API decision. If the user prefers a fully crate-private effect API instead, settle its public CPU stepping semantics before implementing; do not silently feed zero register samples.
 
@@ -74,7 +74,7 @@ Let P and S be captured return PC/SP.
 | 1 | Idle | Advance; no IF clear |
 | 2 | Idle | Prepare upper stack write; no IF clear |
 | 3 | Write high(P) to S-1 | Commit SP=S-1; latch sample.enable_after_bus & 1F |
-| 4 | Write low(P) to S-2 | Commit SP=S-2; select from latched_IE & sample.flags_before_bus & 1F; return selected-source acknowledgment, or None on cancellation |
+| 4 | Write low(P) to S-2 | Commit SP=S-2; select from latched_IE & sample.flags_before_bus & 1F; return InterruptSelected, or InterruptSelectionCancelled on cancellation |
 | 5 | Idle | Set PC to selected vector, or 0000 if canceled; restore FetchOpcode and report the appropriate entry result |
 
 All address subtraction wraps. Both stack writes occur even on cancellation. Preserve all general registers and F. PC changes only on cycle 5 in our existing trace model; entry duration remains five M-cycles/20 ticks.
@@ -86,7 +86,7 @@ System's per-cycle order:
 4. For a write action, sample IF before bus access.
 5. Service action once.
 6. For a write action, sample IE after bus access.
-7. Complete CPU using the matching CycleResponse: Read(value), WriteDone { interrupts: sample }, or IdleDone.
+7. Complete CPU using the matching CycleResponse: Read(value), WriteDone { interrupt_sample: sample }, or IdleDone.
 8. If completion succeeds and requests acknowledgment, clear only that source through Bus.
 9. Publish trace with the plain public outcome and CycleRecord.
 
@@ -96,12 +96,12 @@ Resolve and acknowledge inside the same machine-cycle call that completes cycle 
 
 ## Outcomes and trace design
 
-- Cycles 1-3 return InProgress with acknowledge=None.
-- Cycle 4 returns a new nonterminal outcome, suggested InterruptSelected { vector }, or InterruptSelectionCanceled; selected completion also carries acknowledge=Some(source), canceled completion carries None.
-- Cycle 5 returns existing InterruptEntryComplete { vector } for successful selection or new InterruptEntryCanceled for cancellation. Keep a private selected/canceled payload so a finish-instruction transition is impossible here.
+- Cycles 1-3 return InProgress without acknowledgment.
+- Cycle 4 returns the nonterminal InterruptSelected { interrupt } or InterruptSelectionCancelled outcome. The selected outcome alone tells System to acknowledge that source.
+- Cycle 5 returns existing InterruptEntryComplete { vector } for successful selection or new InterruptEntryCancelled for cancellation. Keep a private selected/canceled payload so a finish-instruction transition is impossible here.
 - The public completion wrapper applies state and derives outcome/effect centrally. This will require a private transition expressing continuation with selection/acknowledgment; do not reintroduce handler-owned self.state assignments.
 - CycleTrace still carries CycleRecord and a plain CycleOutcome. It can now show the selection event on cycle 4; acknowledgment is applied before that trace is returned.
-- step_instruction continues through progress/selection outcomes and stops on cycle-5 completion. Add InstructionStep::InterruptCanceled { mcycles, ticks }; do not report cancellation as instruction completion or a successful interrupt to a real source.
+- step_instruction continues through progress/selection outcomes and stops on cycle-5 completion. Add InstructionStep::InterruptEntryCancelled { mcycles, ticks }; do not report cancellation as instruction completion or a successful interrupt to a real source.
 - Resume counts remain per invocation. A pause after three cycles then resume reports two cycles/eight ticks. Excess budget stops at successful or canceled entry completion and never executes the destination opcode.
 - Cancellation is not CpuError or a sticky fault. Fetch from 0000 on the following call, with IME disabled and SP decremented twice. Delayed EI does not advance on any entry event.
 
@@ -130,7 +130,7 @@ These parameters reproduce the register-write effects of Mooneye's cases without
 
 ## Review slices and limits
 
-1. Review/accept the CycleResponse enum with mandatory write samples and completion-effect interface, validation errors and public Interrupt visibility. Migrate existing tests without implementing the later selection behavior. User owns application/API implementation; assistant owns test migration and protocol cases.
+1. Review/accept the CycleResponse enum with mandatory write samples and selection-event outcomes, validation errors and public Interrupt visibility. Migrate existing tests without implementing the later selection behavior. User owns application/API implementation; assistant owns test migration and protocol cases.
 2. Move selection to cycles 3/4, add cancellation and explicit outcomes; assistant adds CPU tests.
 3. Wire ordered samples/effects in System; assistant updates early-ack tests and adds the synthetic cases/full integration evidence.
 The interfaces are now approved. Begin with slice 1; verify the existing instruction behavior before moving to later selection and System integration. Slice 1 must preserve #39's current acknowledgment behavior until slices 2/3 deliberately replace it; when adapting the completion return, do not acknowledge both on initial acceptance and on completion.
@@ -158,3 +158,13 @@ The user restored the JR signed conversion and removed MissingReadValue. All 352
 CycleAction/CycleOutcome plus the new CycleResponse/InterruptSample/CycleKind/error types are in cpu/cycles.rs and re-exported by CPU. System provides correct response kinds and samples IF before writes/IE after them. CPU validates kind before mutation and read handlers extract typed bytes. No correctness findings remain in this response-protocol slice. Samples are currently ignored by entry as well as ordinary writes; end-to-end late-selection sampling effects will be verified when entry consumes them.
 
 Next implement the approved CycleCompletion acknowledgment effect and its private transition representation while keeping #39 entry behavior stable, then move source selection/IF acknowledgment to the specified later stages and add cancellation. Avoid clearing IF at both acceptance and later selection. #40 stays open.
+
+## Completion evidence - 2026-11-18
+
+Late selection/cancellation and enum-based acknowledgment are implemented by the user. Acceptance returns bool and changes entry state/IME without choosing or clearing a source. CPU latches IE after the high write, combines it with pre-low-write IF, and emits InterruptSelected or InterruptSelectionCancelled at cycle 4. System acknowledges only the selected event in step_machine_cycle. Cycle 5 emits distinct completed/cancelled entry outcomes, and bounded stepping stops with the corresponding result. Interrupt is public through memory; the controller stays private. No CycleCompletion struct is used.
+
+Assistant migrated acceptance/entry/trace tests, replaced early-clear/frozen-source expectations, and added three tests: all 65,536 IE/IF sample pairs (including upper-bit noise and intentionally unrelated unused sample fields), synthetic equivalents of the IE-write hardware cases at every budget pause, and independent IE/IF latch boundaries. Existing tests retain exhaustive PC and SP sweeps, all flags, all-source priority, wrong-response retry/fault guarantees and full-address-space expected-memory checks. System oracles account for stack writes to IF/IE and echo aliases before applying exactly one selected-source clear. Re-requesting after acknowledgment survives; requests arriving before selection may alter priority.
+
+Validation: all 355 tests pass (255 unit, 100 integration); all 13 focused interrupt-entry tests pass; formatting, strict Clippy and diff whitespace checks pass. No correctness defect identified within the agreed coarse timing contract. No external ROM suite was imported or run: ie_push-inspired synthetic cases pass, not the ROM itself. Exact device/IF-write collision timing, DMA/OAM effects and physical sampling edges remain unverified as documented above. User owns application implementation; assistant changed tests/minimal wiring, formatting and project records.
+
+#40 is complete within this contract. Next: specify RETI as a separate instruction task before implementation. HALT/STOP, peripherals and finer collision timing remain separately scoped. Earlier incomplete/uncommitted and separate-CycleCompletion notes are historical and superseded by this checkpoint.

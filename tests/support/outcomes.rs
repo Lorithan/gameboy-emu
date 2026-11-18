@@ -8,5 +8,6 @@ pub fn instruction_complete(outcome: super::InstructionCycleOutcome) -> bool {
         super::InstructionCycleOutcome::InterruptEntryComplete { vector } => {
             panic!("unexpected interrupt entry to {vector:04X} in instruction regression")
         }
+        other => panic!("unexpected interrupt event {other:?} in instruction regression"),
     }
 }

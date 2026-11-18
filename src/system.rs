@@ -44,6 +44,10 @@ pub enum InstructionStep {
         ticks: u64,
         vector: u16,
     },
+    InterruptEntryCancelled {
+        mcycles: u64,
+        ticks: u64,
+    },
 }
 
 pub struct System {
@@ -73,9 +77,7 @@ impl System {
     pub fn step_machine_cycle(&mut self) -> Result<CycleTrace, SystemError> {
         // Handle any pending interrupts before executing the next CPU cycle.
         let pending_interrupts = self.memory.pending_interrupts();
-        if let Some(interrupt) = self.cpu.try_accept_interrupt(pending_interrupts) {
-            self.memory.acknowledge_interrupt(interrupt);
-        }
+        self.cpu.try_accept_interrupt(pending_interrupts);
 
         let action = match self.cpu.request_cycle() {
             Ok(action) => action,
@@ -119,6 +121,9 @@ impl System {
         match outcome {
             Ok(outcome) => {
                 let trace = CycleTrace { record, outcome };
+                if let CycleOutcome::InterruptSelected { interrupt } = outcome {
+                    self.memory.acknowledge_interrupt(interrupt);
+                }
                 Ok(trace)
             }
             Err(err) => Err(SystemError::CpuCompletionError(err, record)),
@@ -145,7 +150,15 @@ impl System {
                         vector,
                     });
                 }
-                CycleOutcome::InProgress => {}
+                CycleOutcome::InterruptEntryCancelled => {
+                    return Ok(InstructionStep::InterruptEntryCancelled {
+                        mcycles: cycle + 1,
+                        ticks: self.elapsed_ticks - starting_ticks,
+                    });
+                }
+                CycleOutcome::InterruptSelected { .. }
+                | CycleOutcome::InProgress
+                | CycleOutcome::InterruptSelectionCancelled => {}
             }
         }
 

@@ -1,4 +1,9 @@
 # Game Boy emulator project plan
+## Current checkpoint - late interrupt selection complete, 2026-11-18
+
+#40 late selection/cancellation is implemented and verified: all 355 tests pass (255 unit, 100 integration), 13 focused entry tests pass, formatting/strict Clippy/whitespace checks pass. CPU latches IE after the upper stack write and resolves against IF sampled before the lower write; System acknowledges only the cycle-4 InterruptSelected event. Cancellation completes both writes/five cycles, lands at 0000, leaves IME disabled and reports a distinct result. The public enum event replaces the proposed CycleCompletion struct. See [acceptance evidence](tasks/LATE_INTERRUPT_SELECTION.md). Synthetic hardware-derived IE cases pass; no external ROM suite ran and no physical edge/IF collision accuracy is claimed.
+
+This supersedes older pending #40 and early-ack statements below. Next task: specify RETI's return cycles and immediate IME enable semantics before user implementation. HALT/STOP, peripherals, frontend and finer IF collision timing remain separate. M2 stays open.
 
 ## Current next task - approved late-selection design, 2026-11-17
 

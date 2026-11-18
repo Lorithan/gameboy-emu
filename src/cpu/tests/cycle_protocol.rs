@@ -104,11 +104,17 @@ fn response_mismatches_preserve_each_interrupt_entry_phase() {
     for mask in [1, 2, 4, 8, 16] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
         cpu.interrupt_state = InterruptState::Enabled;
-        let source = cpu.try_accept_interrupt(mask).unwrap();
+        assert!(cpu.try_accept_interrupt(mask));
+        let source = crate::memory::Interrupt::from_selection(mask).unwrap();
         for cycle in 0..5 {
             reject_wrong_kinds(&mut cpu);
             let response = match cpu.request_cycle().unwrap() {
-                CycleAction::Write { .. } => responses()[1],
+                CycleAction::Write { .. } => CycleResponse::WriteDone {
+                    interrupt_sample: InterruptSample {
+                        enable_after_bus: mask,
+                        flags_before_bus: mask,
+                    },
+                },
                 CycleAction::Idle => CycleResponse::IdleDone,
                 other => panic!("unexpected entry action {other:?}"),
             };
@@ -118,6 +124,8 @@ fn response_mismatches_preserve_each_interrupt_entry_phase() {
                     CycleOutcome::InterruptEntryComplete {
                         vector: source.vector_address(),
                     }
+                } else if cycle == 3 {
+                    CycleOutcome::InterruptSelected { interrupt: source }
                 } else {
                     CycleOutcome::InProgress
                 }

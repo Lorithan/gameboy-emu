@@ -15,7 +15,7 @@ use crate::{
     cpu::{
         opcode::*,
         registers::*,
-        state::{CycleTransition, ExecutionState},
+        state::{CycleTransition, ExecutionState, InterruptSelection},
     },
     memory::Interrupt,
 };
@@ -207,6 +207,19 @@ impl CPU {
                     vector: interrupt.vector_address(),
                 })
             }
+            CycleTransition::InterruptSelectionResolved { interrupt } => {
+                self.state = InterruptJump { interrupt };
+                match interrupt {
+                    InterruptSelection::Selected(interrupt) => {
+                        Ok(CycleOutcome::InterruptSelected { interrupt })
+                    }
+                    InterruptSelection::Cancelled => Ok(CycleOutcome::InterruptSelectionCancelled),
+                }
+            }
+            CycleTransition::InterruptEntryCancelled => {
+                self.state = FetchOpcode;
+                Ok(CycleOutcome::InterruptEntryCancelled)
+            }
             CycleTransition::Faulted(err) => {
                 self.state = Faulted(err);
                 Err(CpuError::UnsupportedOpcode(err))
@@ -214,30 +227,20 @@ impl CPU {
         }
     }
 
-    pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> Option<Interrupt> {
+    pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> bool {
         if matches!(self.state, FetchOpcode) && self.interrupt_state == InterruptState::Enabled {
             let pending = pending & 0x1F; // Only the lower 5 bits are relevant
             if pending != 0 {
-                let interrupt = match pending.trailing_zeros() {
-                    0 => Interrupt::VBlank,
-                    1 => Interrupt::LCDStat,
-                    2 => Interrupt::Timer,
-                    3 => Interrupt::Serial,
-                    4 => Interrupt::Joypad,
-                    _ => unreachable!(),
-                };
-
                 self.state = InterruptEntry {
                     pc: self.registers.pc,
                     sp: self.registers.sp,
-                    interrupt,
                 };
                 self.interrupt_state = InterruptState::Disabled;
-                return Some(interrupt);
+                return true;
             }
         }
 
-        None
+        false
     }
 
     fn complete_cycle_inner(
@@ -742,42 +745,55 @@ impl CPU {
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            InterruptEntry { pc, sp, interrupt } => {
-                let next_state = InterruptWait { pc, sp, interrupt };
+            InterruptEntry { pc, sp } => {
+                let next_state = InterruptWait { pc, sp };
                 Ok(CycleTransition::Continue(next_state))
             }
-            InterruptWait { pc, sp, interrupt } => {
+            InterruptWait { pc, sp } => {
                 let next_state = InterruptPushHigh {
                     pc_high: (pc >> 8) as u8,
                     pc_low: (pc & 0xFF) as u8,
                     sp: sp.wrapping_sub(1),
-                    interrupt,
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            InterruptPushHigh {
-                pc_low,
-                sp,
-                interrupt,
-                ..
-            } => {
+            InterruptPushHigh { pc_low, sp, .. } => {
+                let interrupt_selection = response.interrupt_sample()?;
+
                 self.registers.set_sp(sp);
                 let next_state = InterruptPushLow {
                     pc_low,
                     sp: sp.wrapping_sub(1),
-                    interrupt,
+                    captured_enable: interrupt_selection.enable_after_bus,
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            InterruptPushLow { sp, interrupt, .. } => {
+            InterruptPushLow {
+                sp,
+                captured_enable,
+                ..
+            } => {
+                let sample = response.interrupt_sample()?;
+                let selection = captured_enable & sample.flags_before_bus & 0x1F;
+
                 self.registers.set_sp(sp);
-                let next_state = InterruptJump { interrupt };
-                Ok(CycleTransition::Continue(next_state))
+                let interrupt = match Interrupt::from_selection(selection) {
+                    Some(interrupt) => InterruptSelection::Selected(interrupt),
+                    None => InterruptSelection::Cancelled,
+                };
+
+                Ok(CycleTransition::InterruptSelectionResolved { interrupt })
             }
-            InterruptJump { interrupt } => {
-                self.registers.set_pc(interrupt.vector_address());
-                Ok(CycleTransition::InterruptEntryFinished { interrupt })
-            }
+            InterruptJump { interrupt } => match interrupt {
+                InterruptSelection::Selected(interrupt) => {
+                    self.registers.set_pc(interrupt.vector_address());
+                    Ok(CycleTransition::InterruptEntryFinished { interrupt })
+                }
+                InterruptSelection::Cancelled => {
+                    self.registers.set_pc(0);
+                    Ok(CycleTransition::InterruptEntryCancelled)
+                }
+            },
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }

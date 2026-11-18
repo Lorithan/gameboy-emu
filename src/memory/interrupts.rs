@@ -46,7 +46,7 @@ impl InterruptController {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Interrupt {
+pub enum Interrupt {
     VBlank,
     LCDStat,
     Timer,
@@ -55,6 +55,17 @@ pub(crate) enum Interrupt {
 }
 
 impl Interrupt {
+    pub(crate) fn from_selection(selection: u8) -> Option<Self> {
+        match selection.trailing_zeros() {
+            0 => Some(Interrupt::VBlank),
+            1 => Some(Interrupt::LCDStat),
+            2 => Some(Interrupt::Timer),
+            3 => Some(Interrupt::Serial),
+            4 => Some(Interrupt::Joypad),
+            _ => None,
+        }
+    }
+
     fn bit_index(self) -> u8 {
         match self {
             Interrupt::VBlank => 0,

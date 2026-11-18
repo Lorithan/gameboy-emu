@@ -488,7 +488,10 @@ fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
                 InstructionStep::Complete { mcycles, ticks } => {
                     assert_eq!((prefix, mcycles, ticks), (3, 3, 12))
                 }
-                InstructionStep::InterruptEntered { .. } => panic!("unexpected interrupt entry"),
+                InstructionStep::InterruptEntered { .. }
+                | InstructionStep::InterruptEntryCancelled { .. } => {
+                    panic!("unexpected interrupt entry")
+                }
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < 3);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));
@@ -604,7 +607,10 @@ fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches(
                     assert_eq!(prefix, cycles);
                     assert_eq!((mcycles, ticks), (cycles, cycles * 4));
                 }
-                InstructionStep::InterruptEntered { .. } => panic!("unexpected interrupt entry"),
+                InstructionStep::InterruptEntered { .. }
+                | InstructionStep::InterruptEntryCancelled { .. } => {
+                    panic!("unexpected interrupt entry")
+                }
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < cycles);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));

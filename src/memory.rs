@@ -2,7 +2,7 @@ mod cartridge;
 mod interrupts;
 
 pub use cartridge::Cartridge;
-pub(crate) use interrupts::Interrupt;
+pub use interrupts::Interrupt;
 use interrupts::InterruptController;
 
 #[cfg(test)]

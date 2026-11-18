@@ -3,8 +3,21 @@ use crate::cpu::{
 };
 use crate::response_support::response;
 
+fn entry_response(action: CycleAction, mask: u8) -> crate::cpu::CycleResponse {
+    match action {
+        CycleAction::Write { .. } => crate::cpu::CycleResponse::WriteDone {
+            interrupt_sample: crate::cpu::InterruptSample {
+                enable_after_bus: mask,
+                flags_before_bus: mask,
+            },
+        },
+        CycleAction::Idle => crate::cpu::CycleResponse::IdleDone,
+        _ => panic!("entry must not read"),
+    }
+}
+
 #[test]
-fn interrupt_acceptance_masks_prioritizes_and_rejects_without_mutation() {
+fn interrupt_acceptance_masks_and_rejects_without_mutation() {
     for pending in 0u8..=255 {
         for ime in [
             InterruptState::Disabled,
@@ -16,13 +29,12 @@ fn interrupt_acceptance_masks_prioritizes_and_rejects_without_mutation() {
             let before = cpu.snapshot();
             let accepted = cpu.try_accept_interrupt(pending);
             if ime == InterruptState::Enabled && pending % 32 != 0 {
-                let index = (0..5).find(|i| pending & (1 << i) != 0).unwrap();
-                assert_eq!(accepted.unwrap().vector_address(), 0x40 + index * 8);
+                assert!(accepted);
                 assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
                 assert!(matches!(cpu.state, ExecutionState::InterruptEntry { .. }));
-                assert!(cpu.try_accept_interrupt(31).is_none());
+                assert!(!cpu.try_accept_interrupt(31));
             } else {
-                assert!(accepted.is_none());
+                assert!(!accepted);
                 assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
                 assert_eq!(cpu.interrupt_state, ime);
             }
@@ -36,7 +48,7 @@ fn interrupt_acceptance_masks_prioritizes_and_rejects_without_mutation() {
         cpu.interrupt_state = InterruptState::Enabled;
         let snapshot = cpu.snapshot();
         let state = format!("{:?}", cpu.state);
-        assert!(cpu.try_accept_interrupt(31).is_none());
+        assert!(!cpu.try_accept_interrupt(31));
         assert_eq!(cpu.snapshot(), snapshot);
         assert_eq!(format!("{:?}", cpu.state), state);
         assert_eq!(cpu.interrupt_state, InterruptState::Enabled);
@@ -63,8 +75,8 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
     cpu.registers.sp = sp;
     cpu.interrupt_state = InterruptState::Enabled;
     let original = cpu.snapshot();
-    let source = cpu.try_accept_interrupt(mask).unwrap();
-    let vector = source.vector_address();
+    assert!(cpu.try_accept_interrupt(mask));
+    let vector = 0x40 + mask.trailing_zeros() as u16 * 8;
     let actions = [
         CycleAction::Idle,
         CycleAction::Idle,
@@ -83,15 +95,19 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
         for _ in 0..2 {
             assert_eq!(cpu.request_cycle().unwrap(), action);
             assert_eq!(cpu.snapshot(), before);
-            assert!(cpu.try_accept_interrupt(31).is_none());
+            assert!(!cpu.try_accept_interrupt(31));
         }
         let outcome = cpu
-            .complete_cycle(response(cpu.request_cycle(), None))
+            .complete_cycle(entry_response(cpu.request_cycle().unwrap(), mask))
             .unwrap();
         assert_eq!(
             outcome,
             if cycle == 4 {
                 CycleOutcome::InterruptEntryComplete { vector }
+            } else if cycle == 3 {
+                CycleOutcome::InterruptSelected {
+                    interrupt: crate::memory::Interrupt::from_selection(mask).unwrap(),
+                }
             } else {
                 CycleOutcome::InProgress
             }
@@ -140,12 +156,12 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
     cpu.registers.pc = 0xA53C;
     cpu.registers.sp = 0;
     cpu.interrupt_state = InterruptState::Enabled;
-    cpu.try_accept_interrupt(8).unwrap();
+    assert!(cpu.try_accept_interrupt(8));
     cpu.registers.pc = 0xDEAD;
     cpu.registers.sp = 0xBEEF;
     for _ in 0..2 {
         assert_eq!(
-            cpu.complete_cycle(response(cpu.request_cycle(), None))
+            cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
                 .unwrap(),
             CycleOutcome::InProgress
         );
@@ -157,7 +173,7 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
             value: 0xA5
         }
     );
-    cpu.complete_cycle(response(cpu.request_cycle(), None))
+    cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
         .unwrap();
     cpu.registers.sp = 0x4321;
     assert_eq!(
@@ -167,14 +183,82 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
             value: 0x3C
         }
     );
-    cpu.complete_cycle(response(cpu.request_cycle(), None))
+    cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
         .unwrap();
     assert_eq!(cpu.snapshot().sp, 0xFFFE);
     assert_eq!(cpu.snapshot().pc, 0xDEAD);
     assert_eq!(
-        cpu.complete_cycle(response(cpu.request_cycle(), None))
+        cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
             .unwrap(),
         CycleOutcome::InterruptEntryComplete { vector: 0x58 }
     );
     assert_eq!(cpu.snapshot().pc, 0x58);
+}
+
+#[test]
+fn late_selection_exhausts_ie_if_samples_and_preserves_cancellation_state() {
+    use crate::cpu::{CycleResponse, InterruptSample};
+    for enable in 0u8..=255 {
+        for flags in 0u8..=255 {
+            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+            cpu.interrupt_state = InterruptState::Enabled;
+            assert!(cpu.try_accept_interrupt(4)); // Initial source is only a gate.
+            for _ in 0..2 {
+                cpu.complete_cycle(CycleResponse::IdleDone).unwrap();
+            }
+            cpu.complete_cycle(CycleResponse::WriteDone {
+                interrupt_sample: InterruptSample {
+                    enable_after_bus: enable,
+                    flags_before_bus: !flags,
+                },
+            })
+            .unwrap();
+            let outcome = cpu
+                .complete_cycle(CycleResponse::WriteDone {
+                    interrupt_sample: InterruptSample {
+                        enable_after_bus: !enable,
+                        flags_before_bus: flags,
+                    },
+                })
+                .unwrap();
+            let eligible = enable & flags & 31;
+            let vector = if eligible == 0 {
+                assert_eq!(outcome, CycleOutcome::InterruptSelectionCancelled);
+                0
+            } else {
+                let index = (0..5).find(|i| eligible & (1 << i) != 0).unwrap();
+                let vector = 0x40 + index * 8;
+                match outcome {
+                    CycleOutcome::InterruptSelected { interrupt } => {
+                        assert_eq!(interrupt.vector_address(), vector)
+                    }
+                    other => panic!("unexpected outcome {other:?}"),
+                }
+                vector
+            };
+            assert_eq!(cpu.snapshot().pc, 0x100);
+            assert_eq!(cpu.snapshot().sp, 0xFFFC);
+            let before = cpu.snapshot();
+            assert!(matches!(
+                cpu.complete_cycle(CycleResponse::Read(0)),
+                Err(CpuError::UnexpectedCycleResponse(_))
+            ));
+            assert_eq!(cpu.snapshot(), before);
+            assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
+            assert_eq!(
+                cpu.complete_cycle(CycleResponse::IdleDone).unwrap(),
+                if eligible == 0 {
+                    CycleOutcome::InterruptEntryCancelled
+                } else {
+                    CycleOutcome::InterruptEntryComplete { vector }
+                }
+            );
+            assert_eq!(cpu.snapshot().pc, vector);
+            assert_eq!(cpu.snapshot().af, 0x01B0);
+            assert_eq!(
+                cpu.request_cycle().unwrap(),
+                CycleAction::Read { addr: vector }
+            );
+        }
+    }
 }
