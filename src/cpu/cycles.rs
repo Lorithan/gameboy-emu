@@ -8,6 +8,12 @@ pub enum CycleAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CycleRequest {
+    Execute(CycleAction),
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleOutcome {
     InProgress,
     InstructionComplete,

@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -30,7 +35,7 @@ fn cpu_stores_and_loads_every_high_ram_address_with_exact_traces() {
             complete(&mut system, 3);
             let mut expected = system.cpu_snapshot();
             for cycle in 0u64..3 {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(
                     (trace.record.tick_before, trace.record.tick_after),
                     (12 + cycle * 4, 16 + cycle * 4)
@@ -62,14 +67,14 @@ fn cpu_stores_and_loads_every_high_ram_address_with_exact_traces() {
                 }
                 assert_eq!(system.cpu_snapshot(), expected);
             }
-            let opcode = system.step_machine_cycle().unwrap();
+            let opcode = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert!(matches!(
                 opcode.record.action,
                 CycleAction::Read { addr: 0x0105 }
             ));
             assert_eq!(opcode.record.read_value, Some(0x7E));
             assert!(!instruction_complete(opcode.outcome));
-            let data = system.step_machine_cycle().unwrap();
+            let data = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert!(matches!(data.record.action, CycleAction::Read { addr } if addr == address));
             assert_eq!(data.record.read_value, Some(value));
             assert!(instruction_complete(data.outcome));
@@ -90,7 +95,7 @@ fn cpu_writes_an_instruction_then_fetches_and_executes_it_in_high_ram() {
         complete(&mut system, 1); // JP HL
         let mut expected = system.cpu_snapshot();
         assert_eq!(expected.pc, address);
-        let trace = system.step_machine_cycle().unwrap();
+        let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
         assert!(matches!(trace.record.action, CycleAction::Read { addr } if addr == address));
         assert_eq!(trace.record.read_value, Some(0x04));
         assert_eq!(

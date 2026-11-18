@@ -2,6 +2,7 @@ use crate::cpu::{
     CPU, CpuError, CycleAction, CycleOutcome, CycleResponse, ExecutionState, InterruptSample,
     InterruptState, Registers, opcode::DecodedOpcode, registers::Flag,
 };
+use crate::response_support::expect_execute;
 
 fn read(value: u8, pending: u8) -> CycleResponse {
     CycleResponse::Read {
@@ -64,7 +65,7 @@ fn halt_decision_exhausts_pending_flags_ime_and_pc_wrap() {
                 );
                 for _ in 0..2 {
                     assert_eq!(
-                        cpu.request_cycle().unwrap(),
+                        cpu.request_cycle().map(expect_execute).unwrap(),
                         if bug {
                             CycleAction::Read { addr: 0 }
                         } else {

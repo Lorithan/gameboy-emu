@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -49,7 +54,7 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
                 expected.af = u16::from(read) * 256 + (before.af & 0xF0);
             }
             for cycle in 0..cycles {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 if cycle == 0 {
                     assert!(matches!(
                         trace.record.action,

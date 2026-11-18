@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers};
@@ -29,20 +30,26 @@ fn memory_inc_dec_exhaustively_preserve_registers_and_update_flags_at_the_read()
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .expect("opcode")
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .expect("opcode")
                 );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(matches!(
-                    cpu.request_cycle(),
+                    cpu.request_cycle().map(expect_execute),
                     Ok(CycleAction::Read { addr: 0xC123 })
                 ));
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(old)))
-                        .map(instruction_complete)
-                        .expect("data read")
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(old)
+                    ))
+                    .map(instruction_complete)
+                    .expect("data read")
                 );
                 let (value, final_flags) = reference(old, flags, increment);
                 expected.af = 0xA700 | u16::from(final_flags);
@@ -53,18 +60,18 @@ fn memory_inc_dec_exhaustively_preserve_registers_and_update_flags_at_the_read()
                 );
                 for _ in 0..2 {
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value: actual }) if actual == value)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr: 0xC123, value: actual }) if actual == value)
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .expect("write completion")
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(matches!(
-                    cpu.request_cycle(),
+                    cpu.request_cycle().map(expect_execute),
                     Ok(CycleAction::Read { addr: 0x0101 })
                 ));
             }
@@ -81,14 +88,17 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
         let mut cpu = CPU::from_registers(registers);
         let before = cpu.snapshot();
         assert!(matches!(
-            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
+            cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xFFFF })
         ));
         assert_eq!(cpu.snapshot(), before);
         assert!(
-            !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                .map(instruction_complete)
-                .expect("opcode")
+            !cpu.complete_cycle(response(
+                cpu.request_cycle().map(expect_execute),
+                Some(opcode)
+            ))
+            .map(instruction_complete)
+            .expect("opcode")
         );
         assert_eq!(cpu.snapshot().pc, 0);
         // Check the stored address independently of live HL. Current normal
@@ -97,34 +107,37 @@ fn modification_read_retry_retains_operation_address_and_flags_after_pc_wrap() {
         let mut expected = cpu.snapshot();
         for _ in 0..2 {
             assert!(matches!(
-                cpu.request_cycle(),
+                cpu.request_cycle().map(expect_execute),
                 Ok(CycleAction::Read { addr: 0xC123 })
             ));
             assert!(matches!(
-                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xC123 })
+                cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xC123 })
             ));
             assert_eq!(cpu.snapshot(), expected);
         }
         assert!(
-            !cpu.complete_cycle(response(cpu.request_cycle(), Some(0x0F)))
-                .map(instruction_complete)
-                .expect("retry read")
+            !cpu.complete_cycle(response(
+                cpu.request_cycle().map(expect_execute),
+                Some(0x0F)
+            ))
+            .map(instruction_complete)
+            .expect("retry read")
         );
         let (value, flags) = reference(0x0F, 0xB0, increment);
         expected.af = 0x0100 | u16::from(flags);
         assert_eq!(cpu.snapshot(), expected);
         assert!(
-            matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: 0xC123, value: actual }) if actual == value)
+            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr: 0xC123, value: actual }) if actual == value)
         );
         assert!(
-            cpu.complete_cycle(response(cpu.request_cycle(), None))
+            cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                 .map(instruction_complete)
                 .expect("write")
         );
         assert_eq!(cpu.snapshot(), expected);
         assert!(matches!(
-            cpu.request_cycle(),
+            cpu.request_cycle().map(expect_execute),
             Ok(CycleAction::Read { addr: 0 })
         ));
     }

@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -37,7 +42,7 @@ fn rotates_finish_on_one_fetch_with_all_instruction_budgets() {
                 ));
                 assert_eq!(system.cpu_snapshot(), before);
                 assert_eq!(system.elapsed_ticks(), 0);
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(matches!(
                     trace.record.action,
                     CycleAction::Read { addr: 0x0100 }

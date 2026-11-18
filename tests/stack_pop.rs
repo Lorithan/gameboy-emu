@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -47,7 +52,7 @@ fn pop_bc_reads_low_then_high_with_atomic_pair_assignment_and_exact_timing() {
         let mut system = machine(sp);
         let mut expected = system.cpu_snapshot();
         for cycle in 0u64..3 {
-            let trace = system.step_machine_cycle().unwrap();
+            let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert_eq!(
                 (trace.record.tick_before, trace.record.tick_after),
                 (52 + cycle * 4, 56 + cycle * 4)

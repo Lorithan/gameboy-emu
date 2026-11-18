@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -78,7 +83,10 @@ fn public_comparisons_preserve_a_with_exact_traces_and_instruction_budgets() {
                 let mut expected = before;
                 expected.af = (expected.af & 0xFF00) | flags;
                 expected.pc += if source == Source::Immediate { 2 } else { 1 };
-                let fetch = system.step_machine_cycle().expect("compare opcode");
+                let fetch = system
+                    .step_machine_cycle()
+                    .map(expect_cycle)
+                    .expect("compare opcode");
                 assert!(
                     matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc)
                 );
@@ -92,7 +100,10 @@ fn public_comparisons_preserve_a_with_exact_traces_and_instruction_budgets() {
                     let mut pending = before;
                     pending.pc += 1;
                     assert_eq!(system.cpu_snapshot(), pending);
-                    let read = system.step_machine_cycle().expect("compare operand");
+                    let read = system
+                        .step_machine_cycle()
+                        .map(expect_cycle)
+                        .expect("compare operand");
                     let address = if source == Source::Immediate {
                         pending.pc
                     } else {

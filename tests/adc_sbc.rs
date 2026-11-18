@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -94,7 +99,10 @@ fn every_carry_source_has_correct_traces_budgets_and_boundary_results() {
                     let cycles = if memory_operand { 2 } else { 1 };
                     let mut expected = reference(before, left, right, carry, add);
                     expected.pc += if source == Source::Immediate { 2 } else { 1 };
-                    let fetch = system.step_machine_cycle().expect("opcode");
+                    let fetch = system
+                        .step_machine_cycle()
+                        .map(expect_cycle)
+                        .expect("opcode");
                     assert!(
                         matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc)
                     );
@@ -108,7 +116,10 @@ fn every_carry_source_has_correct_traces_budgets_and_boundary_results() {
                         let mut pending = before;
                         pending.pc += 1;
                         assert_eq!(system.cpu_snapshot(), pending);
-                        let read = system.step_machine_cycle().expect("operand");
+                        let read = system
+                            .step_machine_cycle()
+                            .map(expect_cycle)
+                            .expect("operand");
                         let address = if source == Source::Immediate {
                             pending.pc
                         } else {

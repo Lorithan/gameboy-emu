@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -36,7 +41,10 @@ fn register_store_returns_to_fetch_instead_of_repeating_the_write() {
             ticks: 8
         })
     ));
-    let next = system.step_machine_cycle().expect("next opcode");
+    let next = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("next opcode");
     assert!(matches!(
         next.record.action,
         CycleAction::Read { addr: 0x0106 }
@@ -52,9 +60,15 @@ fn data_read_preserves_pc_and_only_updates_the_destination() {
     let mut expected = system.cpu_snapshot();
     expected.pc = 0x0106;
     expected.af &= 0x00FF; // WRAM starts at zero in the current bus model.
-    let fetch = system.step_machine_cycle().expect("opcode");
+    let fetch = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("opcode");
     assert!(!instruction_complete(fetch.outcome));
-    let read = system.step_machine_cycle().expect("WRAM read");
+    let read = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("WRAM read");
     assert!(matches!(
         read.record.action,
         CycleAction::Read { addr: 0xC000 }
@@ -67,9 +81,15 @@ fn data_read_preserves_pc_and_only_updates_the_destination() {
 #[test]
 fn immediate_store_fetches_an_operand_then_writes_and_resumes_fetching() {
     let mut system = machine(&[0x36, 0x00, 0x7E, 0xD3]);
-    let opcode = system.step_machine_cycle().expect("opcode");
+    let opcode = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("opcode");
     assert!(!instruction_complete(opcode.outcome));
-    let operand = system.step_machine_cycle().expect("immediate operand");
+    let operand = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("immediate operand");
     assert!(matches!(
         operand.record.action,
         CycleAction::Read { addr: 0x0106 }
@@ -79,7 +99,10 @@ fn immediate_store_fetches_an_operand_then_writes_and_resumes_fetching() {
         !instruction_complete(operand.outcome),
         "the write cycle is still pending"
     );
-    let write = system.step_machine_cycle().expect("immediate write");
+    let write = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("immediate write");
     assert!(matches!(
         write.record.action,
         CycleAction::Write {
@@ -90,7 +113,10 @@ fn immediate_store_fetches_an_operand_then_writes_and_resumes_fetching() {
     assert_eq!(write.record.read_value, None);
     assert!(instruction_complete(write.outcome));
     assert_eq!(system.cpu_snapshot().pc, 0x0107);
-    let next = system.step_machine_cycle().expect("next opcode");
+    let next = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("next opcode");
     assert!(matches!(
         next.record.action,
         CycleAction::Read { addr: 0x0107 }
@@ -118,7 +144,10 @@ fn every_byte_round_trips_through_both_store_forms_with_exact_cycle_traces() {
             }
             cycles.push((0xC000, None, true, true));
             for (address, read_value, write, complete) in cycles {
-                let trace = system.step_machine_cycle().expect("store cycle");
+                let trace = system
+                    .step_machine_cycle()
+                    .map(expect_cycle)
+                    .expect("store cycle");
                 assert_eq!(
                     (trace.record.tick_before, trace.record.tick_after),
                     (expected_tick, expected_tick + 4)
@@ -144,7 +173,10 @@ fn every_byte_round_trips_through_both_store_forms_with_exact_cycle_traces() {
             assert_eq!(system.cpu_snapshot(), expected);
             expected_tick += 8;
             for (address, byte, complete) in [(expected.pc, 0x7E, false), (0xC000, value, true)] {
-                let trace = system.step_machine_cycle().expect("load cycle");
+                let trace = system
+                    .step_machine_cycle()
+                    .map(expect_cycle)
+                    .expect("load cycle");
                 assert!(
                     matches!(trace.record.action, CycleAction::Read { addr } if addr == address)
                 );

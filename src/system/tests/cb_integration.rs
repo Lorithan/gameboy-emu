@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::step_support::expect_cycle;
 
 use super::super::System;
 use crate::{cpu::CycleAction, memory::Cartridge};
@@ -61,7 +62,7 @@ fn cb_memory_variants_change_only_completed_target_and_echo_alias() {
                         // Trace resumed cycles to prove exactly one write, or zero for BIT.
                         let mut writes = 0;
                         for remaining in phase..cycles {
-                            let trace = system.step_machine_cycle().unwrap();
+                            let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                             if matches!(trace.record.action, CycleAction::Write { .. }) {
                                 writes += 1;
                             }

@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
@@ -25,40 +26,46 @@ fn absolute_a_every_target_address_uses_little_endian_without_early_effects() {
             let mut expected = cpu.snapshot();
             for byte in [opcode, (addr % 256) as u8, (addr / 256) as u8] {
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                 );
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(byte)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
             }
             if store {
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: 0x5A }) if actual == addr)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr: actual, value: 0x5A }) if actual == addr)
                 );
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .unwrap()
                 );
             } else {
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                 );
                 let value = (addr % 256) as u8;
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(value)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(value)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.af = u16::from(value) * 256 + (expected.af & 0xF0);
             }
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(
-                cpu.request_cycle(),
+                cpu.request_cycle().map(expect_execute),
                 Ok(CycleAction::Read { addr: 0x0103 })
             ));
         }
@@ -74,17 +81,20 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                 for (phase, byte) in [opcode, 0x34, 0xC1].into_iter().enumerate() {
                     for _ in 0..2 {
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: expected.pc }))
                         );
                         assert_eq!(cpu.snapshot(), expected);
                     }
                     assert!(
-                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        !cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(byte)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.pc = expected.pc.wrapping_add(1);
                     assert_eq!(cpu.snapshot(), expected);
@@ -96,7 +106,7 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                 for _ in 0..2 {
                     if store {
                         assert!(matches!(
-                            cpu.request_cycle(),
+                            cpu.request_cycle().map(expect_execute),
                             Ok(CycleAction::Write {
                                 addr: 0xC134,
                                 value: 0x5A
@@ -104,36 +114,39 @@ fn absolute_a_read_retries_capture_store_data_and_low_byte_across_pc_wrap() {
                         ));
                     } else {
                         assert!(matches!(
-                            cpu.request_cycle(),
+                            cpu.request_cycle().map(expect_execute),
                             Ok(CycleAction::Read { addr: 0xC134 })
                         ));
                         assert!(matches!(
-                            cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xC134 })
+                            cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                            Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xC134 })
                         ));
                     }
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 if store {
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                             .map(instruction_complete)
                             .unwrap()
                     );
                 } else {
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(0x69)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(0x69)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.af = 0x6900 + u16::from(flags);
                 }
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(3))
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(3))
                 );
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), Some(0)))
                         .map(instruction_complete)
                         .unwrap()
                 );

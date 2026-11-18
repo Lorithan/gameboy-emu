@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -79,9 +80,12 @@ fn check_all_pairs(add: bool) {
                 let mut cpu = machine(left, right, source, flags, 0x0100);
                 let expected = reference(cpu.snapshot(), left, right, add);
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .expect("binary arithmetic")
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .expect("binary arithmetic")
                 );
                 assert_eq!(
                     cpu.snapshot(),
@@ -111,9 +115,12 @@ fn self_source_reads_original_a_twice_and_overwrites_all_initial_flags() {
                 let mut cpu = machine(value, value, Register::A, combination << 4, 0x0100);
                 let expected = reference(cpu.snapshot(), value, value, add);
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .expect("self-source arithmetic")
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .expect("self-source arithmetic")
                 );
                 assert_eq!(cpu.snapshot(), expected);
             }
@@ -135,23 +142,26 @@ fn boundaries_overwrite_all_flags_and_opcode_retry_wraps_pc() {
                         let before = cpu.snapshot();
                         for _ in 0..2 {
                             assert!(matches!(
-                                cpu.request_cycle(),
+                                cpu.request_cycle().map(expect_execute),
                                 Ok(CycleAction::Read { addr: 0xFFFF })
                             ));
                             assert!(matches!(
-                                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
+                                cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xFFFF })
                             ));
                             assert_eq!(cpu.snapshot(), before);
                         }
                         assert!(
-                            cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                                .map(instruction_complete)
-                                .expect("retry arithmetic opcode")
+                            cpu.complete_cycle(response(
+                                cpu.request_cycle().map(expect_execute),
+                                Some(opcode)
+                            ))
+                            .map(instruction_complete)
+                            .expect("retry arithmetic opcode")
                         );
                         assert_eq!(cpu.snapshot(), reference(before, left, right, add));
                         assert!(matches!(
-                            cpu.request_cycle(),
+                            cpu.request_cycle().map(expect_execute),
                             Ok(CycleAction::Read { addr: 0 })
                         ));
                     }

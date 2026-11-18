@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -76,7 +81,7 @@ fn every_logic_form_has_exact_read_traces_and_resumes_all_budgets() {
                     + if result == 0 { 0x80 } else { 0 }
                     + if group == 0 { 0x20 } else { 0 };
                 for cycle in 0..cycles {
-                    let trace = system.step_machine_cycle().unwrap();
+                    let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                     let addr = if cycle == 0 {
                         before.pc
                     } else if source == 6 {

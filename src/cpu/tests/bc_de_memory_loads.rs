@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -47,35 +48,41 @@ fn indirect_pair_all_addresses_preserve_flags_and_unrelated_registers() {
             let mut expected = cpu.snapshot();
             expected.pc += 1;
             assert!(
-                !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                    .map(instruction_complete)
-                    .unwrap()
+                !cpu.complete_cycle(response(
+                    cpu.request_cycle().map(expect_execute),
+                    Some(opcode)
+                ))
+                .map(instruction_complete)
+                .unwrap()
             );
             assert_eq!(cpu.snapshot(), expected);
             if store {
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
                 );
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .unwrap()
                 );
             } else {
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr: actual }) if actual == addr)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr: actual }) if actual == addr)
                 );
                 let read = 255 - value;
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(read)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(read)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.af = u16::from(read) * 256 + (expected.af & 0xF0);
             }
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(
-                cpu.request_cycle(),
+                cpu.request_cycle().map(expect_execute),
                 Ok(CycleAction::Read { addr: 0x0101 })
             ));
         }
@@ -88,14 +95,17 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
             let mut cpu = machine(pair, 0xC123, 0x5A, flags, 0xFFFF);
             let before = cpu.snapshot();
             assert!(matches!(
-                cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
+                cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xFFFF })
             ));
             assert_eq!(cpu.snapshot(), before);
             assert!(
-                !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                    .map(instruction_complete)
-                    .unwrap()
+                !cpu.complete_cycle(response(
+                    cpu.request_cycle().map(expect_execute),
+                    Some(opcode)
+                ))
+                .map(instruction_complete)
+                .unwrap()
             );
             let mut pending = before;
             pending.pc = 0;
@@ -109,7 +119,7 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
             for _ in 0..3 {
                 if store {
                     assert!(matches!(
-                        cpu.request_cycle(),
+                        cpu.request_cycle().map(expect_execute),
                         Ok(CycleAction::Write {
                             addr: 0xC123,
                             value: 0x5A
@@ -117,12 +127,12 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
                     ));
                 } else {
                     assert!(matches!(
-                        cpu.request_cycle(),
+                        cpu.request_cycle().map(expect_execute),
                         Ok(CycleAction::Read { addr: 0xC123 })
                     ));
                     assert!(matches!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                        Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xC123 })
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                        Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xC123 })
                     ));
                 }
                 assert_eq!(cpu.snapshot(), changed);
@@ -130,25 +140,28 @@ fn indirect_pair_captures_address_and_store_data_with_atomic_retries_and_pc_wrap
             let mut expected = changed;
             if store {
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .unwrap()
                 );
             } else {
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0x69)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(0x69)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.af = 0x6900 + u16::from(flags);
             }
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(
-                cpu.request_cycle(),
+                cpu.request_cycle().map(expect_execute),
                 Ok(CycleAction::Read { addr: 0 })
             ));
             assert!(
-                cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+                cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), Some(0)))
                     .map(instruction_complete)
                     .unwrap()
             );

@@ -1,7 +1,7 @@
 use crate::{
     cpu::{
-        CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, CycleResponse, InterruptSample,
-        Registers,
+        CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, CycleRequest, CycleResponse,
+        InterruptSample, Registers,
     },
     memory::{Bus, Cartridge},
 };
@@ -30,6 +30,12 @@ pub struct CycleTrace {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub enum MachineStep {
+    Cycle(CycleTrace),
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum InstructionStep {
     Complete {
         mcycles: u64,
@@ -45,6 +51,10 @@ pub enum InstructionStep {
         vector: u16,
     },
     InterruptEntryCancelled {
+        mcycles: u64,
+        ticks: u64,
+    },
+    Stopped {
         mcycles: u64,
         ticks: u64,
     },
@@ -74,14 +84,15 @@ impl System {
         self.cpu.snapshot()
     }
 
-    pub fn step_machine_cycle(&mut self) -> Result<CycleTrace, SystemError> {
+    pub fn step_machine_cycle(&mut self) -> Result<MachineStep, SystemError> {
         // Handle any pending interrupts before executing the next CPU cycle.
         let pending_interrupts = self.memory.pending_interrupts();
         self.cpu.wake_if_pending(pending_interrupts);
         self.cpu.try_accept_interrupt(pending_interrupts);
 
         let action = match self.cpu.request_cycle() {
-            Ok(action) => action,
+            Ok(CycleRequest::Execute(action)) => action,
+            Ok(CycleRequest::Stopped) => return Ok(MachineStep::Stopped),
             Err(err) => return Err(SystemError::CpuRequestError(err)),
         };
 
@@ -128,7 +139,7 @@ impl System {
                 if let CycleOutcome::InterruptSelected { interrupt } = outcome {
                     self.memory.acknowledge_interrupt(interrupt);
                 }
-                Ok(trace)
+                Ok(MachineStep::Cycle(trace))
             }
             Err(err) => Err(SystemError::CpuCompletionError(err, record)),
         }
@@ -138,31 +149,37 @@ impl System {
         let starting_ticks = self.elapsed_ticks;
 
         for cycle in 0..max_mcycles {
-            let trace = self.step_machine_cycle()?;
-
-            match trace.outcome {
-                CycleOutcome::InstructionComplete => {
-                    return Ok(InstructionStep::Complete {
-                        mcycles: cycle + 1,
+            match self.step_machine_cycle()? {
+                MachineStep::Cycle(cycle_trace) => match cycle_trace.outcome {
+                    CycleOutcome::InstructionComplete => {
+                        return Ok(InstructionStep::Complete {
+                            mcycles: cycle + 1,
+                            ticks: self.elapsed_ticks - starting_ticks,
+                        });
+                    }
+                    CycleOutcome::InterruptEntryComplete { vector } => {
+                        return Ok(InstructionStep::InterruptEntered {
+                            mcycles: cycle + 1,
+                            ticks: self.elapsed_ticks - starting_ticks,
+                            vector,
+                        });
+                    }
+                    CycleOutcome::InterruptEntryCancelled => {
+                        return Ok(InstructionStep::InterruptEntryCancelled {
+                            mcycles: cycle + 1,
+                            ticks: self.elapsed_ticks - starting_ticks,
+                        });
+                    }
+                    CycleOutcome::InterruptSelected { .. }
+                    | CycleOutcome::InProgress
+                    | CycleOutcome::InterruptSelectionCancelled => {}
+                },
+                MachineStep::Stopped => {
+                    return Ok(InstructionStep::Stopped {
+                        mcycles: cycle,
                         ticks: self.elapsed_ticks - starting_ticks,
                     });
                 }
-                CycleOutcome::InterruptEntryComplete { vector } => {
-                    return Ok(InstructionStep::InterruptEntered {
-                        mcycles: cycle + 1,
-                        ticks: self.elapsed_ticks - starting_ticks,
-                        vector,
-                    });
-                }
-                CycleOutcome::InterruptEntryCancelled => {
-                    return Ok(InstructionStep::InterruptEntryCancelled {
-                        mcycles: cycle + 1,
-                        ticks: self.elapsed_ticks - starting_ticks,
-                    });
-                }
-                CycleOutcome::InterruptSelected { .. }
-                | CycleOutcome::InProgress
-                | CycleOutcome::InterruptSelectionCancelled => {}
             }
         }
 

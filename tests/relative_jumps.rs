@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -40,7 +45,7 @@ fn conditional_traces_and_budgets_match_both_branch_outcomes() {
             let mut system = conditional_machine(byte, equal);
             let before = system.cpu_snapshot();
             for cycle in 0..cycles {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(trace.record.tick_before, 16 + cycle * 4);
                 assert_eq!(trace.record.tick_after, 20 + cycle * 4);
                 assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
@@ -153,7 +158,7 @@ fn backward_jump_has_two_reads_and_one_idle_with_target_committed_last() {
     let mut system = machine();
     let mut expected = system.cpu_snapshot();
     for (cycle, pc) in [(0, 0x0101), (1, 0x0102), (2, 0x0100)] {
-        let trace = system.step_machine_cycle().unwrap();
+        let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
         assert_eq!(trace.record.tick_before, cycle * 4);
         assert_eq!(trace.record.tick_after, (cycle + 1) * 4);
         assert_eq!(instruction_complete(trace.outcome), cycle == 2);

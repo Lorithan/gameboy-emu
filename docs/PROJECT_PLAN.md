@@ -1,4 +1,8 @@
 # Game Boy emulator project plan
+## Current checkpoint - STOP stepping protocol migrated, 2026-11-18
+
+User implemented CycleRequest, CPU completion validation, MachineStep and bounded Stopped results for [#43](https://github.com/Lorithan/gameboy-emu/issues/43). Assistant migrated CPU/System request and trace tests; fresh verification passes all 371 tests (271 unit, 100 integration), formatting, strict Clippy and whitespace checks. See [evidence](tasks/STOP.md#machinestep-migration-verified---2026-11-18). No stopped execution state exists yet, so no-cycle polling and NoCycleRequested rejection remain structurally reviewed but unexercised. Next: user implements STOP decode/state/entry event and shared EI bookkeeping; assistant owns standby tests. The accepted stepping direction supersedes proposal status below. Coverage remains 499/500; no external ROM ran. Device follow-up #44 and M2 ROM gates remain open.
+
 ## Current next design review - STOP, 2026-11-18
 
 [#43 core STOP standby](https://github.com/Lorithan/gameboy-emu/issues/43) is proposed in [STOP.md](tasks/STOP.md). Settle a CPU request result and System step result that distinguish real cycles from a stopped clock before decoding STOP. Proposed StopEntered represents instruction completion plus standby entry; shared delayed-EI bookkeeping includes it. Bounded callers return Stopped without manufacturing idle cycles. First implementation slice is the protocol migration with existing execution preserved; the user owns application changes and the assistant owns test migration/review.

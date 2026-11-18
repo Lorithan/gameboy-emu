@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -94,10 +99,10 @@ fn pop_af_masks_all_low_bytes_in_memory_and_push_af_writes_masked_flags() {
                     completed(system.step_instruction(100).unwrap(), cycles);
                 }
                 let mut expected = system.cpu_snapshot();
-                let opcode = system.step_machine_cycle().unwrap();
+                let opcode = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(opcode.record.read_value, Some(0xF1));
                 assert!(!instruction_complete(opcode.outcome));
-                let low_read = system.step_machine_cycle().unwrap();
+                let low_read = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(
                     matches!(low_read.record.action, CycleAction::Read { addr } if addr == sp - 2)
                 );
@@ -106,7 +111,7 @@ fn pop_af_masks_all_low_bytes_in_memory_and_push_af_writes_masked_flags() {
                 expected.pc = 0x0108;
                 expected.sp = sp - 1;
                 assert_eq!(system.cpu_snapshot(), expected);
-                let high_read = system.step_machine_cycle().unwrap();
+                let high_read = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(
                     matches!(high_read.record.action, CycleAction::Read { addr } if addr == sp - 1)
                 );
@@ -116,17 +121,26 @@ fn pop_af_masks_all_low_bytes_in_memory_and_push_af_writes_masked_flags() {
                 expected.af = u16::from(high) * 256 + u16::from(low & 0xF0);
                 assert_eq!(system.cpu_snapshot(), expected);
                 assert!(!instruction_complete(
-                    system.step_machine_cycle().unwrap().outcome
+                    system
+                        .step_machine_cycle()
+                        .map(expect_cycle)
+                        .unwrap()
+                        .outcome
                 )); // PUSH AF opcode
                 assert!(matches!(
-                    system.step_machine_cycle().unwrap().record.action,
+                    system
+                        .step_machine_cycle()
+                        .map(expect_cycle)
+                        .unwrap()
+                        .record
+                        .action,
                     CycleAction::Idle
                 ));
-                let high_write = system.step_machine_cycle().unwrap();
+                let high_write = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(
                     matches!(high_write.record.action, CycleAction::Write { addr, value } if addr == sp - 1 && value == high)
                 );
-                let low_write = system.step_machine_cycle().unwrap();
+                let low_write = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(
                     matches!(low_write.record.action, CycleAction::Write { addr, value } if addr == sp - 2 && value == low & 0xF0)
                 );

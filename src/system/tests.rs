@@ -1,4 +1,6 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
+use crate::step_support::expect_cycle;
 
 mod cb_integration;
 mod di_ei;
@@ -494,6 +496,7 @@ fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
                 | InstructionStep::InterruptEntryCancelled { .. } => {
                     panic!("unexpected interrupt entry")
                 }
+                InstructionStep::Stopped { .. } => panic!("memory modification must not stop"),
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < 3);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));
@@ -512,7 +515,11 @@ fn memory_modification_budgets_delay_writes_and_never_apply_arithmetic_twice() {
             );
             let tick = system.elapsed_ticks();
             for _ in 0..2 {
-                system.cpu.request_cycle().expect("inspect pending cycle");
+                system
+                    .cpu
+                    .request_cycle()
+                    .map(expect_execute)
+                    .expect("inspect pending cycle");
                 assert!(matches!(
                     system.step_instruction(0),
                     Ok(InstructionStep::BudgetExhausted {
@@ -613,6 +620,7 @@ fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches(
                 | InstructionStep::InterruptEntryCancelled { .. } => {
                     panic!("unexpected interrupt entry")
                 }
+                InstructionStep::Stopped { .. } => panic!("memory access must not stop"),
                 InstructionStep::BudgetExhausted { mcycles, ticks } => {
                     assert!(prefix < cycles);
                     assert_eq!((mcycles, ticks), (prefix, prefix * 4));
@@ -626,7 +634,11 @@ fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches(
                 assert_eq!(paused_memory, 0, "write must wait for its own cycle");
             }
             for _ in 0..2 {
-                system.cpu.request_cycle().expect("inspect pending action");
+                system
+                    .cpu
+                    .request_cycle()
+                    .map(expect_execute)
+                    .expect("inspect pending action");
                 assert!(matches!(
                     system.step_instruction(0),
                     Ok(InstructionStep::BudgetExhausted {
@@ -654,7 +666,7 @@ fn hl_access_budgets_pause_before_side_effects_and_resume_without_extra_fetches(
                 if opcode == 0x7E { 0x5A } else { 0x42 }
             );
             assert!(
-                matches!(system.cpu.request_cycle(), Ok(crate::cpu::CycleAction::Read { addr }) if addr == expected.pc)
+                matches!(system.cpu.request_cycle().map(expect_execute), Ok(crate::cpu::CycleAction::Read { addr }) if addr == expected.pc)
             );
         }
     }
@@ -784,6 +796,7 @@ fn immediate_values_are_data_and_preserve_flags() {
         assert!(!instruction_complete(
             system
                 .step_machine_cycle()
+                .map(expect_cycle)
                 .expect("LD opcode cycle")
                 .outcome
         ));
@@ -792,6 +805,7 @@ fn immediate_values_are_data_and_preserve_flags() {
         assert!(instruction_complete(
             system
                 .step_machine_cycle()
+                .map(expect_cycle)
                 .expect("LD operand cycle")
                 .outcome
         ));
@@ -808,8 +822,14 @@ fn system_clocks_and_execution_states_are_independent() {
     let mut first = program_system(&[0, 0]);
     let second = program_system(&[0x3E, 0x42]);
     let untouched = second.cpu_snapshot();
-    first.step_machine_cycle().expect("first system NOP");
-    first.step_machine_cycle().expect("second NOP");
+    first
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("first system NOP");
+    first
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("second NOP");
     assert_eq!(first.elapsed_ticks(), 8);
     assert_eq!(second.elapsed_ticks(), 0);
     assert_eq!(second.cpu_snapshot(), untouched);
@@ -826,7 +846,10 @@ fn each_trace_records_its_own_bus_action_and_read_byte() {
         (0x0102, 0x42, true),
         (0x0103, 0x00, true),
     ] {
-        let trace = system.step_machine_cycle().expect("supported cycle");
+        let trace = system
+            .step_machine_cycle()
+            .map(expect_cycle)
+            .expect("supported cycle");
         match trace.record.action {
             CycleAction::Read { addr } => assert_eq!(addr, address),
             _ => panic!("expected a read cycle at {address:#06X}"),
@@ -840,7 +863,10 @@ fn each_trace_records_its_own_bus_action_and_read_byte() {
 fn each_trace_counts_one_machine_cycle_not_the_whole_instruction() {
     let mut system = program_system(&[0x00, 0x3E, 0x42, 0x00]);
     for expected_elapsed in [4, 8, 12, 16] {
-        let trace = system.step_machine_cycle().expect("supported cycle");
+        let trace = system
+            .step_machine_cycle()
+            .map(expect_cycle)
+            .expect("supported cycle");
         assert_eq!(trace.record.tick_before, expected_elapsed - 4);
         assert_eq!(trace.record.tick_after, expected_elapsed);
         assert_eq!(system.elapsed_ticks(), expected_elapsed);
@@ -853,7 +879,11 @@ fn failing_read_retains_its_byte_and_tick_span_in_the_error_trace() {
     use crate::cpu::{CpuError, CycleAction};
 
     let mut system = program_system(&[0xD3]);
-    match system.step_machine_cycle().expect_err("unsupported opcode") {
+    match system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect_err("unsupported opcode")
+    {
         SystemError::CpuCompletionError(CpuError::UnsupportedOpcode(_), trace) => {
             assert_eq!(trace.tick_before, 0);
             assert_eq!(trace.tick_after, 4);

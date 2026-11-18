@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -105,7 +110,10 @@ fn public_machine_steps_advance_one_cycle_at_a_time() {
         (0x0103, 12, 0x42, 0x42, true),
         (0x0104, 16, 0x42, 0x00, true),
     ] {
-        let trace = system.step_machine_cycle().expect("supported cycle");
+        let trace = system
+            .step_machine_cycle()
+            .map(expect_cycle)
+            .expect("supported cycle");
         assert_eq!(trace.record.tick_before, ticks - 4);
         assert_eq!(trace.record.tick_after, ticks);
         assert_eq!(trace.record.read_value, Some(read_value));
@@ -127,9 +135,9 @@ fn unsupported_fetch_consumes_time_but_subsequent_faults_do_not() {
     use gameboy_emu::system::SystemError;
 
     let mut system = program_system(&[0x00, 0xD3]);
-    system.step_machine_cycle().expect("NOP");
+    system.step_machine_cycle().map(expect_cycle).expect("NOP");
     assert!(matches!(
-        system.step_machine_cycle(),
+        system.step_machine_cycle().map(expect_cycle),
         Err(SystemError::CpuCompletionError(
             CpuError::UnsupportedOpcode(_),
             _
@@ -140,7 +148,7 @@ fn unsupported_fetch_consumes_time_but_subsequent_faults_do_not() {
     let faulted = system.cpu_snapshot();
     for _ in 0..3 {
         assert!(matches!(
-            system.step_machine_cycle(),
+            system.step_machine_cycle().map(expect_cycle),
             Err(SystemError::CpuRequestError(CpuError::UnsupportedOpcode(_)))
         ));
         assert_eq!(system.elapsed_ticks(), 8);

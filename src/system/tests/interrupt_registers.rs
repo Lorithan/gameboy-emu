@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::step_support::expect_cycle;
 
 use super::super::{InstructionStep, System};
 use crate::{cpu::CycleAction, memory::Cartridge};
@@ -62,7 +63,7 @@ fn interrupt_register_transfers_have_exact_cycles_and_resumable_writes() {
                     assert_eq!(s.cpu_snapshot(), paused);
                     assert_eq!(s.elapsed_ticks(), 16 + budget * 4);
                     for cycle in budget..cycles {
-                        let t = s.step_machine_cycle().unwrap();
+                        let t = s.step_machine_cycle().map(expect_cycle).unwrap();
                         assert_eq!(
                             (t.record.tick_before, t.record.tick_after),
                             (16 + cycle * 4, 20 + cycle * 4)

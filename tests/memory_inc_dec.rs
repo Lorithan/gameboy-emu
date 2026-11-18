@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -30,7 +35,10 @@ fn every_memory_operand_has_three_exact_cycles_and_can_be_reloaded() {
                 | if value == 0 { 0x80 } else { 0 }
                 | if delta < 0 { 0x40 } else { 0 }
                 | if half { 0x20 } else { 0 };
-            let fetch = system.step_machine_cycle().expect("opcode read");
+            let fetch = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("opcode read");
             assert!(matches!(
                 fetch.record.action,
                 CycleAction::Read { addr: 0x0105 }
@@ -43,7 +51,10 @@ fn every_memory_operand_has_three_exact_cycles_and_can_be_reloaded() {
             assert!(!instruction_complete(fetch.outcome));
             expected.pc += 1;
             assert_eq!(system.cpu_snapshot(), expected);
-            let read = system.step_machine_cycle().expect("data read");
+            let read = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("data read");
             assert!(matches!(
                 read.record.action,
                 CycleAction::Read { addr: 0xC123 }
@@ -53,7 +64,10 @@ fn every_memory_operand_has_three_exact_cycles_and_can_be_reloaded() {
             assert!(!instruction_complete(read.outcome));
             expected.af = (expected.af & 0xFF00) | flags;
             assert_eq!(system.cpu_snapshot(), expected);
-            let write = system.step_machine_cycle().expect("data write");
+            let write = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("data write");
             assert!(
                 matches!(write.record.action, CycleAction::Write { addr: 0xC123, value: actual } if actual == value)
             );

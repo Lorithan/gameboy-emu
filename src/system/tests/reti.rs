@@ -1,4 +1,6 @@
 use super::super::{InstructionStep, System};
+use crate::response_support::expect_execute;
+use crate::step_support::expect_cycle;
 use crate::{
     cpu::{CycleAction, CycleOutcome},
     memory::Cartridge,
@@ -63,7 +65,7 @@ fn reti_bus_reads_exact_traces_and_all_budget_resumes_preserve_memory() {
             assert_eq!(s.cpu_snapshot(), expected);
             assert_eq!(s.elapsed_ticks(), 12 + phase * 4);
             for cycle in phase..4 {
-                let t = s.step_machine_cycle().unwrap();
+                let t = s.step_machine_cycle().map(expect_cycle).unwrap();
                 let action = match cycle {
                     0 => CycleAction::Read { addr: 0x103 },
                     1 => CycleAction::Read { addr: sp },
@@ -101,7 +103,7 @@ fn reti_bus_reads_exact_traces_and_all_budget_resumes_preserve_memory() {
             expected.sp = sp.wrapping_add(2);
             assert_eq!(s.cpu_snapshot(), expected);
             assert_eq!(
-                s.cpu.request_cycle().unwrap(),
+                s.cpu.request_cycle().map(expect_execute).unwrap(),
                 CycleAction::Read { addr: target }
             );
             assert_eq!(s.elapsed_ticks(), 28);
@@ -141,7 +143,7 @@ fn reti_enables_pending_interrupt_before_returned_to_opcode() {
             assert_eq!(s.cpu_snapshot().sp, 0xFFFE);
             assert_eq!(s.memory.read(0xFF0F), 0xE4);
             assert_eq!(s.cpu.test_interrupt_status(), (false, true));
-            let t = s.step_machine_cycle().unwrap();
+            let t = s.step_machine_cycle().map(expect_cycle).unwrap();
             assert_eq!(t.record.action, CycleAction::Idle); // No returned-to opcode fetch.
             assert_eq!(t.outcome, CycleOutcome::InProgress);
             assert!(matches!(

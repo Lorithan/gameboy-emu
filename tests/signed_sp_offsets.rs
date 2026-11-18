@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -43,7 +48,7 @@ fn signed_sp_exact_cycles_no_early_changes_and_all_budget_resumes() {
                 expected.sp = result;
             }
             for cycle in 0..cycles {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 match cycle {
                     0 => {
                         assert!(matches!(

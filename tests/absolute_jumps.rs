@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -49,7 +54,7 @@ fn immediate_jump_traces_and_budgets_cover_taken_and_untaken_paths() {
             let mut system = prepared(byte, equal);
             let before = system.cpu_snapshot();
             for cycle in 0..cycles {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(trace.record.tick_before, 16 + cycle * 4);
                 assert_eq!(trace.record.tick_after, 20 + cycle * 4);
                 assert_eq!(instruction_complete(trace.outcome), cycle + 1 == cycles);
@@ -104,7 +109,7 @@ fn jump_hl_has_one_opcode_read_and_never_dereferences_the_target() {
             if budget == 0 {
                 exhausted(system.step_instruction(0).unwrap(), 0);
                 assert_eq!(system.cpu_snapshot(), expected);
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(matches!(
                     trace.record.action,
                     CycleAction::Read { addr: 0x0103 }

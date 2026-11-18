@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -91,7 +96,7 @@ fn call_ret_round_trip_has_stack_reads_then_idle_and_restores_sp() {
         let mut system = return_machine(sp);
         let mut expected = system.cpu_snapshot();
         for cycle in 0u64..4 {
-            let trace = system.step_machine_cycle().unwrap();
+            let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert_eq!(
                 (trace.record.tick_before, trace.record.tick_after),
                 (36 + cycle * 4, 40 + cycle * 4)
@@ -176,7 +181,7 @@ fn call_traces_place_idle_before_return_writes_for_all_conditions() {
             let mut expected = system.cpu_snapshot();
             let cycles = if taken(byte, equal) { 6u64 } else { 3 };
             for cycle in 0..cycles {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(
                     (trace.record.tick_before, trace.record.tick_after),
                     (16 + cycle * 4, 20 + cycle * 4)

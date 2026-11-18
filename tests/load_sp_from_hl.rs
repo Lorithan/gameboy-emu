@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -63,7 +68,7 @@ fn load_sp_from_hl_has_exact_read_idle_trace_and_every_budget_resume() {
             assert_eq!(system.cpu_snapshot(), expected);
             let mut system = program(&bytes);
             complete(&mut system, 3);
-            let fetch = system.step_machine_cycle().unwrap();
+            let fetch = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert!(matches!(
                 fetch.record.action,
                 CycleAction::Read { addr: 0x0103 }
@@ -80,7 +85,7 @@ fn load_sp_from_hl_has_exact_read_idle_trace_and_every_budget_resume() {
             let mut pending = before;
             pending.pc += 1;
             assert_eq!(system.cpu_snapshot(), pending);
-            let idle = system.step_machine_cycle().unwrap();
+            let idle = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert!(matches!(idle.record.action, CycleAction::Idle));
             assert_eq!(idle.record.read_value, None);
             assert_eq!(

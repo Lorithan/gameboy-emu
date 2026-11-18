@@ -9,7 +9,13 @@ use cpu::CycleOutcome as InstructionCycleOutcome;
 mod outcome_support;
 
 #[cfg(test)]
-use cpu::{CpuError, CycleAction, CycleResponse, InterruptSample};
+use cpu::{CpuError, CycleAction, CycleRequest, CycleResponse, InterruptSample};
 #[cfg(test)]
 #[path = "../tests/support/responses.rs"]
 mod response_support;
+
+#[cfg(test)]
+use system::{CycleTrace, MachineStep};
+#[cfg(test)]
+#[path = "../tests/support/steps.rs"]
+mod step_support;

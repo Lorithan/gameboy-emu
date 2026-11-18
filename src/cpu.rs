@@ -54,6 +54,7 @@ pub struct CpuFault {
 pub enum CpuError {
     UnsupportedOpcode(CpuFault),
     UnexpectedCycleResponse(UnexpectedCycleResponse),
+    NoCycleRequested,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +93,7 @@ impl CPU {
         }
     }
 
-    pub fn request_cycle(&self) -> Result<CycleAction, CpuError> {
+    pub fn request_cycle(&self) -> Result<CycleRequest, CpuError> {
         match self.state {
             FetchOpcode
             | DecodeCbOpcode
@@ -112,9 +113,9 @@ impl CPU {
             | ReadHighMemoryImmediate { .. }
             | ReadLowToStoreSp { .. }
             | ReadHighToStoreSp { .. }
-            | ReadImmediateAccumulator { .. } => Ok(CycleAction::Read {
+            | ReadImmediateAccumulator { .. } => Ok(CycleRequest::Execute(CycleAction::Read {
                 addr: self.registers.pc,
-            }),
+            })),
             ReadMemory { addr, .. }
             | ReadMemoryAndUpdateHL { addr, .. }
             | PopLow { addr, .. }
@@ -123,40 +124,50 @@ impl CPU {
             | ReadReturnHigh { addr, .. }
             | ReadOperation { addr, .. }
             | ReadHLForCbOpcode { addr, .. }
-            | ReadMemoryAccumulator { addr, .. } => Ok(CycleAction::Read { addr }),
-            WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
-                Ok(CycleAction::Write { addr, value })
+            | ReadMemoryAccumulator { addr, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Read { addr }))
             }
-            WriteSpLow { sp_low, addr, .. } => Ok(CycleAction::Write {
+            WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write { addr, value }))
+            }
+            WriteSpLow { sp_low, addr, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
                 addr,
                 value: sp_low,
-            }),
-            PushHigh { addr, high, .. } => Ok(CycleAction::Write { addr, value: high }),
-            PushLow { addr, low } => Ok(CycleAction::Write { addr, value: low }),
+            })),
+            PushHigh { addr, high, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
+                addr,
+                value: high,
+            })),
+            PushLow { addr, low } => Ok(CycleRequest::Execute(CycleAction::Write {
+                addr,
+                value: low,
+            })),
             PushCallerHigh {
                 stack_addr,
                 return_addr_high,
                 ..
-            } => Ok(CycleAction::Write {
+            } => Ok(CycleRequest::Execute(CycleAction::Write {
                 addr: stack_addr,
                 value: return_addr_high,
-            }),
+            })),
             PushCallerLow {
                 stack_addr,
                 return_addr_low,
                 ..
-            } => Ok(CycleAction::Write {
+            } => Ok(CycleRequest::Execute(CycleAction::Write {
                 addr: stack_addr,
                 value: return_addr_low,
-            }),
-            InterruptPushHigh { pc_high, sp, .. } => Ok(CycleAction::Write {
-                addr: sp,
-                value: pc_high,
-            }),
-            InterruptPushLow { pc_low, sp, .. } => Ok(CycleAction::Write {
+            })),
+            InterruptPushHigh { pc_high, sp, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write {
+                    addr: sp,
+                    value: pc_high,
+                }))
+            }
+            InterruptPushLow { pc_low, sp, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
                 addr: sp,
                 value: pc_low,
-            }),
+            })),
             Push { .. }
             | ApplyJump { .. }
             | Call { .. }
@@ -170,7 +181,7 @@ impl CPU {
             | InterruptWait { .. }
             | InterruptJump { .. }
             | Halted
-            | Unary16 { .. } => Ok(CycleAction::Idle),
+            | Unary16 { .. } => Ok(CycleRequest::Execute(CycleAction::Idle)),
             Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
@@ -179,9 +190,10 @@ impl CPU {
         let enable_was_pending = self.interrupt_state == InterruptState::Delayed;
 
         let expected_kind = match self.request_cycle()? {
-            CycleAction::Idle => CycleKind::Idle,
-            CycleAction::Read { .. } => CycleKind::Read,
-            CycleAction::Write { .. } => CycleKind::Write,
+            CycleRequest::Execute(CycleAction::Idle) => CycleKind::Idle,
+            CycleRequest::Execute(CycleAction::Read { .. }) => CycleKind::Read,
+            CycleRequest::Execute(CycleAction::Write { .. }) => CycleKind::Write,
+            CycleRequest::Stopped => return Err(CpuError::NoCycleRequested),
         };
         let actual_kind = response.kind();
 

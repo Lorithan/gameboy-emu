@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -96,7 +101,7 @@ fn each_restart_has_four_cycles_and_returns_to_the_next_byte() {
             let mut system = machine(opcode, vector, sp);
             let mut expected = system.cpu_snapshot();
             for cycle in 0u64..4 {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(
                     (trace.record.tick_before, trace.record.tick_after),
                     (28 + cycle * 4, 32 + cycle * 4)

@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
@@ -67,10 +68,10 @@ fn rotations_exhaust_all_values_flags_wrap_retries_and_repetition() {
                     let before = cpu.snapshot();
                     for _ in 0..2 {
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: pc }))
                         );
                         assert_eq!(cpu.snapshot(), before);
                     }
@@ -79,9 +80,12 @@ fn rotations_exhaust_all_values_flags_wrap_retries_and_repetition() {
                     for _ in 0..9 {
                         (value, carry) = reference(opcode, value, carry);
                         assert!(
-                            cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                                .map(instruction_complete)
-                                .unwrap()
+                            cpu.complete_cycle(response(
+                                cpu.request_cycle().map(expect_execute),
+                                Some(opcode)
+                            ))
+                            .map(instruction_complete)
+                            .unwrap()
                         );
                         expected.af = u16::from(value) * 256 + if carry { 0x10 } else { 0 };
                         expected.pc = expected.pc.wrapping_add(1);
@@ -91,7 +95,7 @@ fn rotations_exhaust_all_values_flags_wrap_retries_and_repetition() {
                             "opcode {opcode:02X}, original A={a:02X}, F={flags:02X}"
                         );
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                         );
                     }
                 }

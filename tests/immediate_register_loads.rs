@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -59,7 +64,10 @@ fn every_register_loads_every_byte_with_correct_per_cycle_state_and_trace() {
         for value in 0u8..=u8::MAX {
             let mut system = machine(opcode, value);
             let initial = system.cpu_snapshot();
-            let first = system.step_machine_cycle().expect("opcode cycle");
+            let first = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("opcode cycle");
             assert_eq!((first.record.tick_before, first.record.tick_after), (0, 4));
             assert!(matches!(
                 first.record.action,
@@ -71,7 +79,10 @@ fn every_register_loads_every_byte_with_correct_per_cycle_state_and_trace() {
             pending.pc = 0x0101;
             assert_eq!(system.cpu_snapshot(), pending);
 
-            let second = system.step_machine_cycle().expect("operand cycle");
+            let second = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("operand cycle");
             assert_eq!(
                 (second.record.tick_before, second.record.tick_after),
                 (4, 8)
@@ -147,7 +158,7 @@ fn unrelated_opcodes_remain_unsupported() {
     for opcode in [0xD3, 0xDB] {
         let mut system = machine(opcode, 0x42);
         assert!(matches!(
-            system.step_machine_cycle(),
+            system.step_machine_cycle().map(expect_cycle),
             Err(SystemError::CpuCompletionError(
                 CpuError::UnsupportedOpcode(_),
                 _
@@ -156,7 +167,7 @@ fn unrelated_opcodes_remain_unsupported() {
         assert_eq!(system.cpu_snapshot().pc, 0x0101);
         assert_eq!(system.elapsed_ticks(), 4);
         assert!(matches!(
-            system.step_machine_cycle(),
+            system.step_machine_cycle().map(expect_cycle),
             Err(SystemError::CpuRequestError(CpuError::UnsupportedOpcode(_)))
         ));
         assert_eq!(system.elapsed_ticks(), 4);

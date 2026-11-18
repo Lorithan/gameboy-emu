@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
@@ -34,10 +35,10 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                     let before = cpu.snapshot();
                     for _ in 0..2 {
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                         assert!(
-                            matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
+                            matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: pc }))
                         );
                         assert_eq!(cpu.snapshot(), before);
                     }
@@ -50,20 +51,26 @@ fn complement_carry_exhaustive_flags_values_and_wrapping() {
                     expected.af = u16::from(value) * 256 + u16::from(expected_flags);
                     expected.pc = pc.wrapping_add(1);
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                     );
                     // Second application restores A for Cpl and C for Ccf;
                     // N/H follow the instruction rules rather than reverting.
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.pc = expected.pc.wrapping_add(1);
                     expected.af = match opcode {

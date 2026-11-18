@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -63,7 +68,10 @@ fn add_sub_boundaries_have_one_public_cycle_and_stop_before_the_next_opcode() {
                         ));
                         assert_eq!(system.cpu_snapshot(), before);
                         assert_eq!(system.elapsed_ticks(), 16);
-                        let trace = system.step_machine_cycle().expect("arithmetic opcode");
+                        let trace = system
+                            .step_machine_cycle()
+                            .map(expect_cycle)
+                            .expect("arithmetic opcode");
                         assert!(matches!(
                             trace.record.action,
                             CycleAction::Read { addr: 0x0104 }

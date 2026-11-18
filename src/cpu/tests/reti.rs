@@ -2,6 +2,7 @@ use crate::cpu::{
     CPU, CpuError, CycleAction, CycleKind, CycleOutcome, CycleResponse, InterruptSample,
     InterruptState, Registers, opcode::DecodedOpcode, registers::Flag,
 };
+use crate::response_support::expect_execute;
 
 fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: u8) {
     let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
@@ -24,7 +25,7 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
         let before = cpu.snapshot();
         let state = format!("{:?}", cpu.state);
         for _ in 0..2 {
-            assert_eq!(cpu.request_cycle().unwrap(), action);
+            assert_eq!(cpu.request_cycle().map(expect_execute).unwrap(), action);
         }
         let expected_kind = if cycle == 3 {
             CycleKind::Idle
@@ -99,7 +100,7 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
         assert_eq!(cpu.interrupt_state, expected_ime);
     }
     assert_eq!(
-        cpu.request_cycle().unwrap(),
+        cpu.request_cycle().map(expect_execute).unwrap(),
         CycleAction::Read { addr: target }
     );
 }
@@ -142,7 +143,7 @@ fn reti_captures_return_mode_stack_address_and_low_byte() {
     .unwrap();
     cpu.registers.sp = 0x4321;
     assert_eq!(
-        cpu.request_cycle().unwrap(),
+        cpu.request_cycle().map(expect_execute).unwrap(),
         CycleAction::Read { addr: 0xFFFF }
     );
     cpu.complete_cycle(CycleResponse::Read {
@@ -151,7 +152,10 @@ fn reti_captures_return_mode_stack_address_and_low_byte() {
     })
     .unwrap();
     cpu.registers.sp = 0xBEEF;
-    assert_eq!(cpu.request_cycle().unwrap(), CycleAction::Read { addr: 0 });
+    assert_eq!(
+        cpu.request_cycle().map(expect_execute).unwrap(),
+        CycleAction::Read { addr: 0 }
+    );
     cpu.complete_cycle(CycleResponse::Read {
         value: 0x12,
         pending_interrupts: 0,

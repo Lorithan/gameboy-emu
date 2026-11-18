@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -47,16 +48,22 @@ fn conditional_returns_cover_every_target_and_both_decisions() {
                 let mut cpu = CPU::from_registers(registers);
                 let mut expected = cpu.snapshot();
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(byte)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.pc += 1;
                 assert_eq!(cpu.snapshot(), expected);
-                assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
+                assert!(matches!(
+                    cpu.request_cycle().map(expect_execute).unwrap(),
+                    CycleAction::Idle
+                ));
                 let decision = taken(byte, flags);
                 assert_eq!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .unwrap(),
                     !decision
@@ -64,23 +71,26 @@ fn conditional_returns_cover_every_target_and_both_decisions() {
                 assert_eq!(cpu.snapshot(), expected);
                 if decision {
                     assert!(matches!(
-                        cpu.request_cycle().unwrap(),
+                        cpu.request_cycle().map(expect_execute).unwrap(),
                         CycleAction::Read { addr: 0xFFFC }
                     ));
                     assert!(
-                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(target as u8)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        !cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(target as u8)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.sp = 0xFFFD;
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(matches!(
-                        cpu.request_cycle().unwrap(),
+                        cpu.request_cycle().map(expect_execute).unwrap(),
                         CycleAction::Read { addr: 0xFFFD }
                     ));
                     assert!(
                         !cpu.complete_cycle(response(
-                            cpu.request_cycle(),
+                            cpu.request_cycle().map(expect_execute),
                             Some((target / 256) as u8)
                         ))
                         .map(instruction_complete)
@@ -88,9 +98,12 @@ fn conditional_returns_cover_every_target_and_both_decisions() {
                     );
                     expected.sp = 0xFFFE;
                     assert_eq!(cpu.snapshot(), expected);
-                    assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
+                    assert!(matches!(
+                        cpu.request_cycle().map(expect_execute).unwrap(),
+                        CycleAction::Idle
+                    ));
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -98,7 +111,7 @@ fn conditional_returns_cover_every_target_and_both_decisions() {
                 }
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    matches!(cpu.request_cycle().unwrap(), CycleAction::Read { addr } if addr == expected.pc)
+                    matches!(cpu.request_cycle().map(expect_execute).unwrap(), CycleAction::Read { addr } if addr == expected.pc)
                 );
             }
         }
@@ -118,24 +131,30 @@ fn conditional_returns_capture_flags_and_stack_through_pause_retry_and_wrap() {
                     let mut cpu = CPU::from_registers(registers);
                     let initial = cpu.snapshot();
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: pc }))
                     );
                     assert_eq!(cpu.snapshot(), initial);
                     assert!(
-                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        !cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(byte)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     cpu.registers.sp = 0x8000;
                     cpu.registers.set_af(initial.af ^ 0x90);
                     let mut expected = cpu.snapshot();
                     for _ in 0..2 {
-                        assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
+                        assert!(matches!(
+                            cpu.request_cycle().map(expect_execute).unwrap(),
+                            CycleAction::Idle
+                        ));
                         assert_eq!(cpu.snapshot(), expected);
                     }
                     let decision = taken(byte, flags << 4);
                     assert_eq!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                             .map(instruction_complete)
                             .unwrap(),
                         !decision
@@ -147,34 +166,43 @@ fn conditional_returns_capture_flags_and_stack_through_pause_retry_and_wrap() {
                         {
                             for _ in 0..2 {
                                 assert!(
-                                    matches!(cpu.request_cycle().unwrap(), CycleAction::Read { addr } if addr == address)
+                                    matches!(cpu.request_cycle().map(expect_execute).unwrap(), CycleAction::Read { addr } if addr == address)
                                 );
                                 assert!(
-                                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
+                                    matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: address }))
                                 );
                                 assert_eq!(cpu.snapshot(), expected);
                             }
                             assert!(
-                                !cpu.complete_cycle(response(cpu.request_cycle(), Some(value)))
-                                    .map(instruction_complete)
-                                    .unwrap()
+                                !cpu.complete_cycle(response(
+                                    cpu.request_cycle().map(expect_execute),
+                                    Some(value)
+                                ))
+                                .map(instruction_complete)
+                                .unwrap()
                             );
                             expected.sp = address.wrapping_add(1);
                             assert_eq!(cpu.snapshot(), expected);
                             if final_read {
-                                assert!(matches!(cpu.request_cycle().unwrap(), CycleAction::Idle));
+                                assert!(matches!(
+                                    cpu.request_cycle().map(expect_execute).unwrap(),
+                                    CycleAction::Idle
+                                ));
                             }
                         }
                         assert!(
-                            cpu.complete_cycle(response(cpu.request_cycle(), None))
-                                .map(instruction_complete)
-                                .unwrap()
+                            cpu.complete_cycle(response(
+                                cpu.request_cycle().map(expect_execute),
+                                None
+                            ))
+                            .map(instruction_complete)
+                            .unwrap()
                         );
                         expected.pc = 0x1234;
                     }
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(
-                        matches!(cpu.request_cycle().unwrap(), CycleAction::Read { addr } if addr == expected.pc)
+                        matches!(cpu.request_cycle().map(expect_execute).unwrap(), CycleAction::Read { addr } if addr == expected.pc)
                     );
                 }
             }

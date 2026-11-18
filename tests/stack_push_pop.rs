@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -41,7 +46,7 @@ fn push_bc_has_read_idle_high_write_low_write_and_per_cycle_sp_updates() {
         let mut system = machine(start);
         let mut expected = system.cpu_snapshot();
         for cycle in 0u64..4 {
-            let trace = system.step_machine_cycle().unwrap();
+            let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
             assert_eq!(
                 (trace.record.tick_before, trace.record.tick_after),
                 (24 + cycle * 4, 28 + cycle * 4)

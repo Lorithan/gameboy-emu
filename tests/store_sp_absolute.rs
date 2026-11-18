@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -40,7 +45,7 @@ fn store_sp_absolute_has_five_cycles_and_resumes_between_both_writes() {
         let mut expected = before;
         expected.pc += 3;
         for cycle in 0..5u64 {
-            let trace = system.step_machine_cycle().unwrap();
+            let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
             if cycle < 3 {
                 assert!(
                     matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x0103 + cycle as u16)

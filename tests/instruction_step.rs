@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -51,7 +56,11 @@ fn zero_budget_changes_neither_fresh_nor_partial_instruction_state() {
     assert_eq!(system.elapsed_ticks(), 0);
 
     assert!(!instruction_complete(
-        system.step_machine_cycle().expect("opcode cycle").outcome
+        system
+            .step_machine_cycle()
+            .map(expect_cycle)
+            .expect("opcode cycle")
+            .outcome
     ));
     let partial = system.cpu_snapshot();
     assert_exhausted(
@@ -63,6 +72,7 @@ fn zero_budget_changes_neither_fresh_nor_partial_instruction_state() {
     assert_eq!(system.elapsed_ticks(), 4);
     let operand = system
         .step_machine_cycle()
+        .map(expect_cycle)
         .expect("operand must remain pending");
     assert_eq!(operand.record.read_value, Some(0x42));
     assert!(instruction_complete(operand.outcome));
@@ -119,7 +129,10 @@ fn exhausted_load_resumes_without_refetching_its_opcode() {
 #[test]
 fn returned_counts_are_local_to_each_instruction_call() {
     let mut system = machine(&[0x00, 0x3E, 0xFF, 0x00]);
-    system.step_machine_cycle().expect("initial NOP");
+    system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect("initial NOP");
     assert_eq!(system.elapsed_ticks(), 4);
     let load = system
         .step_instruction(2)

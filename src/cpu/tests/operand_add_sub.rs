@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -76,9 +77,12 @@ fn all_operand_pairs_match_reference_and_finish_at_the_correct_pc() {
             for right in 0u8..=255 {
                 let mut cpu = machine(left, (left ^ right) & 0xF0, 0x0100);
                 let before = cpu.snapshot();
-                cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                    .map(instruction_complete)
-                    .expect("opcode read");
+                cpu.complete_cycle(response(
+                    cpu.request_cycle().map(expect_execute),
+                    Some(opcode),
+                ))
+                .map(instruction_complete)
+                .expect("opcode read");
                 let mut pending = before;
                 pending.pc += 1;
                 assert_eq!(
@@ -88,12 +92,15 @@ fn all_operand_pairs_match_reference_and_finish_at_the_correct_pc() {
                 );
                 let address = if immediate { 0x0101 } else { 0xC123 };
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == address)
                 );
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
-                        .map(instruction_complete)
-                        .expect("operand read")
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(right)
+                    ))
+                    .map(instruction_complete)
+                    .expect("operand read")
                 );
                 let mut expected = reference(pending, left, right, add);
                 if immediate {
@@ -105,7 +112,7 @@ fn all_operand_pairs_match_reference_and_finish_at_the_correct_pc() {
                     "opcode {opcode:02X}, left {left:02X}, right {right:02X}"
                 );
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc),
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc),
                     "arithmetic completion must return to opcode fetch"
                 );
             }
@@ -121,13 +128,16 @@ fn retries_wrap_pc_and_preserve_captured_a_address_and_initial_flags() {
                 let mut cpu = machine(0x42, combination << 4, start);
                 let before = cpu.snapshot();
                 assert!(
-                    matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: start }))
+                    matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: start }))
                 );
                 assert_eq!(cpu.snapshot(), before);
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .expect("retry opcode")
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .expect("retry opcode")
                 );
                 let mut pending = before;
                 pending.pc = pending.pc.wrapping_add(1);
@@ -140,17 +150,20 @@ fn retries_wrap_pc_and_preserve_captured_a_address_and_initial_flags() {
                 let address = if immediate { pending.pc } else { 0xC123 };
                 for _ in 0..2 {
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: address }))
                     );
                     assert_eq!(cpu.snapshot(), pending);
                 }
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0x10)))
-                        .map(instruction_complete)
-                        .expect("retry operand")
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(0x10)
+                    ))
+                    .map(instruction_complete)
+                    .expect("retry operand")
                 );
                 let mut expected = reference(pending, 0x42, 0x10, add);
                 if immediate {
@@ -158,7 +171,7 @@ fn retries_wrap_pc_and_preserve_captured_a_address_and_initial_flags() {
                 }
                 assert_eq!(cpu.snapshot(), expected);
                 assert!(
-                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                 );
             }
         }
@@ -176,14 +189,20 @@ fn boundary_operands_overwrite_every_initial_flag_combination_for_each_source_ki
                     expected.pc += if immediate { 2 } else { 1 };
                     expected = reference(expected, left, right, add);
                     assert!(
-                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .expect("opcode")
+                        !cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .expect("opcode")
                     );
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
-                            .map(instruction_complete)
-                            .expect("operand")
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(right)
+                        ))
+                        .map(instruction_complete)
+                        .expect("operand")
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }

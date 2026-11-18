@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -24,7 +29,10 @@ fn check_load(opcode: u8, set_expected: fn(&mut CpuSnapShot, u16)) {
             .into_iter()
             .enumerate()
         {
-            let trace = system.step_machine_cycle().expect("word-load read cycle");
+            let trace = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("word-load read cycle");
             assert!(
                 matches!(trace.record.action, CycleAction::Read { addr } if addr == 0x0100 + index as u16)
             );

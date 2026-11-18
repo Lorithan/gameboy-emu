@@ -2,7 +2,7 @@
 
 Core task: [#43](https://github.com/Lorithan/gameboy-emu/issues/43), M2. Device follow-up: [#44](https://github.com/Lorithan/gameboy-emu/issues/44), dependent on M3 divider/timer and M4 joypad work.
 
-Status: proposed architecture, 2026-11-18. Review this contract before implementing dependent changes. User owns application implementation; assistant owns tests, documentation and review. Names below are proposals; the required distinctions matter more than their spelling.
+Status: user accepted the no-cycle stepping direction on 2026-11-18. CPU CycleRequest and System MachineStep migrations are implemented and reviewed below; STOP decoding/standby behavior remain pending. The remaining contract describes the next implementation slices. User owns application implementation; assistant owns tests, documentation and review.
 
 Baseline: published b9c765e, 371 previously passing tests (271 unit, 100 integration), formatting and strict Clippy passing. STOP is currently unsupported; coverage remains 243/244 legal non-prefix base plus all 256 CB encodings. No emulator tests were rerun for this documentation-only proposal.
 
@@ -99,3 +99,21 @@ External validation needs versioned test selection, DMG target, source/license, 
 - [RGBDS gbz80 STOP](https://raw.githubusercontent.com/gbdev/rgbds/master/man/gbz80.7): two-byte encoding, default 00 padding, unaffected flags and deliberately unspecified fixed cycles.
 - [SonoSooS CPU internals, NOP and STOP](https://gist.github.com/SonoSooS/c0055300670d678b5ae8433e20bea595): fetch overlap, clock suspension, WAKE/pending cases and wake glitch discussion. Used as research context, not a substitute for hardware validation.
 - [Pan Docs timer/divider registers](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_and_Divider_Registers.md): DIV reset and pause during STOP.
+
+## CycleRequest migration review - 2026-11-18
+
+User added CycleRequest::{Execute(CycleAction), Stopped}, wrapped every existing CPU action, and rejects stopped completion with CpuError::NoCycleRequested before mutation. Fault propagation and wrong-kind response validation remain in place. System unwraps Execute, with a temporary todo for Stopped; that branch is currently unreachable because no Stopped execution state exists yet.
+
+Assistant migrated existing CPU-request tests through a test-only helper that requires Execute and fails on unexpected Stopped, preserving their action/result/flag/memory/trace oracles. All 371 tests pass (271 unit, 100 integration); cargo check --lib, formatting, strict Clippy and whitespace checks pass. This verifies existing execution after the request-type migration; it does not exercise stopped completion or no-cycle System results. No external ROM suite ran.
+
+Next user slice: define MachineStep in system.rs, return Cycle for real traces and Stopped before tick advancement for stopped requests, then adapt bounded instruction stepping to return InstructionStep::Stopped without counting a cycle. Assistant owns the resulting System-test migration. Finish that path before adding STOP decoding or an ExecutionState::Stopped that makes it reachable.
+
+## MachineStep migration verified - 2026-11-18
+
+System now returns MachineStep::Cycle for actual traces and MachineStep::Stopped before advancing time or completing a cycle. Bounded stepping reports InstructionStep::Stopped using the count of previously executed cycles (the loop index, without adding one). Zero budgets retain BudgetExhausted with no work. The temporary todo is removed.
+
+Assistant migrated System-step tests through a test-only helper requiring a real Cycle, preserving trace/flag/memory/budget oracles and explicitly rejecting unexpected standby. Existing exhaustive result matches also reject Stopped for ordinary memory operations. Fresh verification passes all 371 tests (271 unit, 100 integration), formatting, strict Clippy and whitespace checks. No external ROM suite ran.
+
+This checkpoint verifies existing clocked execution under both new result wrappers. ExecutionState::Stopped does not exist yet, so no-cycle polling and NoCycleRequested rejection are reviewed structurally but not exercised. Add those tests when standby becomes reachable; do not claim STOP support from this checkpoint.
+
+Next user slice: STOP decode, private Stopped/StopFinished, public StopEntered, shared delayed-EI completion bookkeeping and bounded handling of the entry event. StopEntered is a real instruction-completing cycle; a later MachineStep::Stopped is a no-cycle poll. The former counts its entry cycle, the latter does not. Follow the ordinary-standby approximation above; divider/joypad integration stays in #44.

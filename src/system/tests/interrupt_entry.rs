@@ -1,4 +1,5 @@
 use super::super::{InstructionStep, System, SystemError};
+use crate::step_support::expect_cycle;
 use crate::{
     cpu::{CpuError, CycleAction, CycleOutcome},
     memory::{Cartridge, Interrupt},
@@ -142,7 +143,7 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                     if phase == 5 {
                         break;
                     }
-                    let trace = s.step_machine_cycle().unwrap();
+                    let trace = s.step_machine_cycle().map(expect_cycle).unwrap();
                     let action = match phase {
                         2 => CycleAction::Write {
                             addr: sp.wrapping_sub(1),
@@ -178,7 +179,7 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                         }
                     );
                 }
-                let trace = s.step_machine_cycle().unwrap();
+                let trace = s.step_machine_cycle().map(expect_cycle).unwrap();
                 assert_eq!(trace.record.action, CycleAction::Read { addr: vector });
                 assert_eq!(trace.outcome, CycleOutcome::InstructionComplete);
                 assert_eq!(s.cpu_snapshot().pc, vector + 1);
@@ -258,7 +259,7 @@ fn pending_interrupts_wait_for_ei_follower_and_instruction_completion() {
             _ => 2,
         };
         for phase in 0..cycles {
-            let trace = s.step_machine_cycle().unwrap();
+            let trace = s.step_machine_cycle().map(expect_cycle).unwrap();
             assert_eq!(
                 trace.outcome,
                 if phase + 1 == cycles {
@@ -305,7 +306,7 @@ fn interrupts_do_not_clear_sticky_faults_or_mutate_on_zero_budget() {
     for _ in 0..2 {
         s.step_instruction(0).unwrap();
         assert!(matches!(
-            s.step_machine_cycle(),
+            s.step_machine_cycle().map(expect_cycle),
             Err(SystemError::CpuRequestError(CpuError::UnsupportedOpcode(_)))
         ));
         assert_eq!(s.cpu_snapshot(), before);

@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -88,7 +93,7 @@ fn indirect_pair_transfers_have_exact_bus_traces_and_all_budget_resumes() {
                 let mut system = program(&bytes);
                 complete(&mut system, 3);
                 complete(&mut system, 2);
-                let fetch = system.step_machine_cycle().unwrap();
+                let fetch = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(matches!(
                     fetch.record.action,
                     CycleAction::Read { addr: 0x0105 }
@@ -105,7 +110,7 @@ fn indirect_pair_transfers_have_exact_bus_traces_and_all_budget_resumes() {
                 let mut pending = before;
                 pending.pc += 1;
                 assert_eq!(system.cpu_snapshot(), pending);
-                let data = system.step_machine_cycle().unwrap();
+                let data = system.step_machine_cycle().map(expect_cycle).unwrap();
                 if store {
                     assert!(
                         matches!(data.record.action, CycleAction::Write { addr: actual, value: 0x5A } if actual == addr)

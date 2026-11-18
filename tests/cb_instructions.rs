@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -70,7 +75,7 @@ fn every_cb_encoding_has_exact_bus_trace_timing_and_result() {
                 let start = system.elapsed_ticks();
                 let n = cycles(opcode);
                 for cycle in 0..n {
-                    let trace = system.step_machine_cycle().unwrap();
+                    let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                     match cycle {
                         0 | 1 => {
                             assert!(
@@ -201,14 +206,14 @@ fn cb_second_opcode_read_crosses_hram_into_ie_and_wraps_pc() {
         complete(&mut system, n);
     }
     let start = system.elapsed_ticks();
-    let prefix = system.step_machine_cycle().unwrap();
+    let prefix = system.step_machine_cycle().map(expect_cycle).unwrap();
     assert!(matches!(
         prefix.record.action,
         CycleAction::Read { addr: 0xFFFE }
     ));
     assert_eq!(prefix.record.read_value, Some(0xCB));
     assert!(!instruction_complete(prefix.outcome));
-    let second = system.step_machine_cycle().unwrap();
+    let second = system.step_machine_cycle().map(expect_cycle).unwrap();
     assert!(matches!(
         second.record.action,
         CycleAction::Read { addr: 0xFFFF }

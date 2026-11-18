@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
@@ -35,18 +36,21 @@ fn di_ei_preserve_registers_flags_and_wrap_pc_from_every_ime_state() {
                     let mut expected = cpu.snapshot();
                     for _ in 0..2 {
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc)
                         );
                     }
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: pc }))
                     );
                     assert_eq!(cpu.snapshot(), expected);
                     assert_eq!(cpu.interrupt_state, state);
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.pc = pc.wrapping_add(1);
                     assert_eq!(cpu.snapshot(), expected);
@@ -95,9 +99,12 @@ fn di_ei_sequences_match_independent_pending_enable_model() {
                     }
                 }
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 let expected = if enabled {
                     InterruptState::Enabled
@@ -118,9 +125,12 @@ fn di_ei_sequences_match_independent_pending_enable_model() {
 fn pending_cpu() -> CPU {
     let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
     assert!(
-        cpu.complete_cycle(response(cpu.request_cycle(), Some(0xFB)))
-            .map(instruction_complete)
-            .unwrap()
+        cpu.complete_cycle(response(
+            cpu.request_cycle().map(expect_execute),
+            Some(0xFB)
+        ))
+        .map(instruction_complete)
+        .unwrap()
     );
     assert_eq!(cpu.interrupt_state, InterruptState::Delayed);
     cpu
@@ -137,11 +147,11 @@ fn delayed_enable_waits_for_final_cycle_of_every_supported_base_instruction() {
         let mut completed = false;
         for _ in 0..8 {
             let before = cpu.snapshot();
-            let action = cpu.request_cycle().unwrap();
+            let action = cpu.request_cycle().map(expect_execute).unwrap();
             let data = match action {
                 CycleAction::Read { addr } => {
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr }))
                     );
                     assert_eq!(cpu.snapshot(), before);
                     assert_eq!(cpu.interrupt_state, InterruptState::Delayed);
@@ -150,7 +160,7 @@ fn delayed_enable_waits_for_final_cycle_of_every_supported_base_instruction() {
                 CycleAction::Write { .. } | CycleAction::Idle => None,
             };
             completed = cpu
-                .complete_cycle(response(cpu.request_cycle(), data))
+                .complete_cycle(response(cpu.request_cycle().map(expect_execute), data))
                 .map(instruction_complete)
                 .unwrap();
             if completed {
@@ -180,19 +190,22 @@ fn delayed_enable_waits_for_whole_cb_instruction_for_every_encoding() {
     for opcode in 0u8..=255 {
         let mut cpu = pending_cpu();
         assert!(
-            !cpu.complete_cycle(response(cpu.request_cycle(), Some(0xCB)))
-                .map(instruction_complete)
-                .unwrap()
+            !cpu.complete_cycle(response(
+                cpu.request_cycle().map(expect_execute),
+                Some(0xCB)
+            ))
+            .map(instruction_complete)
+            .unwrap()
         );
         assert_eq!(cpu.interrupt_state, InterruptState::Delayed);
         let mut data = Some(opcode);
         let mut completed = false;
         for _ in 0..3 {
             let before = cpu.snapshot();
-            let read = match cpu.request_cycle().unwrap() {
+            let read = match cpu.request_cycle().map(expect_execute).unwrap() {
                 CycleAction::Read { addr } => {
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr }))
                     );
                     assert_eq!(cpu.snapshot(), before);
                     assert_eq!(cpu.interrupt_state, InterruptState::Delayed);
@@ -201,7 +214,7 @@ fn delayed_enable_waits_for_whole_cb_instruction_for_every_encoding() {
                 CycleAction::Write { .. } | CycleAction::Idle => None,
             };
             completed = cpu
-                .complete_cycle(response(cpu.request_cycle(), read))
+                .complete_cycle(response(cpu.request_cycle().map(expect_execute), read))
                 .map(instruction_complete)
                 .unwrap();
             assert_eq!(
@@ -224,18 +237,21 @@ fn delayed_enable_waits_for_whole_cb_instruction_for_every_encoding() {
 fn unsupported_instruction_never_matures_delayed_enable() {
     let mut cpu = pending_cpu();
     assert!(matches!(
-        cpu.complete_cycle(response(cpu.request_cycle(), Some(0xD3)))
-            .map(instruction_complete),
+        cpu.complete_cycle(response(
+            cpu.request_cycle().map(expect_execute),
+            Some(0xD3)
+        ))
+        .map(instruction_complete),
         Err(CpuError::UnsupportedOpcode(_))
     ));
     let after = cpu.snapshot();
     for _ in 0..3 {
         assert!(matches!(
-            cpu.request_cycle(),
+            cpu.request_cycle().map(expect_execute),
             Err(CpuError::UnsupportedOpcode(_))
         ));
         assert!(matches!(
-            cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+            cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), Some(0)))
                 .map(instruction_complete),
             Err(CpuError::UnsupportedOpcode(_))
         ));

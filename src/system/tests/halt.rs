@@ -1,4 +1,5 @@
 use super::super::{InstructionStep, System};
+use crate::step_support::expect_cycle;
 use crate::{
     cpu::{CycleAction, CycleOutcome},
     memory::Cartridge,
@@ -49,7 +50,7 @@ fn halt_completes_once_then_bounded_idles_preserve_state_and_memory() {
             assert_eq!(s.elapsed_ticks(), ticks + budget * 4);
             assert_eq!(s.cpu_snapshot(), before);
         }
-        let t = s.step_machine_cycle().unwrap();
+        let t = s.step_machine_cycle().map(expect_cycle).unwrap();
         assert_eq!(t.record.action, CycleAction::Idle);
         assert_eq!(t.record.read_value, None);
         assert_eq!(t.outcome, CycleOutcome::InProgress);
@@ -76,7 +77,7 @@ fn halt_wakes_only_for_enabled_requested_sources_with_no_extra_wake_cycle() {
             s.memory.write(0xFF0F, flags);
             s.memory.write(0xFFFF, enable);
             assert_eq!(
-                s.step_machine_cycle().unwrap().outcome,
+                s.step_machine_cycle().map(expect_cycle).unwrap().outcome,
                 CycleOutcome::InProgress
             );
         }
@@ -122,10 +123,10 @@ fn halt_bug_duplicates_immediate_single_byte_cb_and_rst_fetches() {
     let before = s.cpu_snapshot();
     s.step_instruction(0).unwrap();
     assert_eq!(s.cpu_snapshot(), before);
-    let t = s.step_machine_cycle().unwrap();
+    let t = s.step_machine_cycle().map(expect_cycle).unwrap();
     assert_eq!(t.record.action, CycleAction::Read { addr: 0x101 });
     assert_eq!(s.cpu_snapshot().pc, 0x101);
-    let t = s.step_machine_cycle().unwrap();
+    let t = s.step_machine_cycle().map(expect_cycle).unwrap();
     assert_eq!(t.record.action, CycleAction::Read { addr: 0x101 });
     assert_eq!(s.cpu_snapshot().af >> 8, 0x3E);
     assert_eq!(s.cpu_snapshot().pc, 0x102);
@@ -144,7 +145,11 @@ fn halt_bug_duplicates_immediate_single_byte_cb_and_rst_fetches() {
     s.step_instruction(1).unwrap();
     for _ in 0..2 {
         assert_eq!(
-            s.step_machine_cycle().unwrap().record.action,
+            s.step_machine_cycle()
+                .map(expect_cycle)
+                .unwrap()
+                .record
+                .action,
             CycleAction::Read { addr: 0x101 }
         );
     }
@@ -178,7 +183,7 @@ fn ei_halt_pending_handlers_return_into_halt_then_later_request_returns_after_it
             matches!(s.step_instruction(100).unwrap(),InstructionStep::InterruptEntered{vector:v,mcycles:5,ticks:20} if v==vector)
         );
         assert_eq!((s.memory.read(0xFFFC), s.memory.read(0xFFFD)), (1, 1));
-        let t = s.step_machine_cycle().unwrap();
+        let t = s.step_machine_cycle().map(expect_cycle).unwrap();
         assert_eq!(t.record.action, CycleAction::Read { addr: vector });
         assert_eq!(s.cpu_snapshot().pc, vector + 1); // No leaked suppression in handler.
         s.step_instruction(1).unwrap();

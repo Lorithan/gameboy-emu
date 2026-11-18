@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -87,7 +92,10 @@ fn all_transfers_have_exact_public_traces_and_preserve_unrelated_state() {
             let before = system.cpu_snapshot();
             let final_state = expected(before, destination, source);
             let start = system.elapsed_ticks();
-            let fetch = system.step_machine_cycle().expect("opcode fetch");
+            let fetch = system
+                .step_machine_cycle()
+                .map(expect_cycle)
+                .expect("opcode fetch");
             assert!(matches!(fetch.record.action, CycleAction::Read { addr } if addr == before.pc));
             assert_eq!(fetch.record.read_value, Some(opcode));
             assert_eq!(
@@ -99,7 +107,10 @@ fn all_transfers_have_exact_public_traces_and_preserve_unrelated_state() {
                 let mut pending = before;
                 pending.pc += 1;
                 assert_eq!(system.cpu_snapshot(), pending);
-                let access = system.step_machine_cycle().expect("data access");
+                let access = system
+                    .step_machine_cycle()
+                    .map(expect_cycle)
+                    .expect("data access");
                 assert_eq!(
                     (access.record.tick_before, access.record.tick_after),
                     (start + 4, start + 8)
@@ -233,7 +244,10 @@ fn stop_remains_an_unsupported_sticky_fault_without_a_memory_transfer() {
     let mut system = machine(0x10, false);
     let before = system.cpu_snapshot();
     let start = system.elapsed_ticks();
-    let error = system.step_machine_cycle().expect_err("STOP is deferred");
+    let error = system
+        .step_machine_cycle()
+        .map(expect_cycle)
+        .expect_err("STOP is deferred");
     match error {
         SystemError::CpuCompletionError(CpuError::UnsupportedOpcode(_), trace) => {
             assert!(matches!(trace.action, CycleAction::Read { addr } if addr == before.pc));
@@ -246,7 +260,7 @@ fn stop_remains_an_unsupported_sticky_fault_without_a_memory_transfer() {
     expected.pc += 1;
     assert_eq!(system.cpu_snapshot(), expected);
     assert!(matches!(
-        system.step_machine_cycle(),
+        system.step_machine_cycle().map(expect_cycle),
         Err(SystemError::CpuRequestError(CpuError::UnsupportedOpcode(_)))
     ));
     assert_eq!(system.elapsed_ticks(), start + 4);

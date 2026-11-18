@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -34,9 +35,12 @@ fn finish(cpu: &mut CPU, opcode: u8) {
     let mut pending = cpu.snapshot();
     pending.pc += 1;
     assert!(
-        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-            .map(instruction_complete)
-            .unwrap()
+        !cpu.complete_cycle(response(
+            cpu.request_cycle().map(expect_execute),
+            Some(opcode)
+        ))
+        .map(instruction_complete)
+        .unwrap()
     );
     assert_eq!(
         cpu.snapshot(),
@@ -44,7 +48,7 @@ fn finish(cpu: &mut CPU, opcode: u8) {
         "opcode fetch must not change HL/flags"
     );
     assert!(
-        cpu.complete_cycle(response(cpu.request_cycle(), None))
+        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
             .map(instruction_complete)
             .unwrap()
     );
@@ -157,14 +161,17 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                     cpu.registers.pc = 0xFFFF;
                     let before = cpu.snapshot();
                     assert!(matches!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                        Err(crate::cpu::CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (crate::cpu::CycleAction::Read { addr: 0xFFFF })
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                        Err(crate::cpu::CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (crate::cpu::CycleAction::Read { addr: 0xFFFF })
                     ));
                     assert_eq!(cpu.snapshot(), before);
                     assert!(
-                        !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        !cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     let mut pending = before;
                     pending.pc = 0;
@@ -180,13 +187,13 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                     let changed = cpu.snapshot();
                     for _ in 0..3 {
                         assert!(matches!(
-                            cpu.request_cycle(),
+                            cpu.request_cycle().map(expect_execute),
                             Ok(crate::cpu::CycleAction::Idle)
                         ));
                         assert_eq!(cpu.snapshot(), changed);
                     }
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), None))
+                        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                             .map(instruction_complete)
                             .unwrap()
                     );
@@ -202,13 +209,16 @@ fn word_add_captures_operands_preserves_flags_and_retries_across_pc_wrap() {
                         + if sum > 65535 { 0x10 } else { 0 };
                     assert_eq!(cpu.snapshot(), expected);
                     assert!(matches!(
-                        cpu.request_cycle(),
+                        cpu.request_cycle().map(expect_execute),
                         Ok(crate::cpu::CycleAction::Read { addr: 0 })
                     ));
                     assert!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
-                            .map(instruction_complete)
-                            .unwrap()
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(0)
+                        ))
+                        .map(instruction_complete)
+                        .unwrap()
                     );
                     expected.pc = 1;
                     assert_eq!(cpu.snapshot(), expected);

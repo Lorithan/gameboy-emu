@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{CPU, CpuError, CycleAction, Registers, opcode::DecodedOpcode};
@@ -21,38 +22,41 @@ fn check(sp: u16, target: u16) {
     let mut expected = cpu.snapshot();
     for byte in [0x08, (target % 256) as u8, (target / 256) as u8] {
         assert!(
-            !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                .map(instruction_complete)
-                .unwrap()
+            !cpu.complete_cycle(response(
+                cpu.request_cycle().map(expect_execute),
+                Some(byte)
+            ))
+            .map(instruction_complete)
+            .unwrap()
         );
         expected.pc += 1;
         assert_eq!(cpu.snapshot(), expected);
     }
     assert!(
-        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value }) if addr == target && value == (sp % 256) as u8)
+        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr, value }) if addr == target && value == (sp % 256) as u8)
     );
     assert!(
-        !cpu.complete_cycle(response(cpu.request_cycle(), None))
+        !cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
             .map(instruction_complete)
             .unwrap()
     );
     assert_eq!(cpu.snapshot(), expected);
     let next = ((u32::from(target) + 1) % 65536) as u16;
     assert!(
-        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr, value }) if addr == next && value == (sp / 256) as u8)
+        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr, value }) if addr == next && value == (sp / 256) as u8)
     );
     assert!(
-        cpu.complete_cycle(response(cpu.request_cycle(), None))
+        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
             .map(instruction_complete)
             .unwrap()
     );
     assert_eq!(cpu.snapshot(), expected);
     assert!(matches!(
-        cpu.request_cycle(),
+        cpu.request_cycle().map(expect_execute),
         Ok(CycleAction::Read { addr: 0x0103 })
     ));
     assert!(
-        cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), Some(0)))
             .map(instruction_complete)
             .unwrap()
     );
@@ -75,17 +79,20 @@ fn store_sp_absolute_captures_sp_and_low_address_with_atomic_retries_and_pc_wrap
             for (phase, byte) in [0x08, 0xFF, 0xFF].into_iter().enumerate() {
                 for _ in 0..2 {
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: expected.pc }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: expected.pc }))
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(byte)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(byte)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 expected.pc = expected.pc.wrapping_add(1);
                 assert_eq!(cpu.snapshot(), expected);
@@ -97,12 +104,12 @@ fn store_sp_absolute_captures_sp_and_low_address_with_atomic_retries_and_pc_wrap
             for (phase, addr, value) in [(0, 0xFFFF, 0xA5), (1, 0, 0x5A)] {
                 for _ in 0..3 {
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Write { addr: actual, value: actual_value }) if actual == addr && actual_value == value)
                     );
                     assert_eq!(cpu.snapshot(), expected);
                 }
                 assert_eq!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None))
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None))
                         .map(instruction_complete)
                         .unwrap(),
                     phase == 1
@@ -110,7 +117,7 @@ fn store_sp_absolute_captures_sp_and_low_address_with_atomic_retries_and_pc_wrap
                 assert_eq!(cpu.snapshot(), expected);
             }
             assert!(
-                matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(3))
+                matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc.wrapping_add(3))
             );
         }
     }

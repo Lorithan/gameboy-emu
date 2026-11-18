@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -74,7 +79,10 @@ fn arithmetic_boundaries_have_exact_public_traces_flags_and_budgets() {
                 let mut expected = with_byte(before, target, result);
                 expected.af = (expected.af & 0xFF00) | u16::from(flags) | 0x10;
                 expected.pc += 1;
-                let trace = system.step_machine_cycle().expect("arithmetic opcode");
+                let trace = system
+                    .step_machine_cycle()
+                    .map(expect_cycle)
+                    .expect("arithmetic opcode");
                 assert!(matches!(
                     trace.record.action,
                     CycleAction::Read { addr: 0x0102 }

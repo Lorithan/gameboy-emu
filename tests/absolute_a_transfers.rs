@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -40,7 +45,7 @@ fn absolute_a_four_action_traces_and_every_budget_resume() {
                 expected.af = u16::from(read) * 256 + (before.af & 0xF0);
             }
             for cycle in 0..4u64 {
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 if cycle < 3 {
                     assert!(
                         matches!(trace.record.action, CycleAction::Read { addr } if addr == before.pc + cycle as u16)

@@ -1,6 +1,7 @@
 use crate::cpu::{
     CPU, CpuError, CycleAction, CycleOutcome, ExecutionState, InterruptState, Registers,
 };
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 fn entry_response(action: CycleAction, mask: u8) -> crate::cpu::CycleResponse {
@@ -44,7 +45,10 @@ fn interrupt_acceptance_masks_and_rejects_without_mutation() {
     // Reject while Enabled even in the middle of an instruction or a fault.
     for opcode in [0x3E, 0xCB, 0xCD, 0xC5, 0xD3] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0));
-        let _ = cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)));
+        let _ = cpu.complete_cycle(response(
+            cpu.request_cycle().map(expect_execute),
+            Some(opcode),
+        ));
         cpu.interrupt_state = InterruptState::Enabled;
         let snapshot = cpu.snapshot();
         let state = format!("{:?}", cpu.state);
@@ -54,7 +58,7 @@ fn interrupt_acceptance_masks_and_rejects_without_mutation() {
         assert_eq!(cpu.interrupt_state, InterruptState::Enabled);
         if opcode == 0xD3 {
             assert!(matches!(
-                cpu.request_cycle(),
+                cpu.request_cycle().map(expect_execute),
                 Err(CpuError::UnsupportedOpcode(_))
             ));
         }
@@ -93,12 +97,15 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
     for (cycle, action) in actions.into_iter().enumerate() {
         let before = cpu.snapshot();
         for _ in 0..2 {
-            assert_eq!(cpu.request_cycle().unwrap(), action);
+            assert_eq!(cpu.request_cycle().map(expect_execute).unwrap(), action);
             assert_eq!(cpu.snapshot(), before);
             assert!(!cpu.try_accept_interrupt(31));
         }
         let outcome = cpu
-            .complete_cycle(entry_response(cpu.request_cycle().unwrap(), mask))
+            .complete_cycle(entry_response(
+                cpu.request_cycle().map(expect_execute).unwrap(),
+                mask,
+            ))
             .unwrap();
         assert_eq!(
             outcome,
@@ -123,11 +130,11 @@ fn check_entry(pc: u16, sp: u16, mask: u8, initial_flags: u8) {
         assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
     }
     assert_eq!(
-        cpu.request_cycle().unwrap(),
+        cpu.request_cycle().map(expect_execute).unwrap(),
         CycleAction::Read { addr: vector }
     );
     assert_eq!(
-        cpu.complete_cycle(response(cpu.request_cycle(), Some(0)))
+        cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), Some(0)))
             .unwrap(),
         CycleOutcome::InstructionComplete
     );
@@ -161,35 +168,47 @@ fn interrupt_entry_uses_captured_pc_and_stack_addresses() {
     cpu.registers.sp = 0xBEEF;
     for _ in 0..2 {
         assert_eq!(
-            cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
-                .unwrap(),
+            cpu.complete_cycle(entry_response(
+                cpu.request_cycle().map(expect_execute).unwrap(),
+                8
+            ))
+            .unwrap(),
             CycleOutcome::InProgress
         );
     }
     assert_eq!(
-        cpu.request_cycle().unwrap(),
+        cpu.request_cycle().map(expect_execute).unwrap(),
         CycleAction::Write {
             addr: 0xFFFF,
             value: 0xA5
         }
     );
-    cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
-        .unwrap();
+    cpu.complete_cycle(entry_response(
+        cpu.request_cycle().map(expect_execute).unwrap(),
+        8,
+    ))
+    .unwrap();
     cpu.registers.sp = 0x4321;
     assert_eq!(
-        cpu.request_cycle().unwrap(),
+        cpu.request_cycle().map(expect_execute).unwrap(),
         CycleAction::Write {
             addr: 0xFFFE,
             value: 0x3C
         }
     );
-    cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
-        .unwrap();
+    cpu.complete_cycle(entry_response(
+        cpu.request_cycle().map(expect_execute).unwrap(),
+        8,
+    ))
+    .unwrap();
     assert_eq!(cpu.snapshot().sp, 0xFFFE);
     assert_eq!(cpu.snapshot().pc, 0xDEAD);
     assert_eq!(
-        cpu.complete_cycle(entry_response(cpu.request_cycle().unwrap(), 8))
-            .unwrap(),
+        cpu.complete_cycle(entry_response(
+            cpu.request_cycle().map(expect_execute).unwrap(),
+            8
+        ))
+        .unwrap(),
         CycleOutcome::InterruptEntryComplete { vector: 0x58 }
     );
     assert_eq!(cpu.snapshot().pc, 0x58);
@@ -259,7 +278,7 @@ fn late_selection_exhausts_ie_if_samples_and_preserves_cancellation_state() {
             assert_eq!(cpu.snapshot().pc, vector);
             assert_eq!(cpu.snapshot().af, 0x01B0);
             assert_eq!(
-                cpu.request_cycle().unwrap(),
+                cpu.request_cycle().map(expect_execute).unwrap(),
                 CycleAction::Read { addr: vector }
             );
         }

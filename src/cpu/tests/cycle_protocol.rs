@@ -2,6 +2,7 @@ use crate::cpu::{
     CPU, CpuError, CycleAction, CycleKind, CycleOutcome, CycleResponse, InterruptSample,
     InterruptState, Registers,
 };
+use crate::response_support::expect_execute;
 
 fn responses() -> [CycleResponse; 3] {
     [
@@ -20,7 +21,7 @@ fn responses() -> [CycleResponse; 3] {
 }
 
 fn reject_wrong_kinds(cpu: &mut CPU) {
-    let action = cpu.request_cycle().unwrap();
+    let action = cpu.request_cycle().map(expect_execute).unwrap();
     let expected = match action {
         CycleAction::Read { .. } => CycleKind::Read,
         CycleAction::Write { .. } => CycleKind::Write,
@@ -43,7 +44,7 @@ fn reject_wrong_kinds(cpu: &mut CPU) {
         assert_eq!(cpu.snapshot(), snapshot);
         assert_eq!(format!("{:?}", cpu.state), state);
         assert_eq!(cpu.interrupt_state, ime);
-        assert_eq!(cpu.request_cycle().unwrap(), action);
+        assert_eq!(cpu.request_cycle().map(expect_execute).unwrap(), action);
     }
 }
 
@@ -68,7 +69,7 @@ fn response_mismatches_preserve_every_instruction_phase_and_ime() {
                     } else {
                         0
                     };
-                    let response = match cpu.request_cycle().unwrap() {
+                    let response = match cpu.request_cycle().map(expect_execute).unwrap() {
                         CycleAction::Read { .. } => CycleResponse::Read {
                             value: data,
                             pending_interrupts: 0,
@@ -114,7 +115,7 @@ fn response_mismatches_preserve_each_interrupt_entry_phase() {
         let source = crate::memory::Interrupt::from_selection(mask).unwrap();
         for cycle in 0..5 {
             reject_wrong_kinds(&mut cpu);
-            let response = match cpu.request_cycle().unwrap() {
+            let response = match cpu.request_cycle().map(expect_execute).unwrap() {
                 CycleAction::Write { .. } => CycleResponse::WriteDone {
                     interrupt_sample: InterruptSample {
                         enable_after_bus: mask,
@@ -208,8 +209,8 @@ fn ordinary_read_cycles_ignore_all_pending_masks_without_accepting_interrupts() 
                 assert_eq!(response.kind(), CycleKind::Read);
                 assert_eq!(response.read_value().unwrap(), value);
                 assert_eq!(
-                    cpu.request_cycle().unwrap(),
-                    reference.request_cycle().unwrap()
+                    cpu.request_cycle().map(expect_execute).unwrap(),
+                    reference.request_cycle().map(expect_execute).unwrap()
                 );
                 assert_eq!(
                     cpu.complete_cycle(response).unwrap(),

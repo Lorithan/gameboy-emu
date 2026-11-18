@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -45,7 +50,7 @@ fn decimal_adjust_completes_on_one_fetch_and_respects_all_budgets() {
                 ));
                 assert_eq!(system.cpu_snapshot(), before);
                 assert_eq!(system.elapsed_ticks(), 16);
-                let trace = system.step_machine_cycle().unwrap();
+                let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                 assert!(matches!(
                     trace.record.action,
                     CycleAction::Read { addr: 0x0104 }

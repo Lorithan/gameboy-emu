@@ -1,4 +1,5 @@
 use crate::outcome_support::instruction_complete;
+use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
@@ -103,9 +104,12 @@ fn exhaustive(immediate: bool) {
                     let before = cpu.snapshot();
                     let register = source < 6;
                     assert_eq!(
-                        cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                            .map(instruction_complete)
-                            .expect("logic opcode"),
+                        cpu.complete_cycle(response(
+                            cpu.request_cycle().map(expect_execute),
+                            Some(opcode)
+                        ))
+                        .map(instruction_complete)
+                        .expect("logic opcode"),
                         register
                     );
                     if !register {
@@ -114,12 +118,15 @@ fn exhaustive(immediate: bool) {
                         assert_eq!(cpu.snapshot(), pending);
                         let expected_addr = if immediate { 0x0101 } else { 0xC123 };
                         assert!(
-                            matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected_addr)
+                            matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected_addr)
                         );
                         assert!(
-                            cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
-                                .map(instruction_complete)
-                                .unwrap()
+                            cpu.complete_cycle(response(
+                                cpu.request_cycle().map(expect_execute),
+                                Some(right)
+                            ))
+                            .map(instruction_complete)
+                            .unwrap()
                         );
                     }
                     let expected =
@@ -130,7 +137,7 @@ fn exhaustive(immediate: bool) {
                         "opcode {opcode:02X}, A={a:02X}, operand={right:02X}"
                     );
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == expected.pc)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == expected.pc)
                     );
                 }
             }
@@ -156,14 +163,17 @@ fn logic_self_sources_overwrite_every_initial_flag_combination() {
                 let mut cpu = machine(a, a, 7, flags * 16, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(matches!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete),
-                    Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: 0xFFFF })
+                    cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete),
+                    Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: 0xFFFF })
                 ));
                 assert_eq!(cpu.snapshot(), before);
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(base + 7)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(base + 7)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 assert_eq!(cpu.snapshot(), reference(before, a, a, group, 1));
             }
@@ -179,9 +189,12 @@ fn logic_pending_reads_capture_operands_and_retry_without_mutation() {
                 let mut cpu = machine(0x96, 0x69, source, flags * 16, 0xFFFF);
                 let before = cpu.snapshot();
                 assert!(
-                    !cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    !cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(opcode)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 let address = if source == 8 { 0 } else { 0xC123 };
                 cpu.registers.a = 0xFF;
@@ -189,17 +202,20 @@ fn logic_pending_reads_capture_operands_and_retry_without_mutation() {
                 let pending = cpu.snapshot();
                 for _ in 0..2 {
                     assert!(
-                        matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == address)
+                        matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == address)
                     );
                     assert!(
-                        matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: address }))
+                        matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: address }))
                     );
                     assert_eq!(cpu.snapshot(), pending);
                 }
                 assert!(
-                    cpu.complete_cycle(response(cpu.request_cycle(), Some(0x69)))
-                        .map(instruction_complete)
-                        .unwrap()
+                    cpu.complete_cycle(response(
+                        cpu.request_cycle().map(expect_execute),
+                        Some(0x69)
+                    ))
+                    .map(instruction_complete)
+                    .unwrap()
                 );
                 let mut expected =
                     reference(before, 0x96, 0x69, group, if source == 8 { 2 } else { 1 });
@@ -227,27 +243,33 @@ fn logic_boundaries_ignore_initial_flags_and_wrap_program_counter() {
                             let mut cpu = machine(a, right, source, flags * 16, pc);
                             let before = cpu.snapshot();
                             assert!(
-                                matches!(cpu.complete_cycle(response(cpu.request_cycle(), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().unwrap() == (CycleAction::Read { addr: pc }))
+                                matches!(cpu.complete_cycle(response(cpu.request_cycle().map(expect_execute), None)).map(instruction_complete), Err(CpuError::UnexpectedCycleResponse(_)) if cpu.request_cycle().map(expect_execute).unwrap() == (CycleAction::Read { addr: pc }))
                             );
                             assert_eq!(cpu.snapshot(), before);
                             for _ in 0..2 {
                                 assert!(
-                                    matches!(cpu.request_cycle(), Ok(CycleAction::Read { addr }) if addr == pc)
+                                    matches!(cpu.request_cycle().map(expect_execute), Ok(CycleAction::Read { addr }) if addr == pc)
                                 );
                                 assert_eq!(cpu.snapshot(), before);
                             }
                             let register = source < 6 || source == 7;
                             assert_eq!(
-                                cpu.complete_cycle(response(cpu.request_cycle(), Some(opcode)))
-                                    .map(instruction_complete)
-                                    .unwrap(),
+                                cpu.complete_cycle(response(
+                                    cpu.request_cycle().map(expect_execute),
+                                    Some(opcode)
+                                ))
+                                .map(instruction_complete)
+                                .unwrap(),
                                 register
                             );
                             if !register {
                                 assert!(
-                                    cpu.complete_cycle(response(cpu.request_cycle(), Some(right)))
-                                        .map(instruction_complete)
-                                        .unwrap()
+                                    cpu.complete_cycle(response(
+                                        cpu.request_cycle().map(expect_execute),
+                                        Some(right)
+                                    ))
+                                    .map(instruction_complete)
+                                    .unwrap()
                                 );
                             }
                             assert_eq!(

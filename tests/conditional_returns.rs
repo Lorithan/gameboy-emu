@@ -1,3 +1,8 @@
+#[path = "support/steps.rs"]
+mod step_support;
+use gameboy_emu::system::{CycleTrace, MachineStep};
+use step_support::expect_cycle;
+
 #[path = "support/outcomes.rs"]
 mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
@@ -53,7 +58,7 @@ fn conditional_return_traces_and_all_budgets_cover_both_outcomes() {
                 let mut system = prepared(byte, equal, sp);
                 let mut expected = system.cpu_snapshot();
                 for cycle in 0..cycles {
-                    let trace = system.step_machine_cycle().unwrap();
+                    let trace = system.step_machine_cycle().map(expect_cycle).unwrap();
                     assert_eq!(
                         (trace.record.tick_before, trace.record.tick_after),
                         (56 + cycle * 4, 60 + cycle * 4)
