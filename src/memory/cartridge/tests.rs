@@ -266,3 +266,76 @@ fn invalid_file_content_reports_validation_failure() {
         })
     ));
 }
+#[test]
+fn cartridge_validation_errors_are_standard_leaves_with_useful_metadata() {
+    use std::error::Error;
+    for (error, details) in [
+        (
+            CartridgeError::IncompleteHeader {
+                minimum: 336,
+                actual: 100,
+            },
+            vec!["336", "100"],
+        ),
+        (
+            CartridgeError::LengthError {
+                expected: 32768,
+                actual: 32767,
+            },
+            vec!["32768", "32767"],
+        ),
+        (
+            CartridgeError::VerificationFailure {
+                address: 0x147,
+                expected: 0,
+                actual: 0x19,
+            },
+            vec!["0147", "00", "19"],
+        ),
+        (CartridgeError::GBCUnsupported, vec![]),
+    ] {
+        let standard: &dyn Error = &error;
+        assert!(standard.source().is_none());
+        let message = standard.to_string();
+        assert!(!message.is_empty());
+        for detail in details {
+            assert!(message.contains(detail), "missing {detail}: {message}");
+        }
+    }
+    let error = CartridgeError::ChecksumFailure {
+        expected: 0xE7,
+        actual: 0xE6,
+    };
+    assert!(error.source().is_none());
+    let message = error.to_string().to_ascii_lowercase();
+    assert!(
+        message.contains("231") || message.contains("e7"),
+        "missing expected checksum: {message}"
+    );
+    assert!(
+        message.contains("230") || message.contains("e6"),
+        "missing actual checksum: {message}"
+    );
+}
+
+#[test]
+fn cartridge_file_error_preserves_path_and_typed_io_source_without_duplicate_cause_text() {
+    use std::error::Error;
+    let path = PathBuf::from("ROM folder/missing-夜.gb");
+    let error = CartridgeError::FileIO {
+        path: path.clone(),
+        err: io::Error::new(io::ErrorKind::NotFound, "synthetic missing cartridge"),
+    };
+    let source = error
+        .source()
+        .expect("original I/O cause must be inspectable");
+    let original = source.downcast_ref::<io::Error>().unwrap();
+    assert_eq!(original.kind(), io::ErrorKind::NotFound);
+    assert_eq!(original.to_string(), "synthetic missing cartridge");
+    let message = error.to_string();
+    assert!(message.contains(&path.display().to_string()), "{message}");
+    assert!(
+        !message.contains(&original.to_string()),
+        "cause should be rendered through source: {message}"
+    );
+}

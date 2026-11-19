@@ -44,6 +44,47 @@ impl CartridgeError {
     }
 }
 
+impl std::fmt::Display for CartridgeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CartridgeError::IncompleteHeader { minimum, actual } => write!(
+                f,
+                "expected header minimum: {minimum} bytes, actual size: {actual} bytes"
+            ),
+            CartridgeError::ChecksumFailure { expected, actual } => write!(
+                f,
+                "checksum failure, expected: {expected}, actual: {actual}"
+            ),
+            CartridgeError::LengthError { expected, actual } => write!(
+                f,
+                "expected length: {expected} bytes, actual length: {actual} bytes"
+            ),
+            CartridgeError::VerificationFailure {
+                address,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "verification failed at 0x{address:04X}. expected: 0x{expected:02X}, actual: 0x{actual:02X}"
+            ),
+            CartridgeError::GBCUnsupported => write!(f, "gameboy color currently unsupported"),
+            CartridgeError::FileIO { path, .. } => {
+                write!(f, "could not read cartridge at {}", path.to_string_lossy())
+            }
+        }
+    }
+}
+
+impl std::error::Error for CartridgeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if let CartridgeError::FileIO { err, .. } = self {
+            Some(err)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Cartridge {
     bytes: [u8; CARTRIDGE_SIZE],

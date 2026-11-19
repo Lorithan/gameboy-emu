@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Cartridge error checkpoint verified - 2026-11-19
+
+User implemented Display/Error for CartridgeError. Validation failures are source-less leaves with size/checksum/header-field metadata; FileIO adds path context and exposes the original io::Error without embedding its message twice. Assistant added two cartridge unit tests and a public integration test: standard Error/Box<dyn Error> use, validation metadata, a Unicode path, concrete I/O kind/cause, and actual loader missing-file propagation. Full verification passes 439 tests (314 unit, 125 integration), explicitly including five external fixtures, formatting, strict Clippy and whitespace checks. No assistant application changes, new dependencies or loader/execution/timing change.
+
+This finishes standard error reporting for CPU/System/cartridge. The soon-to-be-removed UnsupportedCbOpcode is intentionally excluded from polishing. Next is [#55](https://github.com/Lorithan/gameboy-emu/issues/55): CbType/DecodedCbOpcode From conversions and dead-error removal only. User implements; assistant preserves the existing all-byte/result/flag/cycle oracles and runs regressions. Base illegal decoding, infallible helpers/register ownership, fetch-state suppression and larger state/module consolidation remain independent follow-ups. Four positional flag booleans remain rejected.
+
 ## System error checkpoint verified - 2026-11-19
 
 User completed SystemError Display/Error and CycleAction Display. Request errors describe the next cycle query; completion errors describe the failed completion at tick_after with idle/read/write address/value context. CycleRecord's structured fields remain available; the message does not claim the already performed bus action itself failed. Both variants expose the original CpuError, preserving deeper typed fault/protocol causes. Three new tests/system_errors.rs tests check source chains and essential completion metadata without fixing every word of prose. The earlier tick_before formatting mistake is resolved.
