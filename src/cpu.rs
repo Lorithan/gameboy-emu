@@ -105,25 +105,9 @@ impl CPU {
                 addr,
                 value: high,
             })),
-            PushLow { addr, low } => Ok(CycleRequest::Execute(CycleAction::Write {
+            PushLow { addr, low, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
                 addr,
                 value: low,
-            })),
-            PushCallerHigh {
-                stack_addr,
-                return_addr_high,
-                ..
-            } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr: stack_addr,
-                value: return_addr_high,
-            })),
-            PushCallerLow {
-                stack_addr,
-                return_addr_low,
-                ..
-            } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr: stack_addr,
-                value: return_addr_low,
             })),
             InterruptPushHigh { pc_high, sp, .. } => {
                 Ok(CycleRequest::Execute(CycleAction::Write {
@@ -137,7 +121,6 @@ impl CPU {
             })),
             Push { .. }
             | ApplyJump { .. }
-            | Call { .. }
             | ReturnConditional { .. }
             | FinishReturn { .. }
             | Addition16 { .. }

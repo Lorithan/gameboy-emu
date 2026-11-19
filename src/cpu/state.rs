@@ -29,6 +29,12 @@ pub(super) enum Imm16Use {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(super) enum PushThen {
+    Finish,
+    Jump(u16),
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(super) enum ExecutionState {
     FetchOpcode {
         skip_increment: bool,
@@ -85,15 +91,18 @@ pub(super) enum ExecutionState {
     Push {
         addr: u16,
         value: u16,
+        then: PushThen,
     },
     PushHigh {
         addr: u16,
         high: u8,
         low: u8,
+        then: PushThen,
     },
     PushLow {
         addr: u16,
         low: u8,
+        then: PushThen,
     },
     PopLow {
         addr: u16,
@@ -103,23 +112,6 @@ pub(super) enum ExecutionState {
         addr: u16,
         low: u8,
         target: PushOperand,
-    },
-    Call {
-        jump_addr: u16,
-        stack_addr: u16,
-        return_addr_high: u8,
-        return_addr_low: u8,
-    },
-    PushCallerHigh {
-        jump_addr: u16,
-        stack_addr: u16,
-        return_addr_high: u8,
-        return_addr_low: u8,
-    },
-    PushCallerLow {
-        jump_addr: u16,
-        stack_addr: u16,
-        return_addr_low: u8,
     },
     ReadReturnLow {
         addr: u16,

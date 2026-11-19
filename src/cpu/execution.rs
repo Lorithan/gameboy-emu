@@ -1,8 +1,8 @@
 use crate::{
     cpu::{
         CPU, CbType, CpuError, CycleResponse, CycleTransition, DecodedCbOpcode, Destination,
-        Imm16Use, InterruptSelection, InterruptState, PushOperand, Register, ReturnKind, Target,
-        UnaryOperation, registers::Flag, state::ExecutionState,
+        Imm16Use, InterruptSelection, InterruptState, PushOperand, PushThen, Register, ReturnKind,
+        Target, UnaryOperation, registers::Flag, state::ExecutionState,
     },
     memory::Interrupt,
 };
@@ -197,22 +197,32 @@ impl CPU {
                 self.registers.set_hl(hl);
                 Ok(CycleTransition::InstructionFinished)
             }
-            ExecutionState::Push { addr, value } => {
-                let high = (value >> 8) as u8;
-                let low = (value & 0xFF) as u8;
-                let next_state = ExecutionState::PushHigh { addr, high, low };
+            ExecutionState::Push { addr, value, then } => {
+                let [low, high] = value.to_le_bytes();
+                let next_state = ExecutionState::PushHigh {
+                    addr,
+                    high,
+                    low,
+                    then,
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
-            ExecutionState::PushHigh { addr, low, .. } => {
+            ExecutionState::PushHigh {
+                addr, low, then, ..
+            } => {
                 self.registers.set_sp(addr);
                 let next_state = ExecutionState::PushLow {
                     addr: self.registers.sp.wrapping_sub(1),
                     low,
+                    then,
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            ExecutionState::PushLow { addr, .. } => {
+            ExecutionState::PushLow { addr, then, .. } => {
                 self.registers.set_sp(addr);
+                if let PushThen::Jump(target) = then {
+                    self.registers.set_pc(target);
+                }
                 Ok(CycleTransition::InstructionFinished)
             }
             ExecutionState::PopLow { addr, target } => {
@@ -239,44 +249,6 @@ impl CPU {
                 }
 
                 self.registers.sp = addr.wrapping_add(1);
-                Ok(CycleTransition::InstructionFinished)
-            }
-            ExecutionState::Call {
-                jump_addr,
-                stack_addr,
-                return_addr_high,
-                return_addr_low,
-            } => {
-                let next_state = ExecutionState::PushCallerHigh {
-                    jump_addr,
-                    stack_addr,
-                    return_addr_high,
-                    return_addr_low,
-                };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ExecutionState::PushCallerHigh {
-                jump_addr,
-                stack_addr,
-                return_addr_low,
-                ..
-            } => {
-                self.registers.set_sp(stack_addr);
-                let next_state = ExecutionState::PushCallerLow {
-                    jump_addr,
-                    stack_addr: self.registers.sp.wrapping_sub(1),
-                    return_addr_low,
-                };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ExecutionState::PushCallerLow {
-                jump_addr,
-                stack_addr,
-                ..
-            } => {
-                self.registers.set_sp(stack_addr);
-                self.registers.set_pc(jump_addr);
-
                 Ok(CycleTransition::InstructionFinished)
             }
             ExecutionState::ReadReturnLow { addr, kind } => {
@@ -482,13 +454,11 @@ impl CPU {
                 }
             }
             Imm16Use::Call { taken, stack_addr } => {
-                let [return_addr_low, return_addr_high] = self.registers.pc.to_le_bytes();
                 if taken {
-                    let next_state = ExecutionState::Call {
-                        jump_addr: value,
-                        stack_addr,
-                        return_addr_high,
-                        return_addr_low,
+                    let next_state = ExecutionState::Push {
+                        addr: stack_addr,
+                        value: self.registers.pc,
+                        then: PushThen::Jump(value),
                     };
                     CycleTransition::Continue(next_state)
                 } else {

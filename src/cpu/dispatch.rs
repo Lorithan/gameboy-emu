@@ -1,8 +1,8 @@
 use crate::cpu::{
     ArithmeticKind, CPU, CpuError, CpuFault, CycleTransition, DecodedOpcode, Destination,
     ExecutionState, HaltBehavior, HighMemoryAddressSource, IllegalOpcode, Imm16Use, IndirectPair,
-    InterruptState, OpcodeEncoding, Operand, PushOperand, Register, ReturnKind, StopBehavior,
-    Target, UnaryOperation, registers::Flag,
+    InterruptState, OpcodeEncoding, Operand, PushOperand, PushThen, Register, ReturnKind,
+    StopBehavior, Target, UnaryOperation, registers::Flag,
 };
 
 impl CPU {
@@ -212,7 +212,11 @@ impl CPU {
                     PushOperand::AF => self.registers.af(),
                 };
 
-                let next_state = ExecutionState::Push { addr, value };
+                let next_state = ExecutionState::Push {
+                    addr,
+                    value,
+                    then: PushThen::Finish,
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Pop { operand } => {
@@ -249,14 +253,10 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Restart { target } => {
-                let return_addr = self.registers.pc;
-                let return_addr_high = (return_addr >> 8) as u8;
-                let return_addr_low = (return_addr & 0xFF) as u8;
-                let next_state = ExecutionState::Call {
-                    jump_addr: target,
-                    stack_addr: self.registers.sp.wrapping_sub(1),
-                    return_addr_high,
-                    return_addr_low,
+                let next_state = ExecutionState::Push {
+                    addr: self.registers.sp.wrapping_sub(1),
+                    value: self.registers.pc,
+                    then: PushThen::Jump(target),
                 };
                 Ok(CycleTransition::Continue(next_state))
             }

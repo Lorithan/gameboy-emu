@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Shared stack push checkpoint verified - 2026-11-19
+
+User completed #62: PushThen::{Finish, Jump(u16)} flows through Push/PushHigh/PushLow. PUSH uses its opcode-captured word and Finish; taken CALL uses post-high-read return PC, opcode-captured stack address and Jump(target); RST uses post-fetch PC, captured SP-minus-one and Jump(vector). Untaken CALL still finishes after both operand reads. Push completion splits to_le_bytes, preserves the idle/high/low sequence and wrapping SP updates, and sets PC for Jump on the low-write completion before returning InstructionFinished. No extra ApplyJump cycle is introduced. ExecutionState::Call/PushCallerHigh/PushCallerLow and their request/completion arms are removed; Imm16Use::Call and dedicated interrupt-entry sampling/selection states remain.
+
+All 442 unchanged tests pass (317 unit, 125 integration), explicitly including five external fixtures with hashes checked against pinned manifests. Existing exhaustive PUSH value, CALL target, RST return-PC, capture/retry/wrap and cycle/trace oracles exercise the shared path; no private-state test migration or helper-mirroring tests were needed. Formatting, strict Clippy and whitespace checks pass. No assistant application edits, dependencies or public API changes. The earlier intermediate ApplyJump extra-cycle issue and dead Call state warning are resolved. Review remaining naming/import cleanup before selecting another slice or returning to M3 timer design #53; M2 stays complete.
+
 ## Private execution checkpoint verified - 2026-11-19
 
 User completed #61: private cpu/execution.rs contains complete_cycle_inner, store_immediate, store_fetched and finish_imm16 in another impl CPU. complete_cycle_inner uses pub(super) for its existing wrapper and defensive STOP test; the three helpers remain private. Comparison of all four bodies found only necessary visibility, ExecutionState/Flag qualification and formatting/trailing-comma changes. Existing sibling dispatch and ALU visibility suffices. CPU retains ownership, construction/snapshot, request_cycle, public completion validation/transition/fault/EI handling and interrupt/wake methods. Parent imports were adjusted without changing these bodies.
