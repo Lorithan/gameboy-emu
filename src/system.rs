@@ -3,7 +3,7 @@ use crate::{
         CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, CycleRequest, CycleResponse,
         InterruptSample, Registers,
     },
-    memory::{Bus, Cartridge},
+    memory::{Bus, Button, Cartridge},
 };
 
 #[cfg(test)]
@@ -201,5 +201,9 @@ impl System {
 
     pub fn elapsed_ticks(&self) -> u64 {
         self.elapsed_ticks
+    }
+
+    pub fn set_button(&mut self, button: Button, pressed: bool) {
+        self.memory.set_button(button, pressed);
     }
 }

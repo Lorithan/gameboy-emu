@@ -39,7 +39,9 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
             }
             bytes.extend_from_slice(&[0, 0xD3]);
             let cycles = if immediate { 3u64 } else { 2 };
-            let read = if (0x80..=0xFF).contains(&offset) {
+            let read = if offset == 0 {
+                0xCF
+            } else if (0x80..=0xFF).contains(&offset) {
                 0
             } else {
                 0xFF
@@ -167,7 +169,9 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 let mapped = (0x80..=0xFF).contains(&offset);
                 assert_eq!(
                     system.cpu_snapshot().af,
-                    u16::from(if offset == 0x04 {
+                    u16::from(if offset == 0 {
+                        0xCF | (value & 0x30)
+                    } else if offset == 0x04 {
                         0 // A DIV write resets the counter instead of storing the byte.
                     } else if offset == 0x0F {
                         value | 0xE0
@@ -184,7 +188,9 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 complete(&mut system, 1);
                 assert_eq!(
                     system.cpu_snapshot().af,
-                    u16::from(if offset == 0x04 {
+                    u16::from(if offset == 0 {
+                        0xCF | ((255 - value) & 0x30)
+                    } else if offset == 0x04 {
                         0
                     } else if offset == 0x0F {
                         (255 - value) | 0xE0

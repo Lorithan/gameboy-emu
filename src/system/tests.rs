@@ -7,6 +7,7 @@ mod di_ei;
 mod divider;
 mod divider_oracle;
 mod halt;
+mod joypad;
 mod reti;
 mod stop;
 
@@ -1384,7 +1385,7 @@ fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
 }
 
 #[test]
-fn ldh_only_changes_mapped_hram_at_final_store_completion() {
+fn ldh_stores_follow_joyp_ie_and_hram_mapping_at_final_completion() {
     for (opcode, store, immediate) in [
         (0xE2, true, false),
         (0xF2, false, false),
@@ -1416,6 +1417,9 @@ fn ldh_only_changes_mapped_hram_at_final_store_completion() {
                     .collect();
                 system.step_instruction(budget).unwrap();
                 for phase in [budget, cycles] {
+                    if store && phase == cycles && offset == 0 {
+                        expected[0xFF00] = 0xDF;
+                    }
                     if store && phase == cycles && (0x80..=0xFF).contains(&offset) {
                         expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
                     }

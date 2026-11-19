@@ -28,8 +28,6 @@ impl InterruptController {
         self.interrupt_flag = value & 0x1F; // Only the lower 5 bits are writable
     }
 
-    // Temporary: production callers arrive with interrupt entry and peripherals.
-    #[allow(dead_code)]
     pub fn request_interrupt(&mut self, interrupt: Interrupt) {
         let bit = interrupt.bit_index();
         self.interrupt_flag |= 1 << bit;

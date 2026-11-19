@@ -1,8 +1,8 @@
 # Headless joypad and JOYP interrupt edges
 
-Task: [#47](https://github.com/Lorithan/gameboy-emu/issues/47), next prerequisite of [#44](https://github.com/Lorithan/gameboy-emu/issues/44), following divider #46. Status: proposed contract, 2026-11-18. User owns application implementation; assistant owns tests/docs/review. Review this contract before dependent work.
+Task: [#47](https://github.com/Lorithan/gameboy-emu/issues/47), next prerequisite of [#44](https://github.com/Lorithan/gameboy-emu/issues/44), following divider #46. Status: headless device/Bus/System input implemented by the user and verified 2026-11-18; all 401 tests pass. #47 is complete for this scope; STOP wake remains #44. User owns application implementation; assistant owns tests/docs/review. Completion evidence supersedes the incomplete-readback/input notes below.
 
-Baseline fa3183f: 390 passing tests (290 unit, 100 integration), formatting/strict Clippy passing. No emulator tests were rerun for this documentation-only specification; no application code, dependencies or ROM fixtures changed.
+Specification baseline fa3183f: 390 passing tests (290 unit, 100 integration), formatting/strict Clippy passing. No emulator tests were rerun for the original documentation-only specification; later implementation evidence is recorded below.
 
 ## Ownership and first scope
 
@@ -10,7 +10,7 @@ Bus owns a private Joypad device in memory/joypad.rs. System exposes host input;
 
 Proposed types:
 
-- Public Button enum: Right, Left, Up, Down, A, B, Select, Start. Define it in joypad.rs and reexport it from memory, like Interrupt. Derive Debug/Clone/Copy/PartialEq/Eq; no SDL2 key types in the core.
+- Public Button enum: Right, Left, Up, Down, A, B, Select, Start. Define it in joypad.rs and reexport it from memory, like Interrupt. The implemented type derives Debug/Clone/Copy; equality traits can be added when callers need them. No SDL2 key types in the core.
 - Joypad visible to its owning memory module, with private selection and pressed-button storage. Proposed selection field contains only bits 4/5; pressed storage uses logical 1 for held buttons, translated to active-low register inputs when read. Do not cache redundant readback/edge state.
 - Private-to-memory JoypadEvent::{None, FallingEdge}. It reports an input-line event, not whether any internal state changed. An unselected button press must still be stored even when it returns None.
 
@@ -102,3 +102,31 @@ Acceptance cases:
 - [Gekkio Complete Technical Reference](https://gekkio.fi/files/gb-docs/gbctr.pdf#page=143), revision 199 (2026-11-06), register 11.1: writable/readable P1 fields and ignored/read-one bits 6/7.
 - [Mooneye unused_hwio-GS](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/bits/unused_hwio-GS.s): pinned MIT-licensed source includes read-one P1 high-bit expectations after writes. Reference only; no ROM/source fixture copied or run.
 - [Pan Docs STOP](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Reducing_Power_Consumption.md): selected input wake and conditional behavior requiring the follow-up contract.
+
+## Device-model review - 2026-11-18
+
+User implemented storage, named constructor, button masks, selected input calculation and before/after edge reporting. Assistant added three unit tests with an independent named-button/line/row oracle. The exhaustive press/release event test passes across all held masks and selections. Startup and matrix/readback tests fail because read currently returns selection alone; it must combine fixed C0 high bits, selection and input_lines. The matrix test cannot complete its exhaustive write checks until readback is fixed.
+
+Compiler also reports private_interfaces: JoypadEvent must be visible to the owning memory module (pub(super)) to match the visibility of methods returning it. No application fixes or allowances were added by the assistant; only test wiring and formatting. Full emulator suite was not rerun with these known incomplete pieces. Existing published baseline remains 390 passing tests.
+
+Next user slice: finish readback/event visibility, then Bus owns and constructs Joypad, reexports Button, maps FF00 and consumes events from both selection writes and button updates through request_interrupt(Interrupt::Joypad). System input forwarding follows. #47 and #44 remain open; no external ROM ran.
+
+## Device and Bus verification - 2026-11-18
+
+User completed readback/event visibility, Bus ownership, Button export, FF00 mapping and event-to-IF handling from both writes and button updates. Obsolete request_interrupt allowances were removed. Assistant added three Bus tests alongside the three device tests. All six focused tests pass, including exhaustive held/selection/write/press/release matrices, all IE/IF values, shared-line blocking, repeated updates/IF clearing, full-memory preservation and instance isolation.
+
+Assistant migrated the FF00 unmapped/readback/write-mask expectations in Bus routing, LDH traces/all-offset data tests and the System full-memory store oracle. Fresh full run passes all 396 tests (296 unit, 100 integration). Formatting/whitespace checks pass; Clippy reports only the unused host-input call chain (Bus::set_button, Joypad::set_button and Button::mask). No new allowances were added. System has no production input forwarder yet, so strict warnings-as-errors is still pending. No external ROM ran.
+
+Next user slice: expose public System::set_button(button: Button, pressed: bool), forwarding only to memory.set_button. It must not execute a cycle, advance/reset DIV, touch CPU state or acknowledge interrupts. Assistant will add public-input timing/CPU-state/HALT tests afterward. STOP wake remains unchanged until the next #44 contract. #47 stays open until that input path and acceptance checks are complete.
+
+## Headless joypad completion verified - 2026-11-18
+
+User added the public System input forwarder; all host input now reaches the Bus-owned device through that API. No application behavior was changed by the assistant. Both input and selection updates request joypad IF on selected-line falling events; startup/readback, row masks and event visibility findings are resolved. Temporary interrupt-request allowances are removed, and the complete production call chain has no unused warnings.
+
+Fresh full suite passes all 401 tests (300 unit, 101 integration). All 11 focused joypad tests pass: three device, three Bus, four System and one public integration test. Library check, formatting, strict Clippy and whitespace checks pass. No dependencies, frontend setup or external fixtures were added; no external ROM ran.
+
+New input tests compare full CPU debug/snapshot state, ticks and every memory address across fetch, delayed EI, pending operand, partial interrupt entry, HALT with either IME state, STOP, sticky fault and armed HALT suppression. Only expected JOYP/IF state changes. Public input preserves the hidden DIV phase and instance isolation. HALT wake/service waits for the next actual cycle, uses normal IE/IME gates, preserves IF when IME is disabled and acknowledges only through existing interrupt entry. A CPU selection write requests at its final bus cycle and software reads back the held input. The public integration test uses only exported APIs to press/release A and observe JOYP through executed load instructions.
+
+The earlier Bus/device exhaustions and FF00 data/full-memory-oracle migration remain covered. Test programs that do not reset DIV retain the existing independent clock-aware DIV expectations; other addresses keep their storage oracles.
+
+#47 completes headless JOYP/IF/input only. STOP still remains stopped when input changes in this foundation; #44 must next specify wake delivery, a press/release between execution calls, held inputs and pending interrupts at entry, and any necessary CPU sampling changes before implementation. Do not reuse HALT's IE&IF test as a STOP wake source or claim complete STOP support from this checkpoint. TIMA/audio, SDL2 and #45 external-ROM work remain separate; M2's ROM-validation gate stays open.

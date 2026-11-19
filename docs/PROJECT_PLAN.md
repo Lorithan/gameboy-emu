@@ -1,7 +1,7 @@
 # Game Boy emulator project plan
-## Current next design review - headless joypad, 2026-11-18
+## Current checkpoint - headless joypad complete, 2026-11-18
 
-[#47](https://github.com/Lorithan/gameboy-emu/issues/47) is proposed in [JOYPAD.md](tasks/JOYPAD.md): Bus-owned Joypad, public Button, CF post-boot readback, writable row selections, active-low matrix, selected-line falling events into IF, and System input updates without clock advancement. First user slice is the device model and named constructor/read/write/button operations; assistant owns exhaustive matrix/edge tests and later FF00-oracle migration. STOP wake stays under #44's next contract, distinct from IF eligibility; #44 remains open after this foundation. No application code/dependencies/fixtures changed or emulator tests rerun for this specification; baseline fa3183f retains 390-test verification. SDL2, TIMA/audio and external-ROM proposal #45 remain separately scoped.
+User implemented Joypad, FF00/IF event handling and public System::set_button for [#47](https://github.com/Lorithan/gameboy-emu/issues/47). All 401 tests pass (300 unit, 101 integration), including 11 focused joypad tests; formatting, strict Clippy and whitespace checks pass. Public input preserves CPU state and clocks across execution states; HALT wake/service occurs on the next cycle through existing gates. FF00 data/full-memory oracles are migrated and obsolete allowances removed. [Completion evidence](tasks/JOYPAD.md#headless-joypad-completion-verified---2026-11-18). #47 is complete, #44 stays open. Next planning task: specify selected-line STOP wake delivery and conditional entry, including input pulses between calls, held inputs, pending interrupts and CPU sampling, before implementation. No external ROM ran. SDL2, TIMA/audio and #45 remain separate; M2's ROM gate remains open.
 
 ## Current checkpoint - divider foundation complete, 2026-11-18
 
