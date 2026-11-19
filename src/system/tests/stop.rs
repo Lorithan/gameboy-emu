@@ -2,7 +2,193 @@ use super::super::{InstructionStep, MachineStep, System};
 use crate::{
     cpu::{CycleAction, CycleOutcome, CycleRequest},
     memory::{Button, Cartridge},
+    step_support::expect_cycle,
 };
+
+#[test]
+fn stop_freezes_new_overflow_until_selected_input_and_the_first_resumed_cycle() {
+    let mut s = machine(&[0, 0x10, 0, 0, 0]);
+    s.memory.write(0xFF0F, 0);
+    s.memory.write(0xFFFF, 4);
+    s.memory.write(0xFF05, 255);
+    s.memory.write(0xFF06, 0x42);
+    s.memory.write(0xFF07, 5);
+    let _ = expect_cycle(s.step_machine_cycle().unwrap());
+    assert_eq!(s.memory.read(0xFF05), 255);
+    let entry = expect_cycle(s.step_machine_cycle().unwrap());
+    assert_eq!(entry.outcome, CycleOutcome::StopEntered);
+    assert_eq!(entry.record.tick_after, 8);
+    assert_eq!(s.cpu_snapshot().pc, 0x103);
+    assert_eq!(
+        (
+            s.memory.read(0xFF04),
+            s.memory.read(0xFF05),
+            s.memory.read(0xFF0F)
+        ),
+        (0, 0, 0xE0)
+    );
+    let stopped_cpu = s.cpu_snapshot();
+    let stopped_memory = memory(&s);
+    for budget in [1, 16, 1000] {
+        assert!(matches!(
+            s.step_machine_cycle().unwrap(),
+            MachineStep::Stopped
+        ));
+        assert!(matches!(
+            s.step_instruction(budget).unwrap(),
+            InstructionStep::Stopped {
+                mcycles: 0,
+                ticks: 0
+            }
+        ));
+        assert_eq!(s.cpu_snapshot(), stopped_cpu);
+        assert_eq!(memory(&s), stopped_memory);
+        assert_eq!(s.elapsed_ticks(), 8);
+    }
+    // Inject a flagged eligible IRQ while stopped: it cannot replace JOYP wake.
+    s.memory.write(0xFF0F, 4);
+    assert!(matches!(
+        s.step_machine_cycle().unwrap(),
+        MachineStep::Stopped
+    ));
+    assert_eq!(
+        (
+            s.memory.read(0xFF05),
+            s.memory.read(0xFF0F),
+            s.elapsed_ticks()
+        ),
+        (0, 0xE4, 8)
+    );
+    s.memory.write(0xFF0F, 0);
+    s.set_button(Button::A, true);
+    s.set_button(Button::A, false);
+    assert_eq!(s.cpu_snapshot(), stopped_cpu);
+    assert_eq!(
+        (
+            s.memory.read(0xFF04),
+            s.memory.read(0xFF05),
+            s.memory.read(0xFF0F),
+            s.elapsed_ticks()
+        ),
+        (0, 0, 0xF0, 8)
+    );
+    let resumed = expect_cycle(s.step_machine_cycle().unwrap());
+    assert_eq!(resumed.record.action, CycleAction::Read { addr: 0x103 });
+    assert_eq!(resumed.outcome, CycleOutcome::InstructionComplete);
+    assert_eq!(resumed.record.tick_after, 12);
+    assert_eq!((s.memory.read(0xFF05), s.memory.read(0xFF0F)), (0x42, 0xF4));
+    let mut expected = stopped_cpu;
+    expected.pc = 0x104;
+    assert_eq!(s.cpu_snapshot(), expected);
+}
+
+#[test]
+fn stop_retains_reload_irq_from_its_fetch_cycle_until_wake_and_late_acknowledgment() {
+    let mut s = machine(&[0xFB, 0, 0x10, 0, 0]);
+    s.memory.write(0xFF0F, 0);
+    s.memory.write(0xFFFF, 4);
+    s.memory.write(0xFF05, 255);
+    s.memory.write(0xFF06, 0x42);
+    s.memory.write(0xFF07, 5);
+    for _ in 0..2 {
+        let _ = expect_cycle(s.step_machine_cycle().unwrap());
+    }
+    let entry = expect_cycle(s.step_machine_cycle().unwrap());
+    assert_eq!(entry.outcome, CycleOutcome::StopEntered);
+    assert_eq!(entry.record.tick_after, 12);
+    assert_eq!((s.memory.read(0xFF05), s.memory.read(0xFF0F)), (0x42, 0xE4));
+    let stopped = s.cpu_snapshot();
+    assert_eq!(stopped.pc, 0x103); // pending mask selects the one-byte branch
+    assert_eq!(s.cpu.test_interrupt_status(), (false, true));
+    for _ in 0..3 {
+        assert!(matches!(
+            s.step_machine_cycle().unwrap(),
+            MachineStep::Stopped
+        ));
+        assert_eq!(
+            (
+                s.memory.read(0xFF05),
+                s.memory.read(0xFF0F),
+                s.elapsed_ticks()
+            ),
+            (0x42, 0xE4, 12)
+        );
+    }
+    s.set_button(Button::A, true);
+    s.set_button(Button::A, false);
+    assert_eq!(s.elapsed_ticks(), 12);
+    for cycle in 1..=5 {
+        let trace = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(trace.record.tick_after, 12 + cycle * 4);
+        assert_eq!(
+            trace.record.action,
+            match cycle {
+                3 => CycleAction::Write {
+                    addr: 0xFFFD,
+                    value: 1
+                },
+                4 => CycleAction::Write {
+                    addr: 0xFFFC,
+                    value: 3
+                },
+                _ => CycleAction::Idle,
+            }
+        );
+        assert_eq!(s.memory.read(0xFF0F), if cycle < 4 { 0xF4 } else { 0xF0 });
+        if cycle == 5 {
+            assert_eq!(
+                trace.outcome,
+                CycleOutcome::InterruptEntryComplete { vector: 0x50 }
+            );
+        }
+    }
+    let mut expected = stopped;
+    expected.pc = 0x50;
+    expected.sp = 0xFFFC;
+    assert_eq!(s.cpu_snapshot(), expected);
+    assert_eq!(s.memory.read(0xFF05), 0x43);
+}
+
+#[test]
+fn stop_halt_like_and_continue_branches_keep_tima_clocking_without_div_reset() {
+    for pending in [false, true] {
+        let mut s = machine(&[0x10, 0, 0]);
+        s.set_button(Button::A, true);
+        s.memory.write(0xFFFF, 4);
+        s.memory.write(0xFF0F, if pending { 4 } else { 0 });
+        s.memory.write(0xFF05, 0x20);
+        s.memory.write(0xFF07, 5);
+        let first = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(first.outcome, CycleOutcome::InstructionComplete);
+        assert_eq!((s.memory.read(0xFF04), s.memory.read(0xFF05)), (0xAB, 0x20));
+        assert_eq!(s.cpu_snapshot().pc, if pending { 0x101 } else { 0x102 });
+        let next = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(
+            next.record.action,
+            if pending {
+                CycleAction::Read { addr: 0x101 }
+            } else {
+                CycleAction::Idle
+            }
+        );
+        assert_eq!(
+            next.outcome,
+            if pending {
+                CycleOutcome::InstructionComplete
+            } else {
+                CycleOutcome::InProgress
+            }
+        );
+        assert_eq!(
+            (
+                s.memory.read(0xFF04),
+                s.memory.read(0xFF05),
+                s.elapsed_ticks()
+            ),
+            (0xAB, 0x21, 8)
+        );
+    }
+}
 
 fn machine(bytes: &[u8]) -> System {
     let mut rom = vec![0; 32768];

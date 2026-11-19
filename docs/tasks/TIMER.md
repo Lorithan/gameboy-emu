@@ -1,6 +1,6 @@
 # M3 programmable timer design brief
 
-Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Register foundation #65, tick/reload/write-phase #66 and DIV/TAC write edges #67 are implemented and verified for the current coarse schedule. STOP pending-phase interactions and external timer calibration remain incomplete. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define the existing boundaries.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Register foundation #65, tick/reload/write-phase #66, DIV/TAC write edges #67 and the user-approved coarse STOP policy #68 are locally verified. External hardware timer audit/execution/calibration remains incomplete. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define the existing boundaries.
 
 ## First implementation slice: register storage and mapping
 
@@ -43,20 +43,28 @@ Five new assistant tests cover all divider phases/control settings, all selected
 
 Primary write-effect source: [Pan Docs timer circuitry](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_Obscure_Behaviour.md). Pinned [div_write.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/div_write.s) and [rapid_toggle.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/rapid_toggle.s) are future hardware-validation candidates, not executed results.
 
+## Agreed coarse STOP policy
+
+[#68](https://github.com/Lorithan/gameboy-emu/issues/68), verified without application changes. Actual StopEntered clears only the counter once: no manufactured TIMA edge, phase cancellation/restart, register change or IF request/clear. Keep on_stop_entered separate from write_div. This deliberately retains the existing project approximation; reviewed references establish reset and stopped clocks but not the physical reset-to-TIMA edge detail. That hardware assessment remains #64.
+
+While Stopped, System returns before real ticks: Counting, every remaining overflow delay and Reloading are retained. Reads/polls/input do not progress them. Selected JOYP input wakes without clocks/reload/acknowledgment; remaining delay resumes on real ticks. IF/IE alone cannot wake Stopped. A reload/IF produced during STOP's final executing cycle survives entry/pause and may be serviced by ordinary arbitration after selected-input wake. HALT-like/Continue branches do not reset DIV and keep TIMA clocking.
+
+Five new tests cover counter/control/phase reset preservation and exact remaining-tick resume, overflow on entry with whole-memory/register/time-pure stopped polls, IF-only rejection and press/release wake, reload/IF on STOP's fetch cycle followed by five-cycle late-acknowledged timer entry, and conditional HALT-like/Continue traces. All 466 tests pass (341 unit, 125 integration), including five hash-verified existing fixtures; formatting, strict Clippy and whitespace pass. Focused runs passed 27 STOP and 25 timer tests (overlapping sets). Tests/docs only; no new hardware STOP or external timer ROM result. Next audit pinned timer fixtures and calibrate the current model against actual execution.
+
 ## Decisions before dependent code
 
 1. **Registers/startup:** specified and implemented above. Extend these methods with reviewed edge/reload behavior in later slices.
 2. **Write-induced edges:** #67 above is locally verified; hardware timer audit/calibration remains required.
 3. **Reload calibration:** ordinary tick/delay/write-window rules are implemented above; audit and execute pinned hardware timer tests against the current access phase before claiming conformance.
-4. **STOP interactions:** settle reset-edge/pending-reload/pause/resume behavior without guessing that STOP reset and DIV write are identical or duplicating stopped state.
+4. **STOP interactions:** coarse policy above is agreed/verified; physical reset-edge fidelity remains #64, not silently equated with DIV writes.
 5. **Effects/order:** Timer-to-Bus event delivery and normal CPU arbitration are implemented; preserve the declared ordering or explicitly revise it if evidence requires.
 6. **Evidence:** independent frequency/edge/register/reload/collision/IF/HALT/STOP tests, then a pinned bounded timer-ROM selection with startup/device/reporting/license audit. No unrelated PPU/audio/frontend work.
 
 ## Proposed checkpoints
 
 1. Register storage/mapping #65 and ordinary tick/reload/write-phase #66 are complete for their scope.
-2. DIV/TAC write edges #67 are complete; next settle STOP reset-edge/pending-phase/pause/resume scope before implementation.
-3. Audit/run pinned timer ROMs, investigate phase mismatches and preserve System regressions.
+2. DIV/TAC write edges #67 and agreed STOP policy #68 are complete for their declared scope.
+3. Next audit/prepare/run pinned timer ROMs, investigate phase mismatches and preserve System regressions.
 
 Finalize interfaces/invariants before each slice. An overflow placeholder must not be presented as timer correctness. [M3 gate](../PROJECT_PLAN.md#milestones) requires timing/interrupt tests and relevant real ROM evidence, not just compilation.
 

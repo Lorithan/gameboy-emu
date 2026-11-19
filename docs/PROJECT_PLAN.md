@@ -4,9 +4,9 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register #65, tick/reload/write-phase #66 and DIV/TAC write-edge #67 slices are locally verified for the declared coarse schedule. Latest executable verification, 2026-11-19: **461 passing tests** (336 unit, 125 integration), including five hash-verified existing external fixtures; formatting and strict Clippy pass. STOP pending-phase interactions and external timer conformance remain incomplete. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
+M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register #65, tick/reload/write-phase #66, DIV/TAC write-edge #67 and agreed coarse STOP policy #68 are locally verified. Latest executable verification, 2026-11-19: **466 passing tests** (341 unit, 125 integration), including five hash-verified existing external fixtures; formatting and strict Clippy pass. No application changes were needed for the STOP policy tests. Hardware timer calibration/conformance remains incomplete. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
 
-**Next: settle STOP reset-edge/pending-phase/pause/resume scope under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53).** [DIV/TAC write-edge #67](tasks/TIMER.md#div-and-tac-write-edge-contract) preserves Counting-only increments, existing overflow/reload state and delayed IF. STOP remains separate and unchanged until its contract is settled. Pinned hardware timer ROM audits/runs and phase calibration remain required; #53 stays open.
+**Next: audit and select pinned hardware timer ROMs under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53), then prepare provenance/limits and execute them.** [STOP policy #68](tasks/TIMER.md#agreed-coarse-stop-policy) retains no reset-induced TIMA edge and freezes pending phases without claiming physical reset-edge fidelity; #64 remains separate. No new user implementation is specified until validation demonstrates a defect or a reviewed contract changes. #53 and M3 remain open.
 
 Separate nonblocking follow-ups:
 

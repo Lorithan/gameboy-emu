@@ -1,6 +1,90 @@
 use super::{Timer, TimerEvent, TimerPhase};
 
 #[test]
+fn stop_reset_preserves_registers_and_every_phase_without_synthesizing_an_edge() {
+    for counter in [0, 8, 0x200, 0xABC8, 0xFFFF] {
+        for tac in 0..8 {
+            for phase in [
+                TimerPhase::Counting,
+                TimerPhase::Overflowing { ticks_left: 1 },
+                TimerPhase::Overflowing { ticks_left: 2 },
+                TimerPhase::Overflowing { ticks_left: 3 },
+                TimerPhase::Overflowing { ticks_left: 4 },
+                TimerPhase::Reloading,
+            ] {
+                for tima in [0, 0x42, 255] {
+                    let mut timer = Timer {
+                        counter,
+                        tima,
+                        tma: 0x69,
+                        tac,
+                        phase,
+                    };
+                    let mut expected = timer;
+                    expected.counter = 0;
+                    timer.on_stop_entered();
+                    assert_eq!(timer, expected);
+                    timer.on_stop_entered();
+                    assert_eq!(timer, expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn stop_retains_each_remaining_reload_delay_and_resumes_counting_from_zero() {
+    for ticks_left in 1..=4 {
+        let mut timer = Timer {
+            counter: 0xFFFF,
+            tima: 0,
+            tma: 0x42,
+            tac: 5,
+            phase: TimerPhase::Overflowing { ticks_left },
+        };
+        timer.on_stop_entered();
+        let paused = timer;
+        for _ in 0..8 {
+            assert_eq!(
+                (
+                    timer.read_div(),
+                    timer.read_tima(),
+                    timer.read_tma(),
+                    timer.read_tac()
+                ),
+                (0, 0, 0x42, 0xFD)
+            );
+            assert_eq!(timer, paused);
+        }
+        for resumed_ticks in 1..=ticks_left {
+            assert_eq!(
+                timer.tick(),
+                if resumed_ticks == ticks_left {
+                    TimerEvent::InterruptRequested
+                } else {
+                    TimerEvent::None
+                }
+            );
+            assert_eq!(timer.counter, u16::from(resumed_ticks));
+            assert_eq!(
+                timer.read_tima(),
+                if resumed_ticks == ticks_left { 0x42 } else { 0 }
+            );
+        }
+        assert_eq!(timer.phase, TimerPhase::Reloading);
+        for resumed_ticks in ticks_left + 1..=16 {
+            assert_eq!(timer.tick(), TimerEvent::None);
+            assert_eq!(timer.counter, u16::from(resumed_ticks));
+            assert_eq!(
+                timer.read_tima(),
+                if resumed_ticks == 16 { 0x43 } else { 0x42 }
+            );
+            assert_eq!(timer.phase, TimerPhase::Counting);
+        }
+    }
+}
+
+#[test]
 fn div_write_edges_exhaust_counter_phases_and_control_settings() {
     for counter in 0u16..=u16::MAX {
         for (selection, half_period) in [512u32, 8, 32, 128].into_iter().enumerate() {

@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest executable verification: DIV/TAC write-edge #67, 2026-11-19, **461 passes** (336 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Five new tests cover all divider/control phases, TAC transitions/aliases, phase gating, write-created delayed overflow and CPU write/IF traces. One existing full-address-space oracle explicitly accounts for the intentional disable edge; unrelated memory/instance assertions remain intact. All 23 timer-focused tests pass. Earlier waveform/reload/write-window tests remain. STOP pending-phase and external timer calibration work remains; no new timer ROM result is claimed.
+Latest executable verification: agreed coarse STOP timer policy #68, 2026-11-19, **466 passes** (341 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Five new tests cover counter-only reset/all phases, remaining reload ticks, no-cycle polling/input, IF retention/normal post-wake service and conditional branch clocking. Focused runs pass 27 STOP and 25 timer tests (overlapping sets). Application source is unchanged for this slice. The no-entry-TIMA-edge policy is an explicit approximation; no physical STOP or new timer ROM validation is claimed. Next audit and execute pinned hardware timer fixtures, retaining all prior edge/phase/write oracles.
 
 ## Commands
 
