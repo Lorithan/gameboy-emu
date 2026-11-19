@@ -1,6 +1,22 @@
 # M3 programmable timer design brief
 
-Active [#53](https://github.com/Lorithan/gameboy-emu/issues/53). **Proposal/questions, not a finalized implementation contract.** User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) already support real ticks, HALT/STOP and IRQ service.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). The register-only foundation below is specified and ready for user implementation; counting/reload sections remain proposals/questions. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) already support real ticks, HALT/STOP and IRQ service.
+
+## First implementation slice: register storage and mapping
+
+[#65](https://github.com/Lorithan/gameboy-emu/issues/65), M3. Add private TIMA/TMA/TAC storage to the existing Timer; preserve the counter and ABC8 seed. Provide parent-visible register read/write methods and route FF05-FF07 in Bus. No new CPU/System interface or second divider clock.
+
+| Register | Startup storage | Read | Write |
+| --- | --- | --- | --- |
+| FF05 TIMA | 00 | Stored byte | Retain all bits |
+| FF06 TMA | 00 | Stored byte | Retain all bits |
+| FF07 TAC | 00 | F8 OR stored value | Store value AND 07 |
+
+TAC bit2 is enable and bits1-0 select the clock. Read operations are pure. This is intentionally a storage/readback checkpoint: TAC-driven counting, DIV/TAC edge effects, overflow/reload and Timer IF are not implemented here, and no functional timer pass is claimed. Preserve existing tick/DIV/STOP behavior; do not introduce a wrapping-add placeholder or fake IRQ. Later contracts extend these write methods with phase/edge effects.
+
+Startup comes from the Pan Docs post-boot register table. TAC's unused-bit behavior is independently specified in pinned [Mooneye unused_hwio-GS.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/bits/unused_hwio-GS.s), which checks upper mask F8 after writing F8 and 00. This is source review, not an executed new fixture.
+
+Assistant acceptance: exhaust all written bytes, TAC mask/aliases, register isolation, startup/read purity and Bus routing. Writes must preserve existing counter phase/IF/IE/elapsed time and unrelated registers/memory. Migrate old FF05-07 fallback/full-memory test oracles explicitly, leaving all independent result/flag/trace/budget expectations intact. Verify DIV/STOP/joypad/interrupt regressions and the full five-fixture suite, formatting, strict Clippy and whitespace before publication. No new allowances/dependencies.
 
 ## Decisions before dependent code
 
@@ -13,7 +29,7 @@ Active [#53](https://github.com/Lorithan/gameboy-emu/issues/53). **Proposal/ques
 
 ## Proposed checkpoints
 
-1. Registers/mapping and ordinary edge-driven counting.
+1. Register storage/mapping (#65), then a separately specified ordinary edge-counting slice.
 2. Delayed reload, event-to-IF delivery and write collisions.
 3. System regressions and explicitly audited external ROM validation.
 

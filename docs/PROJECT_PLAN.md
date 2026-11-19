@@ -6,7 +6,7 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 M1 cartridge/memory foundation and M2 functional CPU execution are complete. CPU structure/readability cleanup is complete: standard errors, decoder validity, register ownership, typed continuations, HALT suppression state, module separation and naming. Last executable verification: `dcedd79`, **442 passing tests** (317 unit, 125 integration), explicitly including five external ROM fixtures; formatting and strict Clippy passed. Later issue-audit/documentation changes add no executable evidence. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
 
-**Next: [#53, specify the programmable timer contract](https://github.com/Lorithan/gameboy-emu/issues/53).** The [active brief](tasks/TIMER.md) records questions and proposed slices. TIMA/TMA/TAC are not implemented; settle startup, edges, reload/write phases and event ordering before dependent code.
+**Next user slice: [#65, timer register storage and mapping](https://github.com/Lorithan/gameboy-emu/issues/65)** under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53). The [active contract](tasks/TIMER.md#first-implementation-slice-register-storage-and-mapping) specifies TIMA/TMA/TAC startup, read/write masks and Bus routing only. Registers/counting/reload are not yet implemented. Edge effects, reload/write phases and event ordering still need a reviewed contract before their dependent code; #53 remains open. No application changes or new tests for this planning step.
 
 Separate nonblocking follow-ups:
 
