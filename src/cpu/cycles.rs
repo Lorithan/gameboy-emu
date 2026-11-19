@@ -7,6 +7,16 @@ pub enum CycleAction {
     Write { addr: u16, value: u8 },
 }
 
+impl std::fmt::Display for CycleAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CycleAction::Idle => write!(f, "idle"),
+            CycleAction::Read { addr } => write!(f, "read at 0x{addr:04X}"),
+            CycleAction::Write { addr, value } => write!(f, "write 0x{value:02X} to 0x{addr:04X}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleRequest {
     Execute(CycleAction),

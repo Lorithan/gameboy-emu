@@ -15,6 +15,32 @@ pub enum SystemError {
     CpuCompletionError(CpuError, CycleRecord),
 }
 
+impl std::fmt::Display for SystemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SystemError::CpuRequestError(_) => {
+                write!(f, "failed to request next CPU cycle")
+            }
+            SystemError::CpuCompletionError(_, cycle_record) => {
+                write!(
+                    f,
+                    "failed to complete CPU cycle at tick {} ({})",
+                    cycle_record.tick_after, cycle_record.action
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SystemError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SystemError::CpuRequestError(cpu_error) => Some(cpu_error),
+            SystemError::CpuCompletionError(cpu_error, _) => Some(cpu_error),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CycleRecord {
     pub tick_before: u64,

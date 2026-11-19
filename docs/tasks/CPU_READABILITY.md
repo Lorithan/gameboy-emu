@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## System error checkpoint verified - 2026-11-19
+
+User completed SystemError Display/Error and CycleAction Display. Request errors describe the next cycle query; completion errors describe the failed completion at tick_after with idle/read/write address/value context. CycleRecord's structured fields remain available; the message does not claim the already performed bus action itself failed. Both variants expose the original CpuError, preserving deeper typed fault/protocol causes. Three new tests/system_errors.rs tests check source chains and essential completion metadata without fixing every word of prose. The earlier tick_before formatting mistake is resolved.
+
+Full verification passes 436 tests (312 unit, 124 integration) explicitly including five external fixtures; formatting, strict Clippy and whitespace checks pass. Assistant changed tests/docs only. Execution/timing and dependencies are unchanged. Next is CartridgeError's separate standard-trait cleanup: FileIO retains path context and its io::Error source; validation variants are leaves. #54 arithmetic extraction and other accepted structural proposals remain queued.
+
 ## CPU error checkpoint verified - 2026-11-19
 
 User completed CPU error extraction and standard traits. Root cpu:: imports remain compatible; the new public cpu::error module contains CpuError, CpuFault, OpcodeEncoding and UnexpectedCycleResponse. Display keeps outer context separate from source detail, CycleKind has readable names, and fault bytes/addresses use fixed-width hexadecimal. Leaf Error sources are None; CpuError exposes its concrete wrapped cause. No execution/state behavior or dependencies changed by this cleanup.
