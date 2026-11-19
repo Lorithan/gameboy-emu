@@ -9,8 +9,10 @@ Cartridge accepts validated unchanged 32 KiB ROM-only images with no cartridge R
 | Address/range | Mapping |
 | --- | --- |
 | 0000-7FFF | Cartridge ROM; writes ignored |
+| 8000-9FFF | 8 KiB PPU-owned VRAM; unrestricted storage access in the first foundation slice |
 | C000-DFFF | 8 KiB WRAM |
 | E000-FDFF | Corresponding WRAM echo |
+| FE00-FE9F | 160 bytes PPU-owned OAM; unrestricted storage access in the first foundation slice |
 | FF80-FFFE | 127-byte HRAM |
 | FF00 | JOYP |
 | FF04 | DIV |
@@ -19,6 +21,14 @@ Cartridge accepts validated unchanged 32 KiB ROM-only images with no cartridge R
 | Other | Read FF, ignore writes; unimplemented hardware |
 
 WRAM/HRAM start zero as deterministic project policy, not physical RAM behavior. CPU starts PC=0100, SP=FFFE, A=01, BC=0013, DE=00D8, HL=014D. F=80 for zero header checksum, otherwise B0. Source: [Pan Docs post-boot profile](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md). Authentic boot and other console profiles are deferred.
+
+## Video-memory foundation
+
+[#71](https://github.com/Lorithan/gameboy-emu/issues/71) adds Bus-owned Ppu with private VRAM/OAM arrays. Both start zero as deterministic project policy, intentionally omitting boot-ROM logo/tile initialization. Bus subtracts the mapped range base and converts to usize offsets; Ppu indexes directly without masking/modulo aliases. Every byte retains all eight bits independently; reads are pure and instances/regions are isolated. FEA0-FEFF retains existing FF/ignored-write fallback and is not additional OAM; that fallback is not a physical accuracy claim.
+
+This is storage/mapping only: no PPU clocking, LCD registers, modes/access locks, rendering, interrupt requests, frame output or DMA yet. FF40-FF4B remain fallback, including LY and DMA; existing audited ROM reporter behavior is unchanged. Agreed later architecture advances PPU once per base tick alongside Timer and exposes read-only completed frames through System, under contracts still to be specified.
+
+Five assistant acceptance tests cover zero/read purity, all-offset independent address patterns, all-byte endpoint/interior writes, full-memory/Timer-phase/instance isolation, unusable-tail nonaliases and CPU word stores across video-region boundaries with exact traces and every pause budget. Existing load/store/stack/interrupt/RETI/CB oracles now explicitly include the newly mapped ranges. This establishes the foundation contract, not functional PPU accuracy. [Mapping reference](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Memory_Map.md); [future mode restrictions](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Accessing_VRAM_and_OAM.md).
 
 ## Interrupt registers
 

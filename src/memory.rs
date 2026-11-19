@@ -1,6 +1,7 @@
 mod cartridge;
 mod interrupts;
 mod joypad;
+mod ppu;
 mod timer;
 
 pub use cartridge::Cartridge;
@@ -10,6 +11,7 @@ pub use joypad::Button;
 
 use crate::memory::{
     joypad::{Joypad, JoypadEvent},
+    ppu::Ppu,
     timer::Timer,
 };
 
@@ -23,6 +25,7 @@ pub struct Bus {
     interrupt_controller: InterruptController,
     timer: Timer,
     joypad: Joypad,
+    ppu: Ppu,
 }
 
 impl Bus {
@@ -34,6 +37,7 @@ impl Bus {
             interrupt_controller: InterruptController::post_boot(),
             timer: Timer::dmg_post_boot(),
             joypad: Joypad::dmg_post_boot(),
+            ppu: Ppu::dmg_post_boot(),
         }
     }
 
@@ -43,8 +47,10 @@ impl Bus {
                 let rom = self.cart.rom();
                 rom[addr as usize]
             }
+            0x8000..=0x9FFF => self.ppu.read_vram((addr as usize) - 0x8000),
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize],
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize],
+            0xFE00..=0xFE9F => self.ppu.read_oam((addr as usize) - 0xFE00),
             0xFF00 => self.joypad.read(),
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.timer.read_tima(),
@@ -59,8 +65,10 @@ impl Bus {
 
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
+            0x8000..=0x9FFF => self.ppu.write_vram((addr as usize) - 0x8000, value),
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize] = value,
+            0xFE00..=0xFE9F => self.ppu.write_oam((addr as usize) - 0xFE00, value),
             0xFF00 => {
                 if let JoypadEvent::FallingEdge = self.joypad.write(value) {
                     self.request_interrupt(Interrupt::Joypad);

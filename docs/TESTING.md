@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #70 on 2026-11-19 at f0d38ef: **484 passed, zero failed**, with no-fail-fast so all targets ran (346 unit, 138 integration). All 466 local tests and eighteen external fixtures pass after the user's System fetch-boundary correction. Formatting and strict Clippy pass. [Timer evidence](testing/MOONEYE_TIMER.md) retains the original rapid_toggle failure and corrected thirteen-fixture pass. The [M3 review](M3_COMPLETION_REVIEW.md) accepts the declared gate using that run, with no exact hardware timing claim or additional test execution for the documentation review.
+Latest fixture-inclusive regression, #71 on 2026-11-19: **489 passed, zero failed**, with no-fail-fast so all targets ran (351 unit, 138 integration). All 471 local tests and eighteen hash-verified external fixtures pass after the user's PPU storage/Bus mapping and naming/offset cleanup. Formatting and strict Clippy pass. Five new tests verify the [video-memory foundation](DEVICES.md#video-memory-foundation); existing fallback/full-memory/CPU oracles explicitly account for newly writable VRAM/OAM. No PPU timing/rendering hardware result is claimed. The [M3 review](M3_COMPLETION_REVIEW.md) retains its earlier f0d38ef evidence, including the corrected rapid_toggle result in [timer evidence](testing/MOONEYE_TIMER.md).
 
 ## Commands
 

@@ -31,7 +31,9 @@ fn absolute_a_four_action_traces_and_every_budget_resume() {
             0u16, 0x7FFF, 0x8000, 0xC000, 0xDFFF, 0xE000, 0xFDFF, 0xFE00, 0xFF80, 0xFFFE, 0xFFFF,
         ] {
             let bytes = [0x3E, 0x5A, opcode, addr as u8, (addr / 256) as u8, 0, 0xD3];
-            let read = if addr <= 0x7FFF || matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+            let read = if addr <= 0x7FFF
+                || matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+            {
                 0
             } else {
                 0xFF

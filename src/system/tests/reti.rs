@@ -25,7 +25,7 @@ fn reti_bus_reads_exact_traces_and_all_budget_resumes_preserve_memory() {
         (0xFFFE, 0x1234),
         (0xFFFF, 0x0034),
         (0xFF0F, 0xFFF4),
-        (0x7FFF, 0xFF00),
+        (0x7FFF, 0x1200), // ROM low ignored, high byte now retained in VRAM.
         (0xBFFF, 0x12FF),
     ] {
         for budget in [0, 1, 2, 3, 4, 100] {

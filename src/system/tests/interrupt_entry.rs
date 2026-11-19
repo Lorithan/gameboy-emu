@@ -244,7 +244,9 @@ fn write_expected(memory: &mut [u8], addr: u16, value: u8) {
             memory[usize::from(addr - 0x2000)] = value;
         }
         0xFF0F => memory[usize::from(addr)] = value % 32 + 224,
-        0xFF80..=0xFFFF => memory[usize::from(addr)] = value,
+        0x8000..=0x9FFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF => {
+            memory[usize::from(addr)] = value;
+        }
         _ => {}
     }
 }

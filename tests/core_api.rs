@@ -53,7 +53,7 @@ fn public_bus_api_routes_rom_and_work_ram() {
     assert_eq!(bus.read(0xE123), 0xA5);
     bus.write(0xE123, 0x5A);
     assert_eq!(bus.read(0xC123), 0x5A);
-    assert_eq!(bus.read(0x8000), 0xFF);
+    assert_eq!(bus.read(0x8000), 0);
 }
 
 #[test]

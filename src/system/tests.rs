@@ -8,6 +8,7 @@ mod divider;
 mod divider_oracle;
 mod halt;
 mod joypad;
+mod ppu_memory;
 mod reti;
 mod stop;
 mod timer_registers;
@@ -53,7 +54,8 @@ fn restarts_write_only_the_return_word_across_bus_boundaries_and_pauses() {
                     if budget < phase {
                         continue;
                     }
-                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         memory[usize::from(addr)] = value;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             memory[usize::from(addr + 0x2000)] = value;
@@ -211,7 +213,8 @@ fn call_writes_only_return_bytes_at_the_correct_pause_and_ret_preserves_memory()
                         if !taken || budget < phase {
                             continue;
                         }
-                        if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                        if matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                        {
                             expected_memory[usize::from(addr)] = value;
                             if (0xC000..=0xDDFF).contains(&addr) {
                                 expected_memory[usize::from(addr + 0x2000)] = value;
@@ -360,7 +363,8 @@ fn stack_cycles_obey_bus_mapping_and_preserve_other_memory_at_every_pause() {
                     if budget < 3 + index as u64 {
                         continue;
                     }
-                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         expected_memory[usize::from(addr)] = byte;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             expected_memory[usize::from(addr + 0x2000)] = byte;
@@ -630,7 +634,8 @@ fn memory_modifications_obey_bus_boundaries_even_when_writes_are_ignored() {
             assert_eq!(system.cpu_snapshot(), expected);
             assert_eq!(
                 system.memory.read(address),
-                if matches!(address, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                if matches!(address, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                {
                     value
                 } else {
                     old
@@ -739,7 +744,7 @@ fn cpu_memory_accesses_respect_wram_echo_rom_and_unimplemented_boundaries() {
             system.step_instruction(3).expect("store");
             let expected = match address {
                 0x0000..=0x7FFF => original,
-                0xC000..=0xFDFF | 0xFF80..=0xFFFF => 0x42,
+                0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF => 0x42,
                 _ => 0xFF,
             };
             assert_eq!(system.memory.read(address), expected);
@@ -1237,7 +1242,10 @@ fn indirect_pair_transfers_only_change_permitted_store_bytes_and_echo_aliases() 
                     .collect();
                 system.step_instruction(budget).unwrap();
                 for phase in [budget, 2] {
-                    if store && phase == 2 && matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if store
+                        && phase == 2
+                        && matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         expected[usize::from(addr)] = 0x5A;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             expected[usize::from(addr + 0x2000)] = 0x5A;
@@ -1298,7 +1306,10 @@ fn hl_auto_update_preserves_memory_except_permitted_store_and_echo_bytes() {
                     .collect();
                 system.step_instruction(budget).unwrap();
                 for phase in [budget, 2] {
-                    if store && phase == 2 && matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if store
+                        && phase == 2
+                        && matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         expected[usize::from(addr)] = 0x5A;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             expected[usize::from(addr + 0x2000)] = 0x5A;
@@ -1357,7 +1368,10 @@ fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
                     .collect();
                 system.step_instruction(budget).unwrap();
                 for phase in [budget, 4] {
-                    if store && phase == 4 && matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if store
+                        && phase == 4
+                        && matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         expected[usize::from(addr)] = 0x5A;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             expected[usize::from(addr + 0x2000)] = 0x5A;
@@ -1515,7 +1529,8 @@ fn store_sp_absolute_changes_only_each_completed_mapped_byte_and_aliases() {
                     if phase < completion {
                         continue;
                     }
-                    if matches!(addr, 0xC000..=0xFDFF | 0xFF80..=0xFFFF) {
+                    if matches!(addr, 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF)
+                    {
                         expected[usize::from(addr)] = value;
                         if (0xC000..=0xDDFF).contains(&addr) {
                             expected[usize::from(addr + 0x2000)] = value;
