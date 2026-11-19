@@ -75,6 +75,10 @@ impl Joypad {
         }
     }
 
+    pub(super) fn stop_wake_active(&self) -> bool {
+        self.input_lines() != 0x0F
+    }
+
     fn input_lines(&self) -> u8 {
         let mut pressed_lines = 0u8;
 

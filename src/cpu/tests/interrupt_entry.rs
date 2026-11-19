@@ -261,7 +261,8 @@ fn late_selection_exhausts_ie_if_samples_and_preserves_cancellation_state() {
             assert!(matches!(
                 cpu.complete_cycle(CycleResponse::Read {
                     value: 0,
-                    pending_interrupts: 0
+                    pending_interrupts: 0,
+                    stop_wake_active: false,
                 }),
                 Err(CpuError::UnexpectedCycleResponse(_))
             ));

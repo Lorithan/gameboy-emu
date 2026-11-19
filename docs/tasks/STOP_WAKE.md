@@ -1,12 +1,26 @@
 # Selected-line STOP entry and wake
 
-Proposed task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. This proposal is not implemented. Baseline is 03aff43 with the previous 401 passing tests (300 unit, 101 integration); no emulator tests rerun for this documentation-only task.
+Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries and mandatory read sampling are implemented; conditional entry and host-input wake remain proposed work. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
+
+## Read-sample slice review - 2026-11-18
+
+Fresh full verification: all 405 tests pass (304 unit, 101 integration); formatting, strict Clippy and whitespace checks pass. Includes the three level-query tests from the previous slice and the new accessor test. Conditional entry/wake remain unimplemented; #48/#44 stay open.
+
+User added the mandatory Read field, its typed accessor, and System sampling after each bus read alongside pending_interrupts. Review confirms CPU still ignores the new level, preserving existing STOP behavior. Assistant migrated test response constructors with false as the ordinary default. All five focused protocol tests pass: the new accessor test exhausts both levels and every byte/pending value, checks wrong response kinds, and ordinary-read regression now exercises both wake levels across immediate, indirect and CB reads with all pending masks and IME states. Existing phase/retry tests retain their response-kind checks.
+
+Strict Clippy passes without temporary allowances; the production Bus/Joypad callers resolve the earlier dead-code errors. System sample timing is structurally reviewed; CPU behavior tests cannot yet demonstrate transport of the level through System because the CPU does not consume it. Conditional STOP integration tests will supply that evidence. No external ROM ran. Next user slice: carry a private StopBehavior through StopFinished, pass the read sample into opcode handling, and apply the documented entry table with conditional wrapping padding in the shared completion wrapper. Host-input wake follows separately.
 
 ## First implementation slice
 
 Add `Joypad::stop_wake_active(&self) -> bool`, visible to its parent module, and a crate-visible Bus method forwarding the same query. Return true exactly when at least one selected P10-P13 line is low. Derive it from the existing private `input_lines()` result: all four high means inactive. A held button in an unselected row is inactive; either selected row can assert a shared line. With neither row selected, the signal is inactive regardless of buttons.
 
 Both methods are pure: no stored wake flag, interrupt request/clear, button update, CPU transition or time advancement. Keep `input_lines()` private. Do this slice first; the following sections describe dependent work for review.
+
+### Level-query slice review - 2026-11-18
+
+Fresh full regression: all 404 tests pass (303 unit, 101 integration); formatting and whitespace checks pass. No external ROM ran. Strict Clippy has only the unused-query errors described below, so finish the production sampling slice before the next verified commit checkpoint.
+
+User implemented both queries with the agreed visibility and no additional state. Three assistant-owned acceptance tests pass: exhaustive held-mask/selection queries, Bus forwarding independent of representative IF/IE combinations, and repeated-query preservation of all mapped memory, hidden DIV phase and instance isolation. Strict Clippy currently rejects the two unused production methods; the next read-response sampling slice will supply their production caller. No temporary allowances or application changes were added by the assistant. CPU STOP behavior remains unchanged. Next: add mandatory `stop_wake_active` to Read responses and sample it in System, preserving existing execution before implementing entry branches.
 
 ## Distinct signals
 

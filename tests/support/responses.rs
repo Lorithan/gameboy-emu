@@ -24,6 +24,7 @@ pub fn response(action: Result<CycleAction, CpuError>, data: Option<u8>) -> Cycl
             Some(value) => CycleResponse::Read {
                 value,
                 pending_interrupts: 0,
+                stop_wake_active: false,
             },
             None => CycleResponse::IdleDone,
         },

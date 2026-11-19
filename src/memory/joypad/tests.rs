@@ -36,6 +36,27 @@ fn configured(held: u8, selection: u8) -> Joypad {
 }
 
 #[test]
+fn stop_wake_level_exhausts_held_masks_and_selections_without_mutation() {
+    for held in 0u8..=255 {
+        for selection in [0, 0x10, 0x20, 0x30] {
+            let joypad = configured(held, selection);
+            let expected = BUTTONS
+                .iter()
+                .any(|(_, host_bit, _, row)| held & host_bit != 0 && selection & row == 0);
+            let before = (joypad.selection, joypad.pressed, joypad.read());
+            for _ in 0..3 {
+                assert_eq!(
+                    joypad.stop_wake_active(),
+                    expected,
+                    "held {held:02X}, selection {selection:02X}"
+                );
+                assert_eq!((joypad.selection, joypad.pressed, joypad.read()), before);
+            }
+        }
+    }
+}
+
+#[test]
 fn joypad_startup_masks_and_instances_are_independent() {
     for (button, host_bit, _, _) in BUTTONS {
         assert_eq!(button.mask(), host_bit);

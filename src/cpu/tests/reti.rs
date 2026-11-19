@@ -36,6 +36,7 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
             CycleResponse::Read {
                 value: 0xFF,
                 pending_interrupts: 0,
+                stop_wake_active: false,
             },
             CycleResponse::IdleDone,
             CycleResponse::WriteDone {
@@ -63,14 +64,17 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
             0 => CycleResponse::Read {
                 value: opcode,
                 pending_interrupts: 0,
+                stop_wake_active: false,
             },
             1 => CycleResponse::Read {
                 value: target as u8,
                 pending_interrupts: 0,
+                stop_wake_active: false,
             },
             2 => CycleResponse::Read {
                 value: (target / 256) as u8,
                 pending_interrupts: 0,
+                stop_wake_active: false,
             },
             _ => CycleResponse::IdleDone,
         };
@@ -139,6 +143,7 @@ fn reti_captures_return_mode_stack_address_and_low_byte() {
     cpu.complete_cycle(CycleResponse::Read {
         value: 0xD9,
         pending_interrupts: 0,
+        stop_wake_active: false,
     })
     .unwrap();
     cpu.registers.sp = 0x4321;
@@ -149,6 +154,7 @@ fn reti_captures_return_mode_stack_address_and_low_byte() {
     cpu.complete_cycle(CycleResponse::Read {
         value: 0x34,
         pending_interrupts: 0,
+        stop_wake_active: false,
     })
     .unwrap();
     cpu.registers.sp = 0xBEEF;
@@ -159,6 +165,7 @@ fn reti_captures_return_mode_stack_address_and_low_byte() {
     cpu.complete_cycle(CycleResponse::Read {
         value: 0x12,
         pending_interrupts: 0,
+        stop_wake_active: false,
     })
     .unwrap();
     assert_eq!(cpu.snapshot().sp, 1);

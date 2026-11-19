@@ -111,6 +111,7 @@ impl System {
                 self.cpu.complete_cycle(CycleResponse::Read {
                     value,
                     pending_interrupts: self.memory.pending_interrupts(),
+                    stop_wake_active: self.memory.stop_wake_active(),
                 })
             }
             crate::cpu::CycleAction::Write { addr, value } => {

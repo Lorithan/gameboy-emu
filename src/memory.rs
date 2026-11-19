@@ -100,4 +100,8 @@ impl Bus {
             self.request_interrupt(Interrupt::Joypad);
         }
     }
+
+    pub(crate) fn stop_wake_active(&self) -> bool {
+        self.joypad.stop_wake_active()
+    }
 }

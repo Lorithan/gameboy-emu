@@ -32,8 +32,14 @@ pub struct InterruptSample {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleResponse {
-    Read { value: u8, pending_interrupts: u8 },
-    WriteDone { interrupt_sample: InterruptSample },
+    Read {
+        value: u8,
+        pending_interrupts: u8,
+        stop_wake_active: bool,
+    },
+    WriteDone {
+        interrupt_sample: InterruptSample,
+    },
     IdleDone,
 }
 
@@ -61,6 +67,18 @@ impl CycleResponse {
             CycleResponse::Read {
                 pending_interrupts, ..
             } => Ok(*pending_interrupts),
+            _ => Err(UnexpectedCycleResponse {
+                expected: CycleKind::Read,
+                received: self.kind(),
+            }),
+        }
+    }
+
+    pub fn stop_wake_active(&self) -> Result<bool, UnexpectedCycleResponse> {
+        match self {
+            CycleResponse::Read {
+                stop_wake_active, ..
+            } => Ok(*stop_wake_active),
             _ => Err(UnexpectedCycleResponse {
                 expected: CycleKind::Read,
                 received: self.kind(),

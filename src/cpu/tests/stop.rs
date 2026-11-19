@@ -7,6 +7,7 @@ fn read(value: u8, pending_interrupts: u8) -> CycleResponse {
     CycleResponse::Read {
         value,
         pending_interrupts,
+        stop_wake_active: false,
     }
 }
 

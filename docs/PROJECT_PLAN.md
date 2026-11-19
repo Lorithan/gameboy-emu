@@ -1,4 +1,14 @@
 # Game Boy emulator project plan
+## Current checkpoint - STOP input sampling complete, 2026-11-18
+
+User implemented #48's pure level queries and mandatory Read wake field/accessor with System sampling. Assistant migrated test constructors and added four tests across the query and response slices, extending ordinary-read regression to both levels. Fresh full verification passes all 405 tests (304 unit, 101 integration), formatting, strict Clippy and whitespace checks, without allowances. [Evidence and limits](tasks/STOP_WAKE.md#read-sample-slice-review---2026-11-18). CPU still ignores the new sample; conditional entry and host-input wake are not implemented. Next: private StopBehavior carried by StopFinished, opcode-level sample consumption and the documented four-branch entry table; then wake delivery. #48/#44 remain open, no external ROM ran, and M2's ROM gate remains open.
+
+## Current slice review - STOP wake level queries, 2026-11-18
+
+Fresh regression passes all 404 tests (303 unit, 101 integration), formatting and whitespace checks. No external ROM ran; finish production sampling to resolve unused-query Clippy errors before the next checkpoint.
+
+User implemented the pure Joypad/Bus queries for #48. Three focused acceptance tests pass, covering every held mask/selection, IF/IE independence, memory/divider-phase preservation and instance isolation. [Evidence](tasks/STOP_WAKE.md#level-query-slice-review---2026-11-18). Strict Clippy flags the two methods until production sampling is connected; assistant added no allowances or application changes. Next user slice: mandatory wake level in CycleResponse::Read, accessor matching the existing response-kind error contract, and System sampling after reads. Assistant owns test-constructor migration. STOP entry/wake behavior is still unchanged.
+
 ## Current next task - selected-line STOP entry and wake, 2026-11-18
 
 [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under #44, is proposed in [STOP_WAKE.md](tasks/STOP_WAKE.md). Start with pure Joypad and Bus stop_wake_active queries. Subsequent slices supply a mandatory read-response level sample, select the four DMG entry branches, then deliver zero-cycle host-input wake through System to a guarded CPU transition. A selected press/release between execution calls must retain wake; IF and eligible pending interrupts remain separate signals. Review the proposal before dependent implementation. User owns application code; assistant owns tests/docs/review. Baseline remains 03aff43 and its previous 401-test verification; no emulator tests rerun for this documentation-only contract. Hardware oscillator/glitch limits stay visible under #44; #45 and M2's external-ROM gate remain open.

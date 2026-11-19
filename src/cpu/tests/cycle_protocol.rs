@@ -9,6 +9,7 @@ fn responses() -> [CycleResponse; 3] {
         CycleResponse::Read {
             value: 0xA5,
             pending_interrupts: 0,
+            stop_wake_active: false,
         },
         CycleResponse::WriteDone {
             interrupt_sample: InterruptSample {
@@ -73,6 +74,7 @@ fn response_mismatches_preserve_every_instruction_phase_and_ime() {
                         CycleAction::Read { .. } => CycleResponse::Read {
                             value: data,
                             pending_interrupts: 0,
+                            stop_wake_active: false,
                         },
                         CycleAction::Write { .. } => responses()[1],
                         CycleAction::Idle => CycleResponse::IdleDone,
@@ -172,6 +174,7 @@ fn ordinary_write_completion_ignores_interrupt_sample_values() {
         cpu.complete_cycle(CycleResponse::Read {
             value: 0x77,
             pending_interrupts: 0,
+            stop_wake_active: false,
         })
         .unwrap(); // LD (HL),A
         assert_eq!(
@@ -200,40 +203,74 @@ fn ordinary_write_completion_ignores_interrupt_sample_values() {
 }
 
 #[test]
-fn ordinary_read_cycles_ignore_all_pending_masks_without_accepting_interrupts() {
-    for pending in 0u8..=255 {
-        for ime in [
-            InterruptState::Disabled,
-            InterruptState::Delayed,
-            InterruptState::Enabled,
-        ] {
-            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
-            cpu.interrupt_state = ime;
-            // Immediate operand, indirect data, and both CB fetch stages.
-            let mut reference = cpu.clone();
-            for value in [0x3E, 0x42, 0x7E, 0xA5, 0xCB, 0x00] {
+fn stop_wake_read_accessor_preserves_both_levels_and_rejects_other_response_kinds() {
+    for value in 0u8..=255 {
+        for pending_interrupts in 0u8..=255 {
+            for stop_wake_active in [false, true] {
                 let response = CycleResponse::Read {
                     value,
-                    pending_interrupts: pending,
+                    pending_interrupts,
+                    stop_wake_active,
                 };
-                assert_eq!(response.kind(), CycleKind::Read);
-                assert_eq!(response.read_value().unwrap(), value);
-                assert_eq!(
-                    cpu.request_cycle().map(expect_execute).unwrap(),
-                    reference.request_cycle().map(expect_execute).unwrap()
-                );
-                assert_eq!(
-                    cpu.complete_cycle(response).unwrap(),
-                    reference
-                        .complete_cycle(CycleResponse::Read {
-                            value,
-                            pending_interrupts: 0
-                        })
-                        .unwrap()
-                );
-                assert_eq!(cpu.snapshot(), reference.snapshot());
-                assert_eq!(cpu.interrupt_state, reference.interrupt_state);
-                assert_eq!(format!("{:?}", cpu.state), format!("{:?}", reference.state));
+                let before = response;
+                for _ in 0..2 {
+                    assert_eq!(response.stop_wake_active(), Ok(stop_wake_active));
+                    assert_eq!(response.read_value(), Ok(value));
+                    assert_eq!(response.pending_interrupts(), Ok(pending_interrupts));
+                    assert_eq!(response.kind(), CycleKind::Read);
+                    assert_eq!(response, before);
+                }
+            }
+        }
+    }
+    for response in [responses()[1], CycleResponse::IdleDone] {
+        let before = response;
+        let error = response.stop_wake_active().unwrap_err();
+        assert_eq!(error.expected, CycleKind::Read);
+        assert_eq!(error.received, response.kind());
+        assert_eq!(response, before);
+    }
+}
+
+#[test]
+fn ordinary_read_cycles_ignore_pending_masks_and_wake_levels_without_accepting_interrupts() {
+    for pending in 0u8..=255 {
+        for stop_wake_active in [false, true] {
+            for ime in [
+                InterruptState::Disabled,
+                InterruptState::Delayed,
+                InterruptState::Enabled,
+            ] {
+                let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+                cpu.interrupt_state = ime;
+                // Immediate operand, indirect data, and both CB fetch stages.
+                let mut reference = cpu.clone();
+                for value in [0x3E, 0x42, 0x7E, 0xA5, 0xCB, 0x00] {
+                    let response = CycleResponse::Read {
+                        value,
+                        pending_interrupts: pending,
+                        stop_wake_active,
+                    };
+                    assert_eq!(response.kind(), CycleKind::Read);
+                    assert_eq!(response.read_value().unwrap(), value);
+                    assert_eq!(
+                        cpu.request_cycle().map(expect_execute).unwrap(),
+                        reference.request_cycle().map(expect_execute).unwrap()
+                    );
+                    assert_eq!(
+                        cpu.complete_cycle(response).unwrap(),
+                        reference
+                            .complete_cycle(CycleResponse::Read {
+                                value,
+                                pending_interrupts: 0,
+                                stop_wake_active: false,
+                            })
+                            .unwrap()
+                    );
+                    assert_eq!(cpu.snapshot(), reference.snapshot());
+                    assert_eq!(cpu.interrupt_state, reference.interrupt_state);
+                    assert_eq!(format!("{:?}", cpu.state), format!("{:?}", reference.state));
+                }
             }
         }
     }

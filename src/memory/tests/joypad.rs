@@ -2,6 +2,80 @@ use super::fixture;
 use crate::memory::{Bus, Button};
 
 #[test]
+fn stop_wake_bus_level_ignores_interrupt_flags_and_enables_for_every_input_mask() {
+    let (mut bus, _) = fixture();
+    let buttons = [
+        (Button::Right, 1, 0x10),
+        (Button::Left, 2, 0x10),
+        (Button::Up, 4, 0x10),
+        (Button::Down, 8, 0x10),
+        (Button::A, 16, 0x20),
+        (Button::B, 32, 0x20),
+        (Button::Select, 64, 0x20),
+        (Button::Start, 128, 0x20),
+    ];
+    for held in 0u8..=255 {
+        for (button, bit, _) in buttons {
+            bus.set_button(button, held & bit != 0);
+        }
+        for selection in [0, 0x10, 0x20, 0x30] {
+            bus.write(0xFF00, selection);
+            let expected = buttons
+                .iter()
+                .any(|(_, bit, row)| held & bit != 0 && selection & row == 0);
+            for flags in [0, 16, 31, 0xE0, 0xFF] {
+                for enable in [0, 16, 31, 0xE0, 0xFF] {
+                    bus.write(0xFF0F, flags);
+                    bus.write(0xFFFF, enable);
+                    let joyp = bus.read(0xFF00);
+                    for _ in 0..2 {
+                        assert_eq!(
+                            bus.stop_wake_active(),
+                            expected,
+                            "held {held:02X}, selection {selection:02X}, IF {flags:02X}, IE {enable:02X}"
+                        );
+                        assert_eq!(bus.read(0xFF00), joyp);
+                        assert_eq!(bus.read(0xFF0F), flags | 0xE0);
+                        assert_eq!(bus.read(0xFFFF), enable);
+                        assert_eq!(bus.pending_interrupts(), flags & enable & 31);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn stop_wake_queries_preserve_memory_hidden_divider_phase_and_instance_isolation() {
+    let (mut bus, _) = fixture();
+    let (other, _) = fixture();
+    bus.set_button(Button::A, true);
+    bus.write(0xFF0F, 0); // An active level remains active after IF is cleared.
+    bus.write(0xFFFF, 0);
+    bus.write(0xC123, 0x35);
+    bus.write(0xFF80, 0xA6);
+    for _ in 0..13 {
+        bus.advance_mcycle(); // ABC8 + 52 = ABFC, immediately before DIV changes.
+    }
+    let before: Vec<_> = (0u16..=65535).map(|addr| bus.read(addr)).collect();
+    for _ in 0..4096 {
+        assert!(bus.stop_wake_active());
+        assert!(!other.stop_wake_active());
+    }
+    for addr in 0u16..=65535 {
+        assert_eq!(bus.read(addr), before[usize::from(addr)], "{addr:04X}");
+    }
+    assert_eq!(bus.read(0xFF04), 0xAB);
+    bus.advance_mcycle();
+    assert_eq!(bus.read(0xFF04), 0xAC);
+    assert_eq!(other.read(0xFF04), 0xAB);
+    bus.set_button(Button::A, false);
+    bus.write(0xFF0F, 0x10); // A persistent interrupt flag is not an active level.
+    bus.write(0xFFFF, 0x10);
+    assert!(!bus.stop_wake_active());
+}
+
+#[test]
 fn joypad_bus_edges_request_if_independently_of_all_ie_and_if_values() {
     let (mut bus, _) = fixture();
     for flags in 0u8..=255 {
