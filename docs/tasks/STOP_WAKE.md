@@ -2,6 +2,10 @@
 
 Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries, read sampling, conditional entry and immediate host-input wake are verified for the declared deterministic scope. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
 
+## Integration issue audit - 2026-11-19
+
+#44's deterministic STOP divider/joypad integration is complete through #46/#47/#48. Source review confirms Stopped returns before System advances elapsed/device ticks, only StopEntered applies the divider reset, and System::set_button updates Bus/IF then offers the selected-line level to the guarded CPU wake. Existing entry/wake/polling/clock/interrupt traces are included in the latest 442-test verification at dcedd79. No tests rerun for this documentation-only audit. Physical DMG revision/startup/edge/glitch assessment moves to separate deferred [#64](https://github.com/Lorithan/gameboy-emu/issues/64), allowing integration parent #44 to close. Current support remains the documented coarse deterministic DMG model, with no physical revision or analog/glitch fidelity claim. Earlier statements below keeping #44 open for those limits are historical and superseded; their accuracy limitations still apply. External STOP-specific hardware validation is not claimed.
+
 ## STOP wake completion verified - 2026-11-18
 
 User implemented guarded CPU wake_from_stop_if and System delivery after Bus button/IF updates. Fresh verification passes all 414 tests (312 unit, 102 integration), including 22 focused STOP-related tests and 13 focused joypad unit tests. Formatting, strict Clippy and whitespace checks pass. Assistant added five wake tests and migrated the earlier Stopped input-purity expectation explicitly; assertions for other states and unrelated memory remain intact. No assistant application logic edits, allowances, dependencies or fixtures.

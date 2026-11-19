@@ -42,7 +42,7 @@ If SingleStepTests is adopted later, use an isolated CPU unit-test adapter: init
 - M3: programmable TIMA/TMA/TAC, input selection, overflow/reload/write interactions and generated timer interrupts. Divider and interrupt-service foundations already exist; [#53](https://github.com/Lorithan/gameboy-emu/issues/53) specifies the timer contract before user implementation.
 - M4: PPU/VRAM/OAM/DMA and their CPU access interactions. For example, the inspected [Mooneye jp_timing source](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/jp_timing.s) deliberately waits for vblank, copies to VRAM/OAM and times reads against OAM DMA completion. It is not currently runnable as a pure CPU check.
 - M5: mapper-dependent validation and MBC1 software.
-- [#44](https://github.com/Lorithan/gameboy-emu/issues/44): physical STOP startup/edge/glitch accuracy. Authentic boot execution remains deferred under the declared startup scope. Neither is silently included in M2 completion.
+- [#64](https://github.com/Lorithan/gameboy-emu/issues/64): physical STOP revision/startup/edge/glitch accuracy assessment, split from completed integration #44 during the 2026-11-19 issue audit. Authentic boot execution remains deferred under the declared startup scope. Neither is silently included in M2 completion.
 - M0/#1 remains open for staged architecture/device startup review; it does not undo the established CPU boundary or require an emulator rewrite.
 
 M2's original functional gate is met. Additional validation should be tied to specific uncertainty, a new device or an observed defect, rather than keeping the milestone open until an unspecified number of ROMs passes.
