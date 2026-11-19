@@ -414,7 +414,7 @@ impl CPU {
             ReadImmediate8 { target } => {
                 let value = response.read_value()?;
                 match target {
-                    Destination::Register(register) => self.store_immediate(register, value),
+                    Destination::Register(register) => Ok(self.store_immediate(register, value)),
                     Destination::Memory(addr) => {
                         self.registers.increment_pc();
                         let next_state = ExecutionState::WriteMemory { addr, value };
@@ -433,7 +433,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             ReadImmediate16High { destination, low } => {
-                self.store_immediate_word(destination, low, response.read_value()?)
+                Ok(self.store_immediate_word(destination, low, response.read_value()?))
             }
             ReadJumpLow { taken } => {
                 let value = response.read_value()?;
@@ -457,10 +457,10 @@ impl CPU {
                 }
             }
             ReadMemory { destination, .. } => {
-                self.store_fetched(destination, response.read_value()?)
+                Ok(self.store_fetched(destination, response.read_value()?))
             }
             ReadMemoryAndUpdateHL { addr, operation } => {
-                self.store_fetched(Register::A, response.read_value()?)?;
+                self.store_fetched(Register::A, response.read_value()?);
                 let hl = match operation {
                     UnaryOperation::Increment => addr.wrapping_add(1),
                     UnaryOperation::Decrement => addr.wrapping_sub(1),
@@ -1303,25 +1303,17 @@ impl CPU {
         }
     }
 
-    fn store_immediate(
-        &mut self,
-        register: Register,
-        value: u8,
-    ) -> Result<CycleTransition, CpuError> {
+    fn store_immediate(&mut self, register: Register, value: u8) -> CycleTransition {
         self.set_register(register, value);
 
         self.registers.increment_pc();
-        Ok(CycleTransition::InstructionFinished)
+        CycleTransition::InstructionFinished
     }
 
-    fn store_fetched(
-        &mut self,
-        destination: Register,
-        value: u8,
-    ) -> Result<CycleTransition, CpuError> {
+    fn store_fetched(&mut self, destination: Register, value: u8) -> CycleTransition {
         self.set_register(destination, value);
 
-        Ok(CycleTransition::InstructionFinished)
+        CycleTransition::InstructionFinished
     }
 
     fn set_register(&mut self, destination: Register, value: u8) {
@@ -1353,7 +1345,7 @@ impl CPU {
         destination: Register16,
         low: u8,
         value: u8,
-    ) -> Result<CycleTransition, CpuError> {
+    ) -> CycleTransition {
         let value = (value as u16) << 8 | low as u16;
 
         match destination {
@@ -1364,7 +1356,7 @@ impl CPU {
         }
 
         self.registers.increment_pc();
-        Ok(CycleTransition::InstructionFinished)
+        CycleTransition::InstructionFinished
     }
 
     fn increment(&mut self, mut value: u8) -> u8 {

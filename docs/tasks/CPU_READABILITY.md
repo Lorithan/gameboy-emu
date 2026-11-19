@@ -1,5 +1,13 @@
 # CPU structure and readability cleanup
 
+## Infallible helper checkpoint verified - 2026-11-19
+
+For #56, user changed store_immediate, store_fetched and store_immediate_word to return CycleTransition directly. Callers wrap returned transitions in Ok; response.read_value()? still validates input before mutation. Immediate reads increment PC once, ReadMemoryAndUpdateHL retains captured-address wrapping, and only the shared wrapper applies completion/state effects. That HL branch still discards store_fetched's InstructionFinished value; replacing the call with set_register remains optional readability polish, not a behavioral defect.
+
+All 441 existing tests pass (316 unit, 125 integration), explicitly including the five external fixtures whose hashes match the pinned manifests. Formatting, strict Clippy and whitespace checks pass. Existing instruction, retry/protocol, interrupt and trace oracles cover this mechanical change; no helper-mirroring tests or assistant application edits were added.
+
+Next proposed slice: move typed get/set/get16/set16 register selection onto Registers, using its existing pair accessors/setters to preserve F masking and byte order. Update CPU callers without moving PC increments or changing when values are captured. JumpCondition can query get_flag through a Registers reference, allowing f to become private again. StackRegister renaming, fetch suppression/state consolidation and ALU extraction can remain independent. User owns implementation; assistant reviews the diff and runs existing register/condition/instruction/protocol tests and the full fixture-inclusive suite before publication.
+
 ## Decoder validity checkpoint verified - 2026-11-19
 
 User completed CB From and base TryFrom in a single reviewed checkpoint for #55. All CB inputs remain valid; UnsupportedCbOpcode and its impossible runtime fault branch are removed. Base decoding returns IllegalOpcode containing the original byte for exactly D3, DB, DD, E3, E4, EB, EC, ED, F4, FC and FD. The CB prefix remains a valid base dispatch byte; legal instruction encoding coverage remains 500/500. IllegalOpcode has Display/Error as a decoder leaf. The preexisting inner CB selector unreachable arm is mathematically bounded by its three-bit mask; replacing that match with a selector table is optional follow-up work, not an executable failure found in this review.
