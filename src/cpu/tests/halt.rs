@@ -46,7 +46,12 @@ fn halt_decision_exhausts_pending_flags_ime_and_pc_wrap() {
                     ));
                     assert_eq!(cpu.snapshot(), before);
                     assert_eq!(cpu.interrupt_state, ime);
-                    assert!(!cpu.suppress_next_opcode_increment);
+                    assert!(!matches!(
+                        cpu.state,
+                        crate::cpu::ExecutionState::FetchOpcode {
+                            skip_increment: true
+                        }
+                    ));
                 }
                 assert_eq!(
                     cpu.complete_cycle(read(0x76, pending)).unwrap(),
@@ -54,7 +59,15 @@ fn halt_decision_exhausts_pending_flags_ime_and_pc_wrap() {
                 );
                 assert_eq!(cpu.snapshot(), expected);
                 let bug = ime != InterruptState::Enabled && pending & 31 != 0;
-                assert_eq!(cpu.suppress_next_opcode_increment, bug);
+                assert_eq!(
+                    matches!(
+                        cpu.state,
+                        ExecutionState::FetchOpcode {
+                            skip_increment: true
+                        }
+                    ),
+                    bug
+                );
                 assert_eq!(matches!(cpu.state, ExecutionState::Halted), !bug);
                 assert_eq!(
                     cpu.interrupt_state,
@@ -91,7 +104,12 @@ fn halt_decision_exhausts_pending_flags_ime_and_pc_wrap() {
                         ));
                         assert_eq!(cpu.snapshot(), expected);
                         assert!(matches!(cpu.state, ExecutionState::Halted));
-                        assert!(!cpu.suppress_next_opcode_increment);
+                        assert!(!matches!(
+                            cpu.state,
+                            crate::cpu::ExecutionState::FetchOpcode {
+                                skip_increment: true
+                            }
+                        ));
                     }
                     for _ in 0..2 {
                         assert_eq!(
@@ -116,7 +134,12 @@ fn wake_uses_eligible_mask_independent_of_ime_and_preserves_other_states() {
             let before = cpu.snapshot();
             cpu.wake_if_pending(pending);
             assert_eq!(
-                matches!(cpu.state, ExecutionState::FetchOpcode),
+                matches!(
+                    cpu.state,
+                    ExecutionState::FetchOpcode {
+                        skip_increment: false
+                    }
+                ),
                 pending & 31 != 0
             );
             assert_eq!(cpu.snapshot(), before);
@@ -135,6 +158,47 @@ fn wake_uses_eligible_mask_independent_of_ime_and_preserves_other_states() {
 }
 
 #[test]
+fn fetch_interrupt_arbitration_preserves_rejected_state_and_captures_rewound_pc() {
+    for pc in [0u16, 0x100, 0xFFFF] {
+        for skip_increment in [false, true] {
+            for ime in [
+                InterruptState::Disabled,
+                InterruptState::Delayed,
+                InterruptState::Enabled,
+            ] {
+                for pending in 0u8..=255 {
+                    let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
+                    cpu.registers.pc = pc;
+                    cpu.state = ExecutionState::FetchOpcode { skip_increment };
+                    cpu.interrupt_state = ime;
+                    let before = format!("{cpu:?}");
+                    let mut expected = cpu.snapshot();
+                    let accepted = ime == InterruptState::Enabled && pending & 31 != 0;
+                    assert_eq!(cpu.try_accept_interrupt(pending), accepted);
+                    if accepted {
+                        expected.pc = pc.wrapping_sub(u16::from(skip_increment));
+                        assert_eq!(cpu.snapshot(), expected);
+                        assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
+                        match cpu.state {
+                            ExecutionState::InterruptEntry { pc: saved_pc, sp } => {
+                                assert_eq!(saved_pc, expected.pc);
+                                assert_eq!(sp, expected.sp);
+                            }
+                            other => panic!("expected captured interrupt entry, got {other:?}"),
+                        }
+                        let entered = format!("{cpu:?}");
+                        assert!(!cpu.try_accept_interrupt(pending));
+                        assert_eq!(format!("{cpu:?}"), entered);
+                    } else {
+                        assert_eq!(format!("{cpu:?}"), before);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn suppression_retries_and_rejected_acceptance_do_not_consume_latch() {
     for pc in [0u16, 0x100, 0xFFFF] {
         let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
@@ -142,20 +206,40 @@ fn suppression_retries_and_rejected_acceptance_do_not_consume_latch() {
         cpu.interrupt_state = InterruptState::Delayed;
         cpu.complete_cycle(read(0x76, 4)).unwrap();
         let before = cpu.snapshot();
-        assert!(cpu.suppress_next_opcode_increment);
+        assert!(matches!(
+            cpu.state,
+            ExecutionState::FetchOpcode {
+                skip_increment: true
+            }
+        ));
         for mask in [0, 0xE0] {
             assert!(!cpu.try_accept_interrupt(mask));
             assert_eq!(cpu.snapshot(), before);
-            assert!(cpu.suppress_next_opcode_increment);
+            assert!(matches!(
+                cpu.state,
+                ExecutionState::FetchOpcode {
+                    skip_increment: true
+                }
+            ));
         }
         assert!(matches!(
             cpu.complete_cycle(CycleResponse::IdleDone),
             Err(CpuError::UnexpectedCycleResponse(_))
         ));
         assert_eq!(cpu.snapshot(), before);
-        assert!(cpu.suppress_next_opcode_increment);
+        assert!(matches!(
+            cpu.state,
+            ExecutionState::FetchOpcode {
+                skip_increment: true
+            }
+        ));
         cpu.complete_cycle(read(0x3E, 0)).unwrap();
-        assert!(!cpu.suppress_next_opcode_increment);
+        assert!(!matches!(
+            cpu.state,
+            crate::cpu::ExecutionState::FetchOpcode {
+                skip_increment: true
+            }
+        ));
         assert_eq!(cpu.snapshot().pc, before.pc);
         cpu.complete_cycle(read(0x3E, 0)).unwrap();
         assert_eq!(cpu.snapshot().af >> 8, 0x3E);
@@ -171,7 +255,12 @@ fn ei_halt_acceptance_rewinds_once_and_cancellation_cannot_leak_latch() {
         cpu.interrupt_state = InterruptState::Delayed;
         cpu.complete_cycle(read(0x76, 4)).unwrap();
         assert!(cpu.try_accept_interrupt(4));
-        assert!(!cpu.suppress_next_opcode_increment);
+        assert!(!matches!(
+            cpu.state,
+            crate::cpu::ExecutionState::FetchOpcode {
+                skip_increment: true
+            }
+        ));
         assert_eq!(cpu.snapshot().pc, pc);
         for _ in 0..2 {
             cpu.complete_cycle(CycleResponse::IdleDone).unwrap();
@@ -192,7 +281,12 @@ fn ei_halt_acceptance_rewinds_once_and_cancellation_cannot_leak_latch() {
             CycleOutcome::InterruptEntryCancelled
         );
         assert_eq!(cpu.snapshot().pc, 0);
-        assert!(!cpu.suppress_next_opcode_increment);
+        assert!(!matches!(
+            cpu.state,
+            crate::cpu::ExecutionState::FetchOpcode {
+                skip_increment: true
+            }
+        ));
         cpu.complete_cycle(read(0, 0)).unwrap();
         assert_eq!(cpu.snapshot().pc, 1);
     }

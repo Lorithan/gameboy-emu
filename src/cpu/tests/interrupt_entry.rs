@@ -36,7 +36,12 @@ fn interrupt_acceptance_masks_and_rejects_without_mutation() {
                 assert!(!cpu.try_accept_interrupt(31));
             } else {
                 assert!(!accepted);
-                assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+                assert!(matches!(
+                    cpu.state,
+                    ExecutionState::FetchOpcode {
+                        skip_increment: false
+                    }
+                ));
                 assert_eq!(cpu.interrupt_state, ime);
             }
             assert_eq!(cpu.snapshot(), before);

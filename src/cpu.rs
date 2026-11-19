@@ -56,16 +56,16 @@ pub struct CPU {
     registers: Registers,
     state: ExecutionState,
     interrupt_state: InterruptState,
-    suppress_next_opcode_increment: bool,
 }
 
 impl CPU {
     pub fn from_registers(registers: Registers) -> Self {
         CPU {
             registers,
-            state: FetchOpcode,
+            state: FetchOpcode {
+                skip_increment: false,
+            },
             interrupt_state: InterruptState::Disabled,
-            suppress_next_opcode_increment: false,
         }
     }
 
@@ -82,7 +82,7 @@ impl CPU {
 
     pub fn request_cycle(&self) -> Result<CycleRequest, CpuError> {
         match self.state {
-            FetchOpcode
+            FetchOpcode { .. }
             | DecodeCbOpcode
             | ReadAbsoluteLow
             | ReadAbsoluteHigh { .. }
@@ -198,11 +198,15 @@ impl CPU {
                 Ok(CycleOutcome::InProgress)
             }
             CycleTransition::InstructionFinished => {
-                self.state = FetchOpcode;
+                self.state = FetchOpcode {
+                    skip_increment: false,
+                };
                 Ok(CycleOutcome::InstructionComplete)
             }
             CycleTransition::InterruptEntryFinished { interrupt } => {
-                self.state = FetchOpcode;
+                self.state = FetchOpcode {
+                    skip_increment: false,
+                };
                 Ok(CycleOutcome::InterruptEntryComplete {
                     vector: interrupt.vector_address(),
                 })
@@ -217,7 +221,9 @@ impl CPU {
                 }
             }
             CycleTransition::InterruptEntryCancelled => {
-                self.state = FetchOpcode;
+                self.state = FetchOpcode {
+                    skip_increment: false,
+                };
                 Ok(CycleOutcome::InterruptEntryCancelled)
             }
             CycleTransition::HaltFinished(behavior) => {
@@ -226,8 +232,9 @@ impl CPU {
                         self.state = Halted;
                     }
                     HaltBehavior::SuppressNextIncrement => {
-                        self.state = FetchOpcode;
-                        self.suppress_next_opcode_increment = true;
+                        self.state = FetchOpcode {
+                            skip_increment: true,
+                        };
                     }
                 }
                 Ok(CycleOutcome::InstructionComplete)
@@ -246,7 +253,9 @@ impl CPU {
                     Ok(CycleOutcome::InstructionComplete)
                 }
                 StopBehavior::Continue => {
-                    self.state = FetchOpcode;
+                    self.state = FetchOpcode {
+                        skip_increment: false,
+                    };
                     Ok(CycleOutcome::InstructionComplete)
                 }
             },
@@ -269,13 +278,14 @@ impl CPU {
     }
 
     pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> bool {
-        if matches!(self.state, FetchOpcode) && self.interrupt_state == InterruptState::Enabled {
+        if let FetchOpcode { skip_increment } = self.state
+            && self.interrupt_state == InterruptState::Enabled
+        {
             let pending = pending & 0x1F; // Only the lower 5 bits are relevant
 
             if pending != 0 {
-                if self.suppress_next_opcode_increment {
+                if skip_increment {
                     self.registers.pc = self.registers.pc.wrapping_sub(1);
-                    self.suppress_next_opcode_increment = false;
                 }
 
                 self.state = InterruptEntry {
@@ -294,13 +304,17 @@ impl CPU {
         let pending = pending & 0x1F;
 
         if matches!(self.state, Halted) && pending != 0 {
-            self.state = FetchOpcode;
+            self.state = FetchOpcode {
+                skip_increment: false,
+            };
         }
     }
 
     pub(crate) fn wake_from_stop_if(&mut self, wake: bool) {
         if matches!(self.state, Stopped) && wake {
-            self.state = FetchOpcode;
+            self.state = FetchOpcode {
+                skip_increment: false,
+            };
         }
     }
 
@@ -309,10 +323,11 @@ impl CPU {
         response: CycleResponse,
     ) -> Result<CycleTransition, CpuError> {
         match self.state {
-            FetchOpcode => self.read_opcode(
+            FetchOpcode { skip_increment } => self.read_opcode(
                 response.read_value()?,
                 response.pending_interrupts()?,
                 response.stop_wake_active()?,
+                skip_increment,
             ),
             DecodeCbOpcode => {
                 let value = response.read_value()?;
@@ -869,12 +884,11 @@ impl CPU {
         response: u8,
         pending: u8,
         stop_wake_active: bool,
+        skip_increment: bool,
     ) -> Result<CycleTransition, CpuError> {
         let op_addr = self.registers.pc;
 
-        if self.suppress_next_opcode_increment {
-            self.suppress_next_opcode_increment = false;
-        } else {
+        if !skip_increment {
             self.registers.increment_pc();
         }
 

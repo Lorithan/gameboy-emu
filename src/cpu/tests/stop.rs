@@ -25,34 +25,33 @@ fn responses() -> [CycleResponse; 3] {
 }
 
 #[test]
-fn stopped_wake_preserves_registers_ime_and_fetch_latch_and_is_idempotent() {
+fn stopped_wake_preserves_registers_ime_and_is_idempotent() {
     for pc in [0, 0x100, 0xFFFF] {
         for ime in [
             InterruptState::Disabled,
             InterruptState::Delayed,
             InterruptState::Enabled,
         ] {
-            for suppressed in [false, true] {
-                let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
-                cpu.registers.pc = pc;
-                cpu.state = ExecutionState::Stopped;
-                cpu.interrupt_state = ime;
-                cpu.suppress_next_opcode_increment = suppressed;
-                let before = format!("{cpu:?}");
-                cpu.wake_from_stop_if(false);
-                assert_eq!(format!("{cpu:?}"), before);
-                let mut expected = cpu.clone();
-                expected.state = ExecutionState::FetchOpcode;
-                cpu.wake_from_stop_if(true);
+            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+            cpu.registers.pc = pc;
+            cpu.state = ExecutionState::Stopped;
+            cpu.interrupt_state = ime;
+            let before = format!("{cpu:?}");
+            cpu.wake_from_stop_if(false);
+            assert_eq!(format!("{cpu:?}"), before);
+            let mut expected = cpu.clone();
+            expected.state = ExecutionState::FetchOpcode {
+                skip_increment: false,
+            };
+            cpu.wake_from_stop_if(true);
+            assert_eq!(format!("{cpu:?}"), format!("{expected:?}"));
+            assert_eq!(
+                cpu.request_cycle().unwrap(),
+                CycleRequest::Execute(CycleAction::Read { addr: pc })
+            );
+            for wake in [true, false, true] {
+                cpu.wake_from_stop_if(wake);
                 assert_eq!(format!("{cpu:?}"), format!("{expected:?}"));
-                assert_eq!(
-                    cpu.request_cycle().unwrap(),
-                    CycleRequest::Execute(CycleAction::Read { addr: pc })
-                );
-                for wake in [true, false, true] {
-                    cpu.wake_from_stop_if(wake);
-                    assert_eq!(format!("{cpu:?}"), format!("{expected:?}"));
-                }
             }
         }
     }
@@ -94,8 +93,18 @@ fn stop_entry_preserves_registers_uses_conditional_padding_and_matures_ei() {
                         ));
                         assert_eq!(cpu.snapshot(), expected);
                         assert_eq!(cpu.interrupt_state, ime);
-                        assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
-                        assert!(!cpu.suppress_next_opcode_increment);
+                        assert!(matches!(
+                            cpu.state,
+                            ExecutionState::FetchOpcode {
+                                skip_increment: false
+                            }
+                        ));
+                        assert!(!matches!(
+                            cpu.state,
+                            crate::cpu::ExecutionState::FetchOpcode {
+                                skip_increment: true
+                            }
+                        ));
                     }
                     assert_eq!(
                         cpu.complete_cycle(read(0x10, pending)).unwrap(),
@@ -105,7 +114,12 @@ fn stop_entry_preserves_registers_uses_conditional_padding_and_matures_ei() {
                     assert_eq!(cpu.snapshot(), expected, "STOP at {pc:04X}");
                     assert!(matches!(cpu.state, ExecutionState::Stopped));
                     assert_eq!(cpu.request_cycle().unwrap(), CycleRequest::Stopped);
-                    assert!(!cpu.suppress_next_opcode_increment);
+                    assert!(!matches!(
+                        cpu.state,
+                        crate::cpu::ExecutionState::FetchOpcode {
+                            skip_increment: true
+                        }
+                    ));
                     assert_eq!(
                         cpu.interrupt_state,
                         if ime == InterruptState::Delayed {
@@ -128,31 +142,27 @@ fn stopped_queries_and_all_completions_preserve_state_and_ignore_interrupts() {
             InterruptState::Delayed,
             InterruptState::Enabled,
         ] {
-            for suppressed in [false, true] {
-                let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
-                cpu.state = ExecutionState::Stopped;
-                cpu.interrupt_state = ime;
-                cpu.suppress_next_opcode_increment = suppressed;
-                let before = cpu.snapshot();
-                for _ in 0..2 {
-                    assert_eq!(cpu.request_cycle().unwrap(), CycleRequest::Stopped);
-                    cpu.wake_if_pending(pending);
-                    assert!(!cpu.try_accept_interrupt(pending));
-                    for response in responses() {
-                        assert!(matches!(
-                            cpu.complete_cycle(response),
-                            Err(CpuError::NoCycleRequested)
-                        ));
-                        // Also cover the inner match's defensive arm directly.
-                        assert!(matches!(
-                            cpu.complete_cycle_inner(response),
-                            Err(CpuError::NoCycleRequested)
-                        ));
-                        assert_eq!(cpu.snapshot(), before);
-                        assert_eq!(cpu.interrupt_state, ime);
-                        assert_eq!(cpu.suppress_next_opcode_increment, suppressed);
-                        assert!(matches!(cpu.state, ExecutionState::Stopped));
-                    }
+            let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+            cpu.state = ExecutionState::Stopped;
+            cpu.interrupt_state = ime;
+            let before = cpu.snapshot();
+            for _ in 0..2 {
+                assert_eq!(cpu.request_cycle().unwrap(), CycleRequest::Stopped);
+                cpu.wake_if_pending(pending);
+                assert!(!cpu.try_accept_interrupt(pending));
+                for response in responses() {
+                    assert!(matches!(
+                        cpu.complete_cycle(response),
+                        Err(CpuError::NoCycleRequested)
+                    ));
+                    // Also cover the inner match's defensive arm directly.
+                    assert!(matches!(
+                        cpu.complete_cycle_inner(response),
+                        Err(CpuError::NoCycleRequested)
+                    ));
+                    assert_eq!(cpu.snapshot(), before);
+                    assert_eq!(cpu.interrupt_state, ime);
+                    assert!(matches!(cpu.state, ExecutionState::Stopped));
                 }
             }
         }
@@ -175,7 +185,9 @@ fn conditional_stop_exhausts_pending_masks_wake_ime_wrap_and_fetch_suppression()
                         regs.pc = pc;
                         let mut cpu = CPU::from_registers(regs);
                         cpu.interrupt_state = ime;
-                        cpu.suppress_next_opcode_increment = suppressed;
+                        cpu.state = crate::cpu::ExecutionState::FetchOpcode {
+                            skip_increment: suppressed,
+                        };
                         let mut expected = cpu.snapshot();
                         let debug_before = format!("{cpu:?}");
                         assert!(matches!(
@@ -210,7 +222,12 @@ fn conditional_stop_exhausts_pending_masks_wake_ime_wrap_and_fetch_suppression()
                             expected,
                             "PC {pc:04X}, pending {pending:02X}, wake {wake}, suppressed {suppressed}, IME {ime:?}"
                         );
-                        assert!(!cpu.suppress_next_opcode_increment);
+                        assert!(!matches!(
+                            cpu.state,
+                            crate::cpu::ExecutionState::FetchOpcode {
+                                skip_increment: true
+                            }
+                        ));
                         assert_eq!(
                             cpu.interrupt_state,
                             if ime == InterruptState::Delayed {
@@ -234,7 +251,12 @@ fn conditional_stop_exhausts_pending_masks_wake_ime_wrap_and_fetch_suppression()
                             );
                             assert_eq!(cpu.snapshot(), expected);
                         } else {
-                            assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+                            assert!(matches!(
+                                cpu.state,
+                                ExecutionState::FetchOpcode {
+                                    skip_increment: false
+                                }
+                            ));
                             assert_eq!(
                                 cpu.request_cycle().unwrap(),
                                 CycleRequest::Execute(CycleAction::Read { addr: expected.pc })

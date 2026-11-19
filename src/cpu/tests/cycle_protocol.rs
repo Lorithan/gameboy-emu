@@ -20,7 +20,9 @@ fn illegal_fetches_preserve_fetch_effects_fault_addresses_and_sticky_errors() {
                     regs.pc = pc;
                     let mut cpu = CPU::from_registers(regs);
                     cpu.interrupt_state = ime;
-                    cpu.suppress_next_opcode_increment = suppressed;
+                    cpu.state = crate::cpu::ExecutionState::FetchOpcode {
+                        skip_increment: suppressed,
+                    };
                     let before = format!("{cpu:?}");
                     assert!(matches!(
                         cpu.complete_cycle(CycleResponse::IdleDone),
@@ -49,7 +51,12 @@ fn illegal_fetches_preserve_fetch_effects_fault_addresses_and_sticky_errors() {
                         "illegal byte {byte:02X} at {pc:04X}, suppressed {suppressed}"
                     );
                     assert!(
-                        !cpu.suppress_next_opcode_increment,
+                        !matches!(
+                            cpu.state,
+                            crate::cpu::ExecutionState::FetchOpcode {
+                                skip_increment: true
+                            }
+                        ),
                         "illegal fetch must consume suppression"
                     );
                     assert_eq!(

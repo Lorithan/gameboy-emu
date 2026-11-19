@@ -20,7 +20,9 @@ pub(super) enum ReturnKind {
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum ExecutionState {
-    FetchOpcode,
+    FetchOpcode {
+        skip_increment: bool,
+    },
     ReadDisplacement {
         taken: bool,
     },

@@ -152,7 +152,12 @@ fn immediate_completion_stores_a_advances_pc_and_returns_to_opcode_fetch() {
             .expect("LD operand read")
         );
         assert_eq!(cpu.snapshot(), expected, "immediate {value:#04X}");
-        assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+        assert!(matches!(
+            cpu.state,
+            ExecutionState::FetchOpcode {
+                skip_increment: false
+            }
+        ));
         assert!(matches!(
             cpu.request_cycle().map(expect_execute),
             Ok(CycleAction::Read { addr: 0x0102 })
@@ -175,7 +180,12 @@ fn operand_completion_returns_to_opcode_fetch_even_when_pc_is_checked_separately
     ))
     .map(instruction_complete)
     .expect("LD operand read");
-    assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+    assert!(matches!(
+        cpu.state,
+        ExecutionState::FetchOpcode {
+            skip_increment: false
+        }
+    ));
 }
 
 #[test]
@@ -267,7 +277,9 @@ fn immediate_completion_wraps_pc() {
 #[test]
 fn missing_read_value_returns_an_error_without_mutating_cpu() {
     for state in [
-        ExecutionState::FetchOpcode,
+        ExecutionState::FetchOpcode {
+            skip_increment: false,
+        },
         ExecutionState::ReadImmediate8 {
             target: Destination::Register(Register::A),
         },
@@ -441,7 +453,12 @@ fn word_operand_states_load_every_value_without_partial_register_updates() {
                 Register16::SP => expected.sp = value,
             }
             assert_eq!(cpu.snapshot(), expected);
-            assert!(matches!(cpu.state, ExecutionState::FetchOpcode));
+            assert!(matches!(
+                cpu.state,
+                ExecutionState::FetchOpcode {
+                    skip_increment: false
+                }
+            ));
         }
     }
 }

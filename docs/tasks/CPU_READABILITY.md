@@ -1,5 +1,13 @@
 # CPU structure and readability cleanup
 
+## Fetch-state suppression checkpoint verified - 2026-11-19
+
+User completed #58 by replacing the CPU latch with FetchOpcode { skip_increment }. Ordinary construction/completion/wake uses false; HALT suppression uses true. Request matching ignores the payload, while validated completion passes it to read_opcode. The original opcode address is still captured before increment/suppression and decode handling; returned transitions consume the fetch state through the wrapper, with repeated HALT allowed to rearm. Interrupt acceptance reads the same payload and preserves the wrapping return-PC rewind before capturing entry PC/SP. Rejected arbitration and wrong-kind responses preserve state.
+
+Assistant migrated the five affected test files to typed fetch setup/assertions while preserving independent PC/register/bus/fault/cycle expectations. STOP tests no longer manufacture a suppression flag alongside Stopped, a combination the new type cannot represent; stopped wake still checks ordinary fetch, register/IME preservation and idempotence. A new arbitration matrix checks all 256 pending bytes, three IME modes, both skip values and PC wrap boundaries: rejected calls preserve the whole CPU; accepted calls capture the correct PC/SP and cannot rewind a second time. Existing HALT, STOP, CB/immediate, EI;HALT/cancellation, fault and retry tests remain intact.
+
+All 442 tests pass (317 unit, 125 integration), explicitly including five external fixtures whose hashes match pinned manifests. Formatting, strict Clippy and whitespace checks pass. No assistant production edits, dependencies or public API changes. Next: review typed continuations for shared immediate-word read states before user implementation, preserving each operand's capture timing and taken/untaken cycles. #54 ALU extraction remains a separate queued option; no larger state consolidation is implemented here.
+
 ## 16-bit register ownership checkpoint verified - 2026-11-19
 
 User completed #57 with Registers::get16/set16 for BC/DE/HL/SP, delegating to existing pair methods and SP storage. The four CPU matches in Unary16 decode/completion, AddHL decode and store_immediate_word were replaced without moving captured operands, arithmetic, flags, PC increments or completion transitions. All 441 unchanged tests pass (316 unit, 125 integration), explicitly including five external fixtures with pinned hashes rechecked. Formatting, strict Clippy and whitespace checks pass. No additional tests or assistant application edits were needed for this mechanical mapping move.
