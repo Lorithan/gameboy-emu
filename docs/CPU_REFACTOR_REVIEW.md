@@ -1,5 +1,7 @@
 # Review of external CPU refactoring suggestions
 
+Current readability proposal, 2026-11-18: user chose CPU cleanup after completed M2. [#54 and CPU_READABILITY.md](tasks/CPU_READABILITY.md) specify a mechanical arithmetic-helper extraction first, then separately reviewed dispatch/completion boundaries. The transition refactor, typed responses, fault visibility and interrupt work discussed below are already implemented. Older next-task suggestions are historical and must be checked against current source before being treated as work. No application code or tests changed for this review.
+
 ## Selected transition refactor - 2026-11-17
 
 The user approved and implemented the previously deferred transition-return design as the first slice of #39. ExecutionState and private CycleTransition now live in cpu/state.rs. Continue carries the next state; instruction/entry finish centrally restore FetchOpcode; Faulted latches a sticky fault before reporting an error. The public wrapper alone assigns execution state and promotes delayed IME only on instruction completion. Public CycleOutcome distinguishes progress, instruction completion and interrupt-entry completion. The trace/error design separates CycleRecord from successful CycleTrace. See [the updated contract](tasks/INTERRUPT_ENTRY.md).
