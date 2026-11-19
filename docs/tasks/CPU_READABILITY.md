@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Private dispatch checkpoint verified - 2026-11-19
+
+User completed #60 by moving read_opcode into private cpu/dispatch.rs as another impl CPU with pub(super). Its parent caller and signature are unchanged. Full method comparison found only visibility, ExecutionState/Flag qualification, whitespace and an equivalent expression-to-block change for the CB-prefix arm. Fetch PC/suppression effects, original fault address, illegal-byte transition, condition/operand capture, inline DAA, signed-SP setup and initial instruction transitions retain their behavior. ALU helpers remain accessible within CPU privacy. complete_cycle, complete_cycle_inner and finish_imm16 remain in cpu.rs.
+
+All 442 unchanged tests pass (317 unit, 125 integration), explicitly including five external fixtures with hashes rechecked against pinned manifests. Formatting, strict Clippy and whitespace checks pass. No assistant application edits, test migration/new tests, dependencies or public API changes. Next proposed design review is the execution-module boundary: pending-cycle completion and its storage/word-finish helpers can move together while public response validation, state/fault application and delayed-EI policy remain in CPU's wrapper. Necessary sibling-call visibility must be checked before implementation. Stack push consolidation remains a separate proposal.
+
 ## Private ALU extraction checkpoint verified - 2026-11-19
 
 User completed #54: private mod alu declares another impl CPU in cpu/alu.rs containing increment, decrement, add, sub, execute_accumulator, rotate, shift and execute_cb_transform. The five parent-called methods use pub(super); add/sub/shift remain private. CPU still owns all state, and call sites are unchanged. The user-approved shift cleanup replaces shl/shr calls with equivalent << and >> operators and removes their trait imports. Imports use current CPU-local names and registers::Flag. Body-by-body comparison found only visibility, Flag qualification and equivalent shift syntax changes, allowing method order/whitespace. Inline DAA, signed-SP arithmetic, dispatch, immediate-word completion and cycle handling remain in cpu.rs.
