@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest executable verification: tick/reload/write-phase #66, 2026-11-19, **456 passes** (331 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Nine tests added since register foundation #65 cover exhaustive divider/TAC input, ordinary periods, delayed one-shot reload/IF, all-byte phase writes, cancellation/old-IF preservation and CPU reload-cycle writes. Earlier register/Bus/LDH oracles remain intact. DIV/TAC write-edge, STOP pending-reload and external timer calibration work remains; no new timer ROM result is claimed.
+Latest executable verification: DIV/TAC write-edge #67, 2026-11-19, **461 passes** (336 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Five new tests cover all divider/control phases, TAC transitions/aliases, phase gating, write-created delayed overflow and CPU write/IF traces. One existing full-address-space oracle explicitly accounts for the intentional disable edge; unrelated memory/instance assertions remain intact. All 23 timer-focused tests pass. Earlier waveform/reload/write-window tests remain. STOP pending-phase and external timer calibration work remains; no new timer ROM result is claimed.
 
 ## Commands
 

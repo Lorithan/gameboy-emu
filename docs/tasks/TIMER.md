@@ -1,6 +1,6 @@
 # M3 programmable timer design brief
 
-Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Register foundation #65 and tick/reload/write-phase slice #66 are implemented and verified for the current coarse schedule. DIV/TAC write edges, STOP interactions and external timer validation remain incomplete. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define the existing boundaries.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Register foundation #65, tick/reload/write-phase #66 and DIV/TAC write edges #67 are implemented and verified for the current coarse schedule. STOP pending-phase interactions and external timer calibration remain incomplete. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define the existing boundaries.
 
 ## First implementation slice: register storage and mapping
 
@@ -31,22 +31,22 @@ Reloading is a coarse scheduling marker visible to a bus write after the reload 
 
 Cancellation does not clear already-set IF. Writing FF/00 directly is not an overflow trigger. Nine assistant tests added since #65 cover the exhaustive input waveform, ordinary periods, four-tick/wrapping/one-shot reload, Bus IF, all-byte delay/window writes, prior-IF preservation and CPU writes at the actual reload bus boundary. Timer literal setups now initialize Counting. All 456 tests pass (331 unit, 125 integration), including five hash-verified existing fixtures; formatting, strict Clippy and whitespace pass. No assistant application edits or new external timer fixture/result. DIV/TAC write-induced edges and STOP behavior with a pending reload remain next design work.
 
-## Next implementation slice: DIV and TAC write edges
+## DIV and TAC write-edge contract
 
-[#67](https://github.com/Lorithan/gameboy-emu/issues/67), specified for user implementation. Extract the existing Counting-phase increment/overflow operation into a private helper (suggested name increment_tima) reused by tick and write edges. It advances no time: ordinary increments retain Counting; FF becomes00 with four subsequent ticks pending. No write emits an immediate interrupt; tick remains the only reload-event producer.
+[#67](https://github.com/Lorithan/gameboy-emu/issues/67), complete for this declared slice. User extracted increment_tima, guarded by Counting, and reused it for tick and write edges. It advances no time: ordinary increments retain Counting; FF becomes00 with four subsequent ticks pending. No write emits an immediate interrupt; tick remains the only reload-event producer.
 
 Both writes sample timer_input before and after their state change and offer the shared increment only for old=true/new=false. DIV clears the entire counter and ignores its byte; TAC stores value AND07 without resetting/advancing the counter. No other transition increments. This covers high-selected-bit DIV reset, disabling a high input on DMG and selecting a low bit from a high one. Same effective TAC values/upper-bit aliases produce no pulse.
 
 The shared increment accepts only Counting, preserving the existing coarse phase gating. Overflowing/Reloading writes still reset counter or update TAC but do not increment TIMA or cancel/restart/shorten their pending phase. A write-created overflow waits four future ticks, including after disabling TAC. This is the current model contract to be calibrated against pinned timer ROMs, not arbitrary subcycle accuracy. Keep on_stop_entered separate and unchanged; do not silently route it through write_div while STOP reset-edge/pending-phase behavior is unresolved.
 
-Assistant acceptance will cover divider phases/selectors/enables, DIV data independence, old/new TAC combinations/upper aliases/idempotence, counter preservation, normal and FF edges, delayed IF and pending/reload gating with Bus/CPU traces. Preserve existing independent memory/register/flag/budget oracles; explicitly migrate intentional edge effects only. Verify full suite and five existing hash-checked fixtures, formatting/strict Clippy/whitespace before publication. No application changes or new test/ROM run for this specification.
+Five new assistant tests cover all divider phases/control settings, all selected-bit combinations/old TAC settings/written bytes, aliases/idempotence, Counting-only gating, write-created FF overflow with four future ticks, and CPU DIV/disable writes with delayed IF/trace preservation. The initial guard omission was caught by pending-phase acceptance and fixed by the user. An existing full-address-space oracle now explicitly accounts for its fixed TAC07-to00 sequence overflowing FF TIMA; all unrelated memory/instance checks remain. All 23 timer-focused tests and the full 461 tests pass (336 unit, 125 integration), including five hash-verified existing fixtures; formatting, strict Clippy and whitespace pass. No assistant application edits, dependencies or new external timer result.
 
 Primary write-effect source: [Pan Docs timer circuitry](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_Obscure_Behaviour.md). Pinned [div_write.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/div_write.s) and [rapid_toggle.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/rapid_toggle.s) are future hardware-validation candidates, not executed results.
 
 ## Decisions before dependent code
 
 1. **Registers/startup:** specified and implemented above. Extend these methods with reviewed edge/reload behavior in later slices.
-2. **Write-induced edges:** #67 above is ready to implement; subsequent hardware timer audit/calibration remains required.
+2. **Write-induced edges:** #67 above is locally verified; hardware timer audit/calibration remains required.
 3. **Reload calibration:** ordinary tick/delay/write-window rules are implemented above; audit and execute pinned hardware timer tests against the current access phase before claiming conformance.
 4. **STOP interactions:** settle reset-edge/pending-reload/pause/resume behavior without guessing that STOP reset and DIV write are identical or duplicating stopped state.
 5. **Effects/order:** Timer-to-Bus event delivery and normal CPU arbitration are implemented; preserve the declared ordering or explicitly revise it if evidence requires.
@@ -55,7 +55,7 @@ Primary write-effect source: [Pan Docs timer circuitry](https://raw.githubuserco
 ## Proposed checkpoints
 
 1. Register storage/mapping #65 and ordinary tick/reload/write-phase #66 are complete for their scope.
-2. Specify and implement DIV/TAC write edges and STOP interactions.
+2. DIV/TAC write edges #67 are complete; next settle STOP reset-edge/pending-phase/pause/resume scope before implementation.
 3. Audit/run pinned timer ROMs, investigate phase mismatches and preserve System regressions.
 
 Finalize interfaces/invariants before each slice. An overflow placeholder must not be presented as timer correctness. [M3 gate](../PROJECT_PLAN.md#milestones) requires timing/interrupt tests and relevant real ROM evidence, not just compilation.

@@ -90,7 +90,7 @@ fn timer_bus_writes_exhaust_bytes_and_preserve_irq_storage_and_divider_phase() {
 }
 
 #[test]
-fn timer_bus_writes_and_reads_preserve_the_rest_of_the_full_address_space() {
+fn timer_bus_full_address_space_preserves_storage_and_accounts_for_control_write_edges() {
     let (mut bus, _) = fixture();
     let (other, _) = fixture();
     let mut expected: Vec<u8> = (0u16..=u16::MAX).map(|addr| bus.read(addr)).collect();
@@ -103,6 +103,12 @@ fn timer_bus_writes_and_reads_preserve_the_rest_of_the_full_address_space() {
             } else {
                 value
             };
+            if target == 0xFF07 && value == 0xF8 {
+                // In this fixed sequence, TAC 07 -> 00 disables the high
+                // selected input at startup counter ABC8. TIMA was FF, so
+                // the write overflows it to 00. No ticks elapse to reload it.
+                expected[0xFF05] = 0;
+            }
             for addr in 0u16..=u16::MAX {
                 assert_eq!(
                     bus.read(addr),

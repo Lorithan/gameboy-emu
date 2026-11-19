@@ -39,11 +39,7 @@ impl Timer {
         match self.phase {
             TimerPhase::Counting => {
                 if old_input && !new_input {
-                    let (new_tima, wrapped) = self.tima.overflowing_add(1);
-                    self.tima = new_tima;
-                    if wrapped {
-                        self.phase = TimerPhase::Overflowing { ticks_left: 4 };
-                    }
+                    self.increment_tima();
                 }
 
                 TimerEvent::None
@@ -72,7 +68,13 @@ impl Timer {
     }
 
     pub(super) fn write_div(&mut self, _value: u8) {
+        let old_input = self.timer_input();
         self.counter = 0;
+        let new_input = self.timer_input();
+
+        if old_input && !new_input {
+            self.increment_tima();
+        }
     }
 
     pub(super) fn read_tima(&self) -> u8 {
@@ -106,7 +108,13 @@ impl Timer {
     }
 
     pub(super) fn write_tac(&mut self, value: u8) {
+        let old_input = self.timer_input();
         self.tac = value & 0x07;
+        let new_input = self.timer_input();
+
+        if old_input && !new_input {
+            self.increment_tima();
+        }
     }
 
     pub(super) fn on_stop_entered(&mut self) {
@@ -129,6 +137,16 @@ impl Timer {
         let mask = 1 << bit_index;
 
         self.counter & mask != 0
+    }
+
+    fn increment_tima(&mut self) {
+        if self.phase == TimerPhase::Counting {
+            let (new_tima, wrapped) = self.tima.overflowing_add(1);
+            self.tima = new_tima;
+            if wrapped {
+                self.phase = TimerPhase::Overflowing { ticks_left: 4 };
+            }
+        }
     }
 }
 

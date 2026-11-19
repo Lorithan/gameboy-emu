@@ -4,9 +4,9 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register foundation #65 and tick-driven TIMA/reload/write-phase slice #66 are implemented for the declared coarse schedule. Latest executable verification, 2026-11-19: **456 passing tests** (331 unit, 125 integration), including five hash-verified existing external fixtures; formatting and strict Clippy pass. DIV/TAC write edges, pending STOP interactions and external timer conformance remain incomplete. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
+M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register #65, tick/reload/write-phase #66 and DIV/TAC write-edge #67 slices are locally verified for the declared coarse schedule. Latest executable verification, 2026-11-19: **461 passing tests** (336 unit, 125 integration), including five hash-verified existing external fixtures; formatting and strict Clippy pass. STOP pending-phase interactions and external timer conformance remain incomplete. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
 
-**Next user slice: [#67, DIV/TAC write-induced falling edges](https://github.com/Lorithan/gameboy-emu/issues/67).** [Contract](tasks/TIMER.md#next-implementation-slice-div-and-tac-write-edges) reuses the Counting-phase increment/overflow path for old/new input transitions, preserving pending/reload gating and delayed IF. STOP remains separate and unchanged until its reset/pending-phase contract is settled. Hardware timer ROM audits/runs and calibration remain required under #53. No application changes or new test execution for this design step.
+**Next: settle STOP reset-edge/pending-phase/pause/resume scope under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53).** [DIV/TAC write-edge #67](tasks/TIMER.md#div-and-tac-write-edge-contract) preserves Counting-only increments, existing overflow/reload state and delayed IF. STOP remains separate and unchanged until its contract is settled. Pinned hardware timer ROM audits/runs and phase calibration remain required; #53 stays open.
 
 Separate nonblocking follow-ups:
 

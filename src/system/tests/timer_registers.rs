@@ -6,6 +6,49 @@ use crate::{
 };
 
 #[test]
+fn cpu_div_and_disable_writes_overflow_without_immediate_if_then_reload_next_cycle() {
+    for offset in [4u8, 7] {
+        let mut rom = vec![0; 32768];
+        rom[0x14D] = 0xE7;
+        rom[0x100..0x103].copy_from_slice(&[0xE0, offset, 0]);
+        let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+        system.memory.write(0xFF05, 255);
+        system.memory.write(0xFF06, 0x42);
+        system.memory.write(0xFF07, 4); // selected slow bit is high at ABC8
+        let initial = system.cpu_snapshot();
+        for _ in 0..2 {
+            let _ = expect_cycle(system.step_machine_cycle().unwrap());
+        }
+        assert_eq!(system.memory.read(0xFF05), 255);
+        let write = expect_cycle(system.step_machine_cycle().unwrap());
+        assert_eq!(
+            write.record.action,
+            CycleAction::Write {
+                addr: 0xFF00 + u16::from(offset),
+                value: 1
+            }
+        );
+        assert_eq!(write.record.tick_after, 12);
+        assert_eq!(write.outcome, CycleOutcome::InstructionComplete);
+        assert_eq!(
+            (system.memory.read(0xFF05), system.memory.read(0xFF0F)),
+            (0, 0xE1)
+        );
+        let next = expect_cycle(system.step_machine_cycle().unwrap());
+        assert_eq!(next.record.action, CycleAction::Read { addr: 0x102 });
+        assert_eq!(next.record.tick_after, 16);
+        assert_eq!(next.outcome, CycleOutcome::InstructionComplete);
+        assert_eq!(
+            (system.memory.read(0xFF05), system.memory.read(0xFF0F)),
+            (0x42, 0xE5)
+        );
+        let mut expected = initial;
+        expected.pc = 0x103;
+        assert_eq!(system.cpu_snapshot(), expected);
+    }
+}
+
+#[test]
 fn reload_cycle_cpu_write_ignores_tima_but_updates_tma_and_tima_together() {
     for offset in [5u8, 6] {
         let mut rom = vec![0; 32768];

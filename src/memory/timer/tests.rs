@@ -1,6 +1,151 @@
 use super::{Timer, TimerEvent, TimerPhase};
 
 #[test]
+fn div_write_edges_exhaust_counter_phases_and_control_settings() {
+    for counter in 0u16..=u16::MAX {
+        for (selection, half_period) in [512u32, 8, 32, 128].into_iter().enumerate() {
+            for enabled in [false, true] {
+                let tac = selection as u8 + if enabled { 4 } else { 0 };
+                let mut timer = Timer {
+                    counter,
+                    tima: 0x42,
+                    tma: 0xA5,
+                    tac,
+                    phase: TimerPhase::Counting,
+                };
+                let falling = enabled && (u32::from(counter) / half_period) % 2 == 1;
+                timer.write_div(counter as u8);
+                assert_eq!(timer.counter, 0);
+                assert_eq!(timer.read_tima(), 0x42 + u8::from(falling));
+                assert_eq!(
+                    (timer.read_tma(), timer.tac, timer.phase),
+                    (0xA5, tac, TimerPhase::Counting)
+                );
+                let reset = timer;
+                timer.write_div(!(counter as u8));
+                assert_eq!(
+                    timer, reset,
+                    "resetting zero again cannot create another pulse"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn tac_write_edges_exhaust_selected_bit_combinations_old_controls_and_written_bytes() {
+    let half_periods = [512u32, 8, 32, 128];
+    for combination in 0..16 {
+        let counter = half_periods
+            .iter()
+            .enumerate()
+            .fold(0x1001u16, |counter, (index, half)| {
+                counter
+                    + if combination & (1 << index) != 0 {
+                        *half as u16
+                    } else {
+                        0
+                    }
+            });
+        for old_control in 0u8..8 {
+            for value in 0u8..=255 {
+                let old_high = old_control >= 4
+                    && (u32::from(counter) / half_periods[usize::from(old_control % 4)]) % 2 == 1;
+                let new_control = value % 8;
+                let new_high = new_control >= 4
+                    && (u32::from(counter) / half_periods[usize::from(new_control % 4)]) % 2 == 1;
+                let mut timer = Timer {
+                    counter,
+                    tima: 0x42,
+                    tma: 0xA5,
+                    tac: old_control,
+                    phase: TimerPhase::Counting,
+                };
+                timer.write_tac(value);
+                assert_eq!(
+                    timer.read_tima(),
+                    0x42 + u8::from(old_high && !new_high),
+                    "counter {counter:04X}, old {old_control:02X}, write {value:02X}"
+                );
+                assert_eq!(
+                    (timer.counter, timer.tac, timer.read_tma(), timer.phase),
+                    (counter, new_control, 0xA5, TimerPhase::Counting)
+                );
+                let after = timer;
+                timer.write_tac(value ^ 0xF8);
+                assert_eq!(
+                    timer, after,
+                    "same effective control with different upper bits must be idempotent"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn write_edges_preserve_pending_and_reloading_phases_without_touching_tima() {
+    for phase in [
+        TimerPhase::Overflowing { ticks_left: 1 },
+        TimerPhase::Overflowing { ticks_left: 2 },
+        TimerPhase::Overflowing { ticks_left: 3 },
+        TimerPhase::Overflowing { ticks_left: 4 },
+        TimerPhase::Reloading,
+    ] {
+        for tima in [0, 0x42, 0xFF] {
+            for operation in 0..6 {
+                let mut timer = Timer {
+                    counter: 8,
+                    tima,
+                    tma: 0xA5,
+                    tac: 5,
+                    phase,
+                };
+                let mut expected = timer;
+                if operation < 2 {
+                    timer.write_div(if operation == 0 { 0 } else { 255 });
+                    expected.counter = 0;
+                } else {
+                    let value = [0, 4, 0xF8, 0xFC][operation - 2];
+                    timer.write_tac(value);
+                    expected.tac = value % 8;
+                }
+                assert_eq!(
+                    timer, expected,
+                    "phase {phase:?}, TIMA {tima:02X}, operation {operation}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn write_created_overflow_waits_four_real_ticks_even_after_disabling() {
+    for via_div in [false, true] {
+        let mut timer = Timer {
+            counter: 8,
+            tima: 255,
+            tma: 0x42,
+            tac: 5,
+            phase: TimerPhase::Counting,
+        };
+        if via_div {
+            timer.write_div(0xA5);
+        } else {
+            timer.write_tac(0);
+        }
+        assert_eq!(timer.read_tima(), 0);
+        assert_eq!(timer.phase, TimerPhase::Overflowing { ticks_left: 4 });
+        for _ in 0..3 {
+            assert_eq!(timer.tick(), TimerEvent::None);
+            assert_eq!(timer.read_tima(), 0);
+        }
+        assert_eq!(timer.tick(), TimerEvent::InterruptRequested);
+        assert_eq!(timer.read_tima(), 0x42);
+        assert_eq!(timer.tick(), TimerEvent::None);
+    }
+}
+
+#[test]
 fn tima_writes_cancel_at_every_delay_tick_without_scheduling_another_reload() {
     for elapsed in 0..4 {
         for value in 0u8..=255 {
