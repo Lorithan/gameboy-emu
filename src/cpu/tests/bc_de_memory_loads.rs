@@ -30,7 +30,7 @@ fn machine(pair: IndirectPair, addr: u16, a: u8, flags: u8, pc: u16) -> CPU {
 fn indirect_pair_mappings_are_explicit() {
     for (opcode, pair, store) in CASES {
         assert_eq!(
-            DecodedOpcode::from(opcode),
+            DecodedOpcode::try_from(opcode).unwrap(),
             if store {
                 DecodedOpcode::StoreAToIndirect { destination: pair }
             } else {

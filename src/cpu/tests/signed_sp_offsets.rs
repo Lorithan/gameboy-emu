@@ -43,9 +43,12 @@ fn finish(cpu: &mut CPU, opcode: u8, raw: u8, cycles: usize) {
 }
 #[test]
 fn signed_sp_opcode_mappings_are_explicit() {
-    assert_eq!(DecodedOpcode::from(0xF8), DecodedOpcode::LoadHlFromSpOffset);
     assert_eq!(
-        DecodedOpcode::from(0xE8),
+        DecodedOpcode::try_from(0xF8).unwrap(),
+        DecodedOpcode::LoadHlFromSpOffset
+    );
+    assert_eq!(
+        DecodedOpcode::try_from(0xE8).unwrap(),
         DecodedOpcode::AddSignedOffsetToSp
     );
 }

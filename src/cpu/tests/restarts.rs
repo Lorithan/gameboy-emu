@@ -18,7 +18,7 @@ const RESTARTS: [(u8, u16); 8] = [
 #[test]
 fn restart_opcodes_decode_to_independent_vector_table() {
     for (byte, expected) in RESTARTS {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::Restart { target } => assert_eq!(target, expected),
             _ => panic!("incorrect RST mapping {byte:02X}"),
         }

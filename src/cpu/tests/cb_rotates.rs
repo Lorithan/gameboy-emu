@@ -311,7 +311,7 @@ fn cb_decoder_accepts_all_bytes_and_maps_bit_families_and_targets() {
         Target::Register(Register::A),
     ];
     for byte in 0u8..=255 {
-        let decoded = DecodedCbOpcode::try_from(byte).unwrap();
+        let decoded = DecodedCbOpcode::from(byte);
         assert_eq!(decoded.target, targets[usize::from(byte % 8)]);
         let bit = (byte % 64) / 8;
         match byte {

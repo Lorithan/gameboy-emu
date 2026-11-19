@@ -14,7 +14,7 @@ fn read(value: u8, pending: u8) -> CycleResponse {
 
 #[test]
 fn halt_decision_exhausts_pending_flags_ime_and_pc_wrap() {
-    assert_eq!(DecodedOpcode::from(0x76), DecodedOpcode::Halt);
+    assert_eq!(DecodedOpcode::try_from(0x76).unwrap(), DecodedOpcode::Halt);
     for pending in 0u8..=255 {
         for flags in 0..16 {
             for ime in [

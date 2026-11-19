@@ -15,7 +15,10 @@ fn machine(sp: u16, flags: u8, pc: u16) -> CPU {
 }
 #[test]
 fn store_sp_absolute_mapping_is_explicit() {
-    assert_eq!(DecodedOpcode::from(0x08), DecodedOpcode::StoreStackPointer);
+    assert_eq!(
+        DecodedOpcode::try_from(0x08).unwrap(),
+        DecodedOpcode::StoreStackPointer
+    );
 }
 fn check(sp: u16, target: u16) {
     let mut cpu = machine(sp, ((sp % 16) * 16) as u8, 0x0100);

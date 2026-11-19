@@ -8,12 +8,15 @@ use crate::cpu::opcode::DecodedOpcode;
 #[test]
 fn complement_carry_opcode_mappings_are_independent() {
     assert!(matches!(
-        DecodedOpcode::from(0x2F),
+        DecodedOpcode::try_from(0x2F).unwrap(),
         DecodedOpcode::ComplementAccumulator
     ));
-    assert!(matches!(DecodedOpcode::from(0x37), DecodedOpcode::SetCarry));
     assert!(matches!(
-        DecodedOpcode::from(0x3F),
+        DecodedOpcode::try_from(0x37).unwrap(),
+        DecodedOpcode::SetCarry
+    ));
+    assert!(matches!(
+        DecodedOpcode::try_from(0x3F).unwrap(),
         DecodedOpcode::ComplementCarry
     ));
 }

@@ -96,22 +96,22 @@ fn carry_arithmetic_decodes_each_register_memory_and_immediate_source() {
         match source {
             Source::Register(register) => {
                 assert!(
-                    matches!(DecodedOpcode::from(adc), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
+                    matches!(DecodedOpcode::try_from(adc).unwrap(), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
                 );
                 assert!(
-                    matches!(DecodedOpcode::from(sbc), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
+                    matches!(DecodedOpcode::try_from(sbc).unwrap(), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: true }, operand: Operand::Target(Target::Register(actual)) } if actual == register)
                 );
             }
             Source::Memory => {
                 assert!(matches!(
-                    DecodedOpcode::from(adc),
+                    DecodedOpcode::try_from(adc).unwrap(),
                     DecodedOpcode::Arithmetic {
                         kind: ArithmeticKind::Add { carry: true },
                         operand: Operand::Target(Target::IndirectHL)
                     }
                 ));
                 assert!(matches!(
-                    DecodedOpcode::from(sbc),
+                    DecodedOpcode::try_from(sbc).unwrap(),
                     DecodedOpcode::Arithmetic {
                         kind: ArithmeticKind::Sub { carry: true },
                         operand: Operand::Target(Target::IndirectHL)
@@ -120,14 +120,14 @@ fn carry_arithmetic_decodes_each_register_memory_and_immediate_source() {
             }
             Source::Immediate => {
                 assert!(matches!(
-                    DecodedOpcode::from(adc),
+                    DecodedOpcode::try_from(adc).unwrap(),
                     DecodedOpcode::Arithmetic {
                         kind: ArithmeticKind::Add { carry: true },
                         operand: Operand::Immediate
                     }
                 ));
                 assert!(matches!(
-                    DecodedOpcode::from(sbc),
+                    DecodedOpcode::try_from(sbc).unwrap(),
                     DecodedOpcode::Arithmetic {
                         kind: ArithmeticKind::Sub { carry: true },
                         operand: Operand::Immediate

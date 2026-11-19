@@ -88,3 +88,14 @@ impl Display for UnexpectedCycleResponse {
 }
 
 impl Error for UnexpectedCycleResponse {}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct IllegalOpcode(pub u8);
+
+impl Display for IllegalOpcode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "illegal opcode: 0x{:02X}", self.0)
+    }
+}
+
+impl Error for IllegalOpcode {}

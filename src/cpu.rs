@@ -15,6 +15,7 @@ pub use registers::Registers;
 
 use crate::{
     cpu::{
+        error::IllegalOpcode,
         opcode::*,
         registers::*,
         state::{
@@ -317,16 +318,7 @@ impl CPU {
                 let value = response.read_value()?;
                 self.registers.increment_pc();
 
-                let (target, cb_type) = match DecodedCbOpcode::try_from(value) {
-                    Ok(DecodedCbOpcode { target, cb_type }) => (target, cb_type),
-                    Err(_) => {
-                        let fault = CpuFault {
-                            opcode: OpcodeEncoding::Cb(value),
-                            addr: self.registers.pc.wrapping_sub(2),
-                        };
-                        return Ok(CycleTransition::Faulted(fault));
-                    }
-                };
+                let DecodedCbOpcode { target, cb_type } = DecodedCbOpcode::from(value);
 
                 match target {
                     Target::Register(register) => {
@@ -884,14 +876,24 @@ impl CPU {
         pending: u8,
         stop_wake_active: bool,
     ) -> Result<CycleTransition, CpuError> {
-        let opcode = DecodedOpcode::from(response);
-
         let op_addr = self.registers.pc;
+
         if self.suppress_next_opcode_increment {
             self.suppress_next_opcode_increment = false;
         } else {
             self.registers.increment_pc();
         }
+
+        let opcode = match DecodedOpcode::try_from(response) {
+            Ok(opcode) => opcode,
+            Err(IllegalOpcode(byte)) => {
+                let fault = CpuFault {
+                    opcode: OpcodeEncoding::Base(byte),
+                    addr: op_addr,
+                };
+                return Ok(CycleTransition::Faulted(fault));
+            }
+        };
 
         match opcode {
             DecodedOpcode::Nop => Ok(CycleTransition::InstructionFinished),
@@ -1297,13 +1299,6 @@ impl CPU {
                     (true, true) => StopBehavior::Continue,
                 };
                 Ok(CycleTransition::StopFinished(behavior))
-            }
-            DecodedOpcode::Unknown => {
-                let fault = CpuFault {
-                    opcode: OpcodeEncoding::Base(response),
-                    addr: op_addr,
-                };
-                Ok(CycleTransition::Faulted(fault))
             }
         }
     }

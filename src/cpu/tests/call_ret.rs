@@ -20,7 +20,10 @@ fn taken(byte: u8, flags: u16) -> bool {
 
 #[test]
 fn ret_decodes_to_unconditional_return() {
-    assert!(matches!(DecodedOpcode::from(0xC9), DecodedOpcode::Return));
+    assert!(matches!(
+        DecodedOpcode::try_from(0xC9).unwrap(),
+        DecodedOpcode::Return
+    ));
 }
 
 #[test]
@@ -163,7 +166,7 @@ fn call_opcodes_decode_to_independent_expected_conditions() {
         (0xD4, JumpCondition::NC),
         (0xDC, JumpCondition::C),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::Call { condition } => assert_eq!(condition, expected),
             _ => panic!("incorrect CALL mapping {byte:02X}"),
         }

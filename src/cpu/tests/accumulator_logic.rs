@@ -72,7 +72,7 @@ fn logic_decodes_all_twenty_seven_forms() {
             let DecodedOpcode::Arithmetic {
                 kind: actual,
                 operand: Operand::Target(target),
-            } = DecodedOpcode::from(base + index)
+            } = DecodedOpcode::try_from(base + index).unwrap()
             else {
                 panic!("missing register/memory mapping");
             };
@@ -85,7 +85,7 @@ fn logic_decodes_all_twenty_seven_forms() {
             }
         }
         assert!(
-            matches!(DecodedOpcode::from(immediate), DecodedOpcode::Arithmetic { kind: actual, operand: Operand::Immediate } if actual == kind),
+            matches!(DecodedOpcode::try_from(immediate).unwrap(), DecodedOpcode::Arithmetic { kind: actual, operand: Operand::Immediate } if actual == kind),
             "missing immediate {immediate:02X}"
         );
     }

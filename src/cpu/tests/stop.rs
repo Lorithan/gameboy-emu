@@ -60,7 +60,7 @@ fn stopped_wake_preserves_registers_ime_and_fetch_latch_and_is_idempotent() {
 
 #[test]
 fn stop_entry_preserves_registers_uses_conditional_padding_and_matures_ei() {
-    assert_eq!(DecodedOpcode::from(0x10), DecodedOpcode::Stop);
+    assert_eq!(DecodedOpcode::try_from(0x10).unwrap(), DecodedOpcode::Stop);
     for pc in [0u16, 0x100, 0x7FFF, 0xFFFE, 0xFFFF] {
         for flags in (0u16..=0xF0).step_by(16) {
             for ime in [

@@ -112,7 +112,7 @@ fn check(target: u16, sp: u16, pc: u16, flags: u8, ime: InterruptState, opcode: 
 #[test]
 fn reti_exhausts_targets_and_stack_addresses_in_separate_sweeps() {
     assert_eq!(
-        DecodedOpcode::from(0xD9),
+        DecodedOpcode::try_from(0xD9).unwrap(),
         DecodedOpcode::ReturnFromInterrupt
     );
     for value in 0u16..=65535 {

@@ -48,12 +48,15 @@ fn absolute_jump_mappings_are_independent_and_complete() {
         (0xD2, JumpCondition::NC),
         (0xDA, JumpCondition::C),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::AbsoluteJump { condition } => assert_eq!(condition, expected),
             _ => panic!("wrong mapping for {byte:#04X}"),
         }
     }
-    assert!(matches!(DecodedOpcode::from(0xE9), DecodedOpcode::JumpHL));
+    assert!(matches!(
+        DecodedOpcode::try_from(0xE9).unwrap(),
+        DecodedOpcode::JumpHL
+    ));
 }
 
 #[test]

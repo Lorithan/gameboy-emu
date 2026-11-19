@@ -31,7 +31,7 @@ fn ldh_mappings_are_independent() {
             HighMemoryAddressSource::C
         };
         assert_eq!(
-            DecodedOpcode::from(opcode),
+            DecodedOpcode::try_from(opcode).unwrap(),
             if store {
                 DecodedOpcode::StoreHighMemory {
                     address_source: selector,

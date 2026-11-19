@@ -1,22 +1,30 @@
 use super::{DecodedOpcode, Register, Register16, Target, UnaryOperation};
 
 #[test]
+fn illegal_decode_errors_support_standard_leaf_reporting() {
+    let error = DecodedOpcode::try_from(0xD3).unwrap_err();
+    let standard: &dyn std::error::Error = &error;
+    assert!(standard.source().is_none());
+    assert!(standard.to_string().contains("D3"));
+}
+
+#[test]
 fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
     assert!(matches!(
-        DecodedOpcode::from(0x36),
+        DecodedOpcode::try_from(0x36).unwrap(),
         DecodedOpcode::LoadImmediate {
             destination: Target::IndirectHL
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0x77),
+        DecodedOpcode::try_from(0x77).unwrap(),
         DecodedOpcode::Load {
             destination: Target::IndirectHL,
             source: Target::Register(Register::A)
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0x7E),
+        DecodedOpcode::try_from(0x7E).unwrap(),
         DecodedOpcode::Load {
             destination: Target::Register(Register::A),
             source: Target::IndirectHL
@@ -26,7 +34,10 @@ fn hl_memory_opcodes_decode_to_the_expected_direction_and_register() {
 
 #[test]
 fn known_opcode_bytes_decode_to_the_expected_operation_and_destination() {
-    assert!(matches!(DecodedOpcode::from(0), DecodedOpcode::Nop));
+    assert!(matches!(
+        DecodedOpcode::try_from(0).unwrap(),
+        DecodedOpcode::Nop
+    ));
     for (byte, expected) in [
         (0x06, Register::B),
         (0x0E, Register::C),
@@ -36,7 +47,7 @@ fn known_opcode_bytes_decode_to_the_expected_operation_and_destination() {
         (0x2E, Register::L),
         (0x3E, Register::A),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::LoadImmediate {
                 destination: Target::Register(register),
             } => assert_eq!(register, expected),
@@ -53,7 +64,7 @@ fn word_loads_decode_to_word_destinations() {
         (0x21, Register16::HL),
         (0x31, Register16::SP),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::LoadImmediate16 { destination } => assert_eq!(destination, expected),
             _ => panic!("opcode {byte:#04X} did not decode as a word load"),
         }
@@ -61,114 +72,31 @@ fn word_loads_decode_to_word_destinations() {
 }
 
 #[test]
-fn every_other_byte_remains_explicitly_unknown() {
-    for byte in 0u8..=u8::MAX {
-        if byte == 0x08 {
-            continue;
+fn base_decoder_rejects_exactly_the_eleven_illegal_bytes() {
+    const ILLEGAL: [u8; 11] = [
+        0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
+    ];
+    for byte in 0u8..=255 {
+        match DecodedOpcode::try_from(byte) {
+            Ok(_) => assert!(!ILLEGAL.contains(&byte), "accepted illegal byte {byte:02X}"),
+            Err(super::IllegalOpcode(actual)) => {
+                assert!(ILLEGAL.contains(&byte), "rejected legal byte {byte:02X}");
+                assert_eq!(actual, byte);
+            }
         }
-        if byte == 0xF9 {
-            continue;
-        }
-        if [0xE0, 0xE2, 0xF0, 0xF2].contains(&byte) {
-            continue;
-        }
-        if [0xEA, 0xFA].contains(&byte) {
-            continue;
-        }
-        if [0x22, 0x2A, 0x32, 0x3A].contains(&byte) {
-            continue;
-        }
-        if [0x02, 0x0A, 0x12, 0x1A].contains(&byte) {
-            continue;
-        }
-        if [0xE8, 0xF8].contains(&byte) {
-            continue;
-        }
-        if [0x09, 0x19, 0x29, 0x39].contains(&byte) {
-            continue;
-        }
-        if [0x03, 0x0B, 0x13, 0x1B, 0x23, 0x2B, 0x33, 0x3B].contains(&byte) {
-            continue;
-        }
-        if byte == 0x27 {
-            continue;
-        }
-        if [0x07, 0x0F, 0x17, 0x1F].contains(&byte) {
-            continue;
-        }
-        if [0x2F, 0x37, 0x3F].contains(&byte) {
-            continue;
-        }
-        if [0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF].contains(&byte) {
-            continue;
-        }
-        if [0xC0, 0xC8, 0xD0, 0xD8].contains(&byte) {
-            continue;
-        }
-        if [0xC9, 0xCB, 0xD9, 0xF3, 0xFB].contains(&byte) {
-            continue;
-        }
-        if [0xC4, 0xCC, 0xCD, 0xD4, 0xDC].contains(&byte) {
-            continue;
-        }
-        if [0xC1, 0xC5, 0xD1, 0xD5, 0xE1, 0xE5, 0xF1, 0xF5].contains(&byte) {
-            continue;
-        }
-        if [0xC2, 0xC3, 0xCA, 0xD2, 0xDA, 0xE9].contains(&byte) {
-            continue;
-        }
-        if (0xA0..=0xBF).contains(&byte) || [0xE6, 0xEE, 0xF6, 0xFE].contains(&byte) {
-            continue;
-        }
-        if (0x88..=0x8F).contains(&byte)
-            || (0x98..=0x9F).contains(&byte)
-            || [0xCE, 0xDE].contains(&byte)
-        {
-            continue;
-        }
-        if [0x86, 0x96, 0xC6, 0xD6].contains(&byte) {
-            continue;
-        }
-        if (0x40..=0x7F).contains(&byte) {
-            continue;
-        }
-        if [
-            0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x87, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x97,
-        ]
-        .contains(&byte)
-        {
-            continue;
-        }
-        if [0x20, 0x28, 0x30, 0x38].contains(&byte) {
-            continue;
-        }
-        if [
-            0x00, 0x01, 0x04, 0x05, 0x06, 0x0C, 0x0D, 0x0E, 0x10, 0x11, 0x14, 0x15, 0x16, 0x18,
-            0x1C, 0x1D, 0x1E, 0x21, 0x24, 0x25, 0x26, 0x2C, 0x2D, 0x2E, 0x31, 0x34, 0x35, 0x36,
-            0x3C, 0x3D, 0x3E,
-        ]
-        .contains(&byte)
-        {
-            continue;
-        }
-        assert!(
-            matches!(DecodedOpcode::from(byte), DecodedOpcode::Unknown),
-            "unexpectedly accepted opcode {byte:#04X}"
-        );
     }
 }
-
 #[test]
 fn memory_inc_dec_opcodes_have_the_correct_operation() {
     assert!(matches!(
-        DecodedOpcode::from(0x34),
+        DecodedOpcode::try_from(0x34).unwrap(),
         DecodedOpcode::Unary {
             operation: UnaryOperation::Increment,
             target: Target::IndirectHL
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0x35),
+        DecodedOpcode::try_from(0x35).unwrap(),
         DecodedOpcode::Unary {
             operation: UnaryOperation::Decrement,
             target: Target::IndirectHL

@@ -41,28 +41,28 @@ fn reference(mut snapshot: CpuSnapShot, left: u8, right: u8, add: bool) -> CpuSn
 #[test]
 fn operand_source_mappings_are_explicit() {
     assert!(matches!(
-        DecodedOpcode::from(0x86),
+        DecodedOpcode::try_from(0x86).unwrap(),
         DecodedOpcode::Arithmetic {
             kind: ArithmeticKind::Add { carry: false },
             operand: Operand::Target(Target::IndirectHL)
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0x96),
+        DecodedOpcode::try_from(0x96).unwrap(),
         DecodedOpcode::Arithmetic {
             kind: ArithmeticKind::Sub { carry: false },
             operand: Operand::Target(Target::IndirectHL)
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0xC6),
+        DecodedOpcode::try_from(0xC6).unwrap(),
         DecodedOpcode::Arithmetic {
             kind: ArithmeticKind::Add { carry: false },
             operand: Operand::Immediate
         }
     ));
     assert!(matches!(
-        DecodedOpcode::from(0xD6),
+        DecodedOpcode::try_from(0xD6).unwrap(),
         DecodedOpcode::Arithmetic {
             kind: ArithmeticKind::Sub { carry: false },
             operand: Operand::Immediate

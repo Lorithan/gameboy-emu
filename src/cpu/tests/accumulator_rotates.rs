@@ -34,7 +34,7 @@ fn rotate_mappings_are_explicit() {
         ),
     ] {
         assert_eq!(
-            DecodedOpcode::from(byte),
+            DecodedOpcode::try_from(byte).unwrap(),
             DecodedOpcode::Rotate { direction }
         );
     }

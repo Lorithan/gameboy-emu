@@ -7,8 +7,14 @@ use crate::cpu::{CycleOutcome, InterruptState, opcode::DecodedOpcode};
 
 #[test]
 fn di_ei_decode_and_cpu_startup() {
-    assert_eq!(DecodedOpcode::from(0xF3), DecodedOpcode::DisableInterrupts);
-    assert_eq!(DecodedOpcode::from(0xFB), DecodedOpcode::EnabledInterrupts);
+    assert_eq!(
+        DecodedOpcode::try_from(0xF3).unwrap(),
+        DecodedOpcode::DisableInterrupts
+    );
+    assert_eq!(
+        DecodedOpcode::try_from(0xFB).unwrap(),
+        DecodedOpcode::EnabledInterrupts
+    );
     for checksum in [0, 1, 0xE7] {
         let cpu = CPU::from_registers(Registers::dmg_post_boot(checksum));
         assert_eq!(cpu.interrupt_state, InterruptState::Disabled);
@@ -139,7 +145,7 @@ fn pending_cpu() -> CPU {
 #[test]
 fn delayed_enable_waits_for_final_cycle_of_every_supported_base_instruction() {
     for opcode in 0u8..=255 {
-        if opcode == 0xCB || DecodedOpcode::from(opcode) == DecodedOpcode::Unknown {
+        if opcode == 0xCB || DecodedOpcode::try_from(opcode).is_err() {
             continue;
         }
         let mut cpu = pending_cpu();

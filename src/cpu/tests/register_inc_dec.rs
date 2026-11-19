@@ -66,13 +66,16 @@ fn expected(mut snapshot: CpuSnapShot, target: Register, old: u8, increment: boo
 fn inc_dec_opcode_mapping_is_explicit_for_every_register() {
     for (inc, dec, target) in CASES {
         assert!(
-            matches!(DecodedOpcode::from(inc), DecodedOpcode::Unary { operation: UnaryOperation::Increment, target: Target::Register(register) } if register == target)
+            matches!(DecodedOpcode::try_from(inc).unwrap(), DecodedOpcode::Unary { operation: UnaryOperation::Increment, target: Target::Register(register) } if register == target)
         );
         assert!(
-            matches!(DecodedOpcode::from(dec), DecodedOpcode::Unary { operation: UnaryOperation::Decrement, target: Target::Register(register) } if register == target)
+            matches!(DecodedOpcode::try_from(dec).unwrap(), DecodedOpcode::Unary { operation: UnaryOperation::Decrement, target: Target::Register(register) } if register == target)
         );
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
+    assert!(matches!(
+        DecodedOpcode::try_from(0x76).unwrap(),
+        DecodedOpcode::Halt
+    ));
 }
 
 fn check_every_value_and_flags(increment: bool) {

@@ -4,6 +4,75 @@ use crate::cpu::{
 };
 use crate::response_support::expect_execute;
 
+#[test]
+fn illegal_fetches_preserve_fetch_effects_fault_addresses_and_sticky_errors() {
+    for byte in [
+        0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
+    ] {
+        for pc in [0u16, 0x100, 0xFFFF] {
+            for suppressed in [false, true] {
+                for ime in [
+                    InterruptState::Disabled,
+                    InterruptState::Delayed,
+                    InterruptState::Enabled,
+                ] {
+                    let mut regs = Registers::dmg_post_boot(0xE7);
+                    regs.pc = pc;
+                    let mut cpu = CPU::from_registers(regs);
+                    cpu.interrupt_state = ime;
+                    cpu.suppress_next_opcode_increment = suppressed;
+                    let before = format!("{cpu:?}");
+                    assert!(matches!(
+                        cpu.complete_cycle(CycleResponse::IdleDone),
+                        Err(CpuError::UnexpectedCycleResponse(_))
+                    ));
+                    assert_eq!(format!("{cpu:?}"), before);
+                    let mut expected = cpu.snapshot();
+                    expected.pc = pc.wrapping_add(u16::from(!suppressed));
+                    let error = cpu
+                        .complete_cycle(CycleResponse::Read {
+                            value: byte,
+                            pending_interrupts: 0,
+                            stop_wake_active: false,
+                        })
+                        .unwrap_err();
+                    match error {
+                        CpuError::UnsupportedOpcode(fault) => {
+                            assert_eq!(fault.opcode, crate::cpu::OpcodeEncoding::Base(byte));
+                            assert_eq!(fault.addr, pc);
+                        }
+                        other => panic!("wrong illegal-opcode error: {other:?}"),
+                    }
+                    assert_eq!(
+                        cpu.snapshot(),
+                        expected,
+                        "illegal byte {byte:02X} at {pc:04X}, suppressed {suppressed}"
+                    );
+                    assert!(
+                        !cpu.suppress_next_opcode_increment,
+                        "illegal fetch must consume suppression"
+                    );
+                    assert_eq!(
+                        cpu.interrupt_state, ime,
+                        "a fault must not mature delayed EI"
+                    );
+                    let faulted = format!("{cpu:?}");
+                    for response in responses() {
+                        match cpu.complete_cycle(response).unwrap_err() {
+                            CpuError::UnsupportedOpcode(fault) => {
+                                assert_eq!(fault.opcode, crate::cpu::OpcodeEncoding::Base(byte));
+                                assert_eq!(fault.addr, pc);
+                            }
+                            other => panic!("sticky fault was replaced: {other:?}"),
+                        }
+                        assert_eq!(format!("{cpu:?}"), faulted);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn responses() -> [CycleResponse; 3] {
     [
         CycleResponse::Read {

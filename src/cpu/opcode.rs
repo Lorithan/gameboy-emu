@@ -1,5 +1,6 @@
 use crate::cpu::{
     Register,
+    error::IllegalOpcode,
     registers::{Flag, Flags, Register16},
 };
 
@@ -187,227 +188,228 @@ pub(super) enum DecodedOpcode {
     Halt,
 
     Stop,
-    Unknown,
 }
 
-impl From<u8> for DecodedOpcode {
-    fn from(byte: u8) -> Self {
+impl TryFrom<u8> for DecodedOpcode {
+    type Error = IllegalOpcode;
+
+    fn try_from(byte: u8) -> Result<Self, Self::Error> {
         match byte {
-            0x00 => DecodedOpcode::Nop,
-            0x01 => DecodedOpcode::LoadImmediate16 {
+            0x00 => Ok(DecodedOpcode::Nop),
+            0x01 => Ok(DecodedOpcode::LoadImmediate16 {
                 destination: Register16::BC,
-            },
-            0x02 => DecodedOpcode::StoreAToIndirect {
+            }),
+            0x02 => Ok(DecodedOpcode::StoreAToIndirect {
                 destination: IndirectPair::BC,
-            },
-            0x03 => DecodedOpcode::Unary16 {
+            }),
+            0x03 => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
                 target: Register16::BC,
-            },
-            0x04 => DecodedOpcode::Unary {
+            }),
+            0x04 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::B),
-            },
-            0x05 => DecodedOpcode::Unary {
+            }),
+            0x05 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::B),
-            },
-            0x06 => DecodedOpcode::LoadImmediate {
+            }),
+            0x06 => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::B),
-            },
-            0x07 => DecodedOpcode::Rotate {
+            }),
+            0x07 => Ok(DecodedOpcode::Rotate {
                 direction: RotationDirection::Left {
                     through_carry: false,
                 },
-            },
-            0x08 => DecodedOpcode::StoreStackPointer,
-            0x09 => DecodedOpcode::AddHL {
+            }),
+            0x08 => Ok(DecodedOpcode::StoreStackPointer),
+            0x09 => Ok(DecodedOpcode::AddHL {
                 target: Register16::BC,
-            },
-            0x0A => DecodedOpcode::LoadAFromIndirect {
+            }),
+            0x0A => Ok(DecodedOpcode::LoadAFromIndirect {
                 source: IndirectPair::BC,
-            },
-            0x0B => DecodedOpcode::Unary16 {
+            }),
+            0x0B => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::BC,
-            },
-            0x0C => DecodedOpcode::Unary {
+            }),
+            0x0C => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::C),
-            },
-            0x0D => DecodedOpcode::Unary {
+            }),
+            0x0D => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::C),
-            },
-            0x0E => DecodedOpcode::LoadImmediate {
+            }),
+            0x0E => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::C),
-            },
-            0x0F => DecodedOpcode::Rotate {
+            }),
+            0x0F => Ok(DecodedOpcode::Rotate {
                 direction: RotationDirection::Right {
                     through_carry: false,
                 },
-            },
-            0x10 => DecodedOpcode::Stop,
-            0x11 => DecodedOpcode::LoadImmediate16 {
+            }),
+            0x10 => Ok(DecodedOpcode::Stop),
+            0x11 => Ok(DecodedOpcode::LoadImmediate16 {
                 destination: Register16::DE,
-            },
-            0x12 => DecodedOpcode::StoreAToIndirect {
+            }),
+            0x12 => Ok(DecodedOpcode::StoreAToIndirect {
                 destination: IndirectPair::DE,
-            },
-            0x13 => DecodedOpcode::Unary16 {
+            }),
+            0x13 => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
                 target: Register16::DE,
-            },
-            0x14 => DecodedOpcode::Unary {
+            }),
+            0x14 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::D),
-            },
-            0x15 => DecodedOpcode::Unary {
+            }),
+            0x15 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::D),
-            },
-            0x16 => DecodedOpcode::LoadImmediate {
+            }),
+            0x16 => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::D),
-            },
-            0x17 => DecodedOpcode::Rotate {
+            }),
+            0x17 => Ok(DecodedOpcode::Rotate {
                 direction: RotationDirection::Left {
                     through_carry: true,
                 },
-            },
-            0x18 => DecodedOpcode::RelativeJump {
+            }),
+            0x18 => Ok(DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Always,
-            },
-            0x19 => DecodedOpcode::AddHL {
+            }),
+            0x19 => Ok(DecodedOpcode::AddHL {
                 target: Register16::DE,
-            },
-            0x1A => DecodedOpcode::LoadAFromIndirect {
+            }),
+            0x1A => Ok(DecodedOpcode::LoadAFromIndirect {
                 source: IndirectPair::DE,
-            },
-            0x1B => DecodedOpcode::Unary16 {
+            }),
+            0x1B => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::DE,
-            },
-            0x1C => DecodedOpcode::Unary {
+            }),
+            0x1C => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::E),
-            },
-            0x1D => DecodedOpcode::Unary {
+            }),
+            0x1D => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::E),
-            },
-            0x1E => DecodedOpcode::LoadImmediate {
+            }),
+            0x1E => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::E),
-            },
-            0x1F => DecodedOpcode::Rotate {
+            }),
+            0x1F => Ok(DecodedOpcode::Rotate {
                 direction: RotationDirection::Right {
                     through_carry: true,
                 },
-            },
-            0x20 => DecodedOpcode::RelativeJump {
+            }),
+            0x20 => Ok(DecodedOpcode::RelativeJump {
                 condition: JumpCondition::NZ,
-            },
-            0x21 => DecodedOpcode::LoadImmediate16 {
+            }),
+            0x21 => Ok(DecodedOpcode::LoadImmediate16 {
                 destination: Register16::HL,
-            },
-            0x23 => DecodedOpcode::Unary16 {
+            }),
+            0x23 => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
                 target: Register16::HL,
-            },
-            0x22 => DecodedOpcode::StoreAToHL {
+            }),
+            0x22 => Ok(DecodedOpcode::StoreAToHL {
                 operation: UnaryOperation::Increment,
-            },
-            0x24 => DecodedOpcode::Unary {
+            }),
+            0x24 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::H),
-            },
-            0x25 => DecodedOpcode::Unary {
+            }),
+            0x25 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::H),
-            },
-            0x26 => DecodedOpcode::LoadImmediate {
+            }),
+            0x26 => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::H),
-            },
-            0x27 => DecodedOpcode::DecimalAdjust,
-            0x28 => DecodedOpcode::RelativeJump {
+            }),
+            0x27 => Ok(DecodedOpcode::DecimalAdjust),
+            0x28 => Ok(DecodedOpcode::RelativeJump {
                 condition: JumpCondition::Z,
-            },
-            0x29 => DecodedOpcode::AddHL {
+            }),
+            0x29 => Ok(DecodedOpcode::AddHL {
                 target: Register16::HL,
-            },
-            0x2A => DecodedOpcode::LoadAFromHL {
+            }),
+            0x2A => Ok(DecodedOpcode::LoadAFromHL {
                 operation: UnaryOperation::Increment,
-            },
-            0x2B => DecodedOpcode::Unary16 {
+            }),
+            0x2B => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::HL,
-            },
-            0x2C => DecodedOpcode::Unary {
+            }),
+            0x2C => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::L),
-            },
-            0x2D => DecodedOpcode::Unary {
+            }),
+            0x2D => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::L),
-            },
-            0x2E => DecodedOpcode::LoadImmediate {
+            }),
+            0x2E => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::L),
-            },
-            0x2F => DecodedOpcode::ComplementAccumulator,
-            0x30 => DecodedOpcode::RelativeJump {
+            }),
+            0x2F => Ok(DecodedOpcode::ComplementAccumulator),
+            0x30 => Ok(DecodedOpcode::RelativeJump {
                 condition: JumpCondition::NC,
-            },
-            0x31 => DecodedOpcode::LoadImmediate16 {
+            }),
+            0x31 => Ok(DecodedOpcode::LoadImmediate16 {
                 destination: Register16::SP,
-            },
-            0x32 => DecodedOpcode::StoreAToHL {
+            }),
+            0x32 => Ok(DecodedOpcode::StoreAToHL {
                 operation: UnaryOperation::Decrement,
-            },
-            0x33 => DecodedOpcode::Unary16 {
+            }),
+            0x33 => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Increment,
                 target: Register16::SP,
-            },
-            0x34 => DecodedOpcode::Unary {
+            }),
+            0x34 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::IndirectHL,
-            },
-            0x35 => DecodedOpcode::Unary {
+            }),
+            0x35 => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::IndirectHL,
-            },
-            0x36 => DecodedOpcode::LoadImmediate {
+            }),
+            0x36 => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::IndirectHL,
-            },
-            0x37 => DecodedOpcode::SetCarry,
-            0x38 => DecodedOpcode::RelativeJump {
+            }),
+            0x37 => Ok(DecodedOpcode::SetCarry),
+            0x38 => Ok(DecodedOpcode::RelativeJump {
                 condition: JumpCondition::C,
-            },
-            0x39 => DecodedOpcode::AddHL {
+            }),
+            0x39 => Ok(DecodedOpcode::AddHL {
                 target: Register16::SP,
-            },
-            0x3A => DecodedOpcode::LoadAFromHL {
+            }),
+            0x3A => Ok(DecodedOpcode::LoadAFromHL {
                 operation: UnaryOperation::Decrement,
-            },
-            0x3B => DecodedOpcode::Unary16 {
+            }),
+            0x3B => Ok(DecodedOpcode::Unary16 {
                 operation: UnaryOperation::Decrement,
                 target: Register16::SP,
-            },
-            0x3C => DecodedOpcode::Unary {
+            }),
+            0x3C => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Increment,
                 target: Target::Register(Register::A),
-            },
-            0x3D => DecodedOpcode::Unary {
+            }),
+            0x3D => Ok(DecodedOpcode::Unary {
                 operation: UnaryOperation::Decrement,
                 target: Target::Register(Register::A),
-            },
-            0x3E => DecodedOpcode::LoadImmediate {
+            }),
+            0x3E => Ok(DecodedOpcode::LoadImmediate {
                 destination: Target::Register(Register::A),
-            },
-            0x3F => DecodedOpcode::ComplementCarry,
-            0x76 => DecodedOpcode::Halt,
-            0x40..=0x7F => DecodedOpcode::Load {
+            }),
+            0x3F => Ok(DecodedOpcode::ComplementCarry),
+            0x76 => Ok(DecodedOpcode::Halt),
+            0x40..=0x7F => Ok(DecodedOpcode::Load {
                 destination: Target::from_bits(byte >> 3),
                 source: Target::from_bits(byte),
-            },
+            }),
             0x80..=0xBF => {
                 let kind = match (byte >> 3) & 0b111 {
                     0 => ArithmeticKind::Add { carry: false },
@@ -417,147 +419,143 @@ impl From<u8> for DecodedOpcode {
                     4 => ArithmeticKind::And,
                     5 => ArithmeticKind::Xor,
                     6 => ArithmeticKind::Or,
-                    7 => ArithmeticKind::Compare,
-                    _ => return DecodedOpcode::Unknown,
+                    _ => ArithmeticKind::Compare,
                 };
 
-                DecodedOpcode::Arithmetic {
+                Ok(DecodedOpcode::Arithmetic {
                     kind,
                     operand: Operand::Target(Target::from_bits(byte)),
-                }
+                })
             }
-            0xC0 => DecodedOpcode::ConditionalReturn {
+            0xC0 => Ok(DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::NZ,
-            },
-            0xC1 => DecodedOpcode::Pop {
+            }),
+            0xC1 => Ok(DecodedOpcode::Pop {
                 operand: PushOperand::BC,
-            },
-            0xC2 => DecodedOpcode::AbsoluteJump {
+            }),
+            0xC2 => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NZ,
-            },
-            0xC3 => DecodedOpcode::AbsoluteJump {
+            }),
+            0xC3 => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Always,
-            },
-            0xC4 => DecodedOpcode::Call {
+            }),
+            0xC4 => Ok(DecodedOpcode::Call {
                 condition: JumpCondition::NZ,
-            },
-            0xC5 => DecodedOpcode::Push {
+            }),
+            0xC5 => Ok(DecodedOpcode::Push {
                 operand: PushOperand::BC,
-            },
-            0xC6 => DecodedOpcode::Arithmetic {
+            }),
+            0xC6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: false },
                 operand: Operand::Immediate,
-            },
+            }),
             0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
                 let target = (byte & 0x38) as u16;
-                DecodedOpcode::Restart { target }
+                Ok(DecodedOpcode::Restart { target })
             }
-            0xC8 => DecodedOpcode::ConditionalReturn {
+            0xC8 => Ok(DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::Z,
-            },
-            0xC9 => DecodedOpcode::Return,
-            0xCA => DecodedOpcode::AbsoluteJump {
+            }),
+            0xC9 => Ok(DecodedOpcode::Return),
+            0xCA => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::Z,
-            },
-            0xCB => DecodedOpcode::DecodeCbOpcode,
-            0xCC => DecodedOpcode::Call {
+            }),
+            0xCB => Ok(DecodedOpcode::DecodeCbOpcode),
+            0xCC => Ok(DecodedOpcode::Call {
                 condition: JumpCondition::Z,
-            },
-            0xCD => DecodedOpcode::Call {
+            }),
+            0xCD => Ok(DecodedOpcode::Call {
                 condition: JumpCondition::Always,
-            },
-            0xCE => DecodedOpcode::Arithmetic {
+            }),
+            0xCE => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: true },
                 operand: Operand::Immediate,
-            },
-            0xD0 => DecodedOpcode::ConditionalReturn {
+            }),
+            0xD0 => Ok(DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::NC,
-            },
-            0xD1 => DecodedOpcode::Pop {
+            }),
+            0xD1 => Ok(DecodedOpcode::Pop {
                 operand: PushOperand::DE,
-            },
-            0xD2 => DecodedOpcode::AbsoluteJump {
+            }),
+            0xD2 => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NC,
-            },
-            0xD4 => DecodedOpcode::Call {
+            }),
+            0xD4 => Ok(DecodedOpcode::Call {
                 condition: JumpCondition::NC,
-            },
-            0xD5 => DecodedOpcode::Push {
+            }),
+            0xD5 => Ok(DecodedOpcode::Push {
                 operand: PushOperand::DE,
-            },
-            0xD6 => DecodedOpcode::Arithmetic {
+            }),
+            0xD6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: false },
                 operand: Operand::Immediate,
-            },
-            0xD8 => DecodedOpcode::ConditionalReturn {
+            }),
+            0xD8 => Ok(DecodedOpcode::ConditionalReturn {
                 condition: JumpCondition::C,
-            },
-            0xD9 => DecodedOpcode::ReturnFromInterrupt,
-            0xDA => DecodedOpcode::AbsoluteJump {
+            }),
+            0xD9 => Ok(DecodedOpcode::ReturnFromInterrupt),
+            0xDA => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::C,
-            },
-            0xDC => DecodedOpcode::Call {
+            }),
+            0xDC => Ok(DecodedOpcode::Call {
                 condition: JumpCondition::C,
-            },
-            0xDE => DecodedOpcode::Arithmetic {
+            }),
+            0xDE => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: true },
                 operand: Operand::Immediate,
-            },
-            0xE0 => DecodedOpcode::StoreHighMemory {
+            }),
+            0xE0 => Ok(DecodedOpcode::StoreHighMemory {
                 address_source: HighMemoryAddressSource::Immediate,
-            },
-            0xE1 => DecodedOpcode::Pop {
+            }),
+            0xE1 => Ok(DecodedOpcode::Pop {
                 operand: PushOperand::HL,
-            },
-            0xE2 => DecodedOpcode::StoreHighMemory {
+            }),
+            0xE2 => Ok(DecodedOpcode::StoreHighMemory {
                 address_source: HighMemoryAddressSource::C,
-            },
-            0xE5 => DecodedOpcode::Push {
+            }),
+            0xE5 => Ok(DecodedOpcode::Push {
                 operand: PushOperand::HL,
-            },
-            0xE6 => DecodedOpcode::Arithmetic {
+            }),
+            0xE6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::And,
                 operand: Operand::Immediate,
-            },
-            0xE8 => DecodedOpcode::AddSignedOffsetToSp,
-            0xE9 => DecodedOpcode::JumpHL,
-            0xEA => DecodedOpcode::StoreAToAbsolute,
-            0xEE => DecodedOpcode::Arithmetic {
+            }),
+            0xE8 => Ok(DecodedOpcode::AddSignedOffsetToSp),
+            0xE9 => Ok(DecodedOpcode::JumpHL),
+            0xEA => Ok(DecodedOpcode::StoreAToAbsolute),
+            0xEE => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Xor,
                 operand: Operand::Immediate,
-            },
-            0xF0 => DecodedOpcode::LoadHighMemory {
+            }),
+            0xF0 => Ok(DecodedOpcode::LoadHighMemory {
                 address_source: HighMemoryAddressSource::Immediate,
-            },
-            0xF1 => DecodedOpcode::Pop {
+            }),
+            0xF1 => Ok(DecodedOpcode::Pop {
                 operand: PushOperand::AF,
-            },
-            0xF2 => DecodedOpcode::LoadHighMemory {
+            }),
+            0xF2 => Ok(DecodedOpcode::LoadHighMemory {
                 address_source: HighMemoryAddressSource::C,
-            },
-            0xF3 => DecodedOpcode::DisableInterrupts,
-            0xF5 => DecodedOpcode::Push {
+            }),
+            0xF3 => Ok(DecodedOpcode::DisableInterrupts),
+            0xF5 => Ok(DecodedOpcode::Push {
                 operand: PushOperand::AF,
-            },
-            0xF6 => DecodedOpcode::Arithmetic {
+            }),
+            0xF6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Or,
                 operand: Operand::Immediate,
-            },
-            0xF8 => DecodedOpcode::LoadHlFromSpOffset,
-            0xF9 => DecodedOpcode::TransferHLtoSP,
-            0xFA => DecodedOpcode::LoadAFromAbsolute,
-            0xFB => DecodedOpcode::EnabledInterrupts,
-            0xFE => DecodedOpcode::Arithmetic {
+            }),
+            0xF8 => Ok(DecodedOpcode::LoadHlFromSpOffset),
+            0xF9 => Ok(DecodedOpcode::TransferHLtoSP),
+            0xFA => Ok(DecodedOpcode::LoadAFromAbsolute),
+            0xFB => Ok(DecodedOpcode::EnabledInterrupts),
+            0xFE => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,
-            },
-            _ => DecodedOpcode::Unknown,
+            }),
+            _ => Err(IllegalOpcode(byte)),
         }
     }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct UnsupportedCbOpcode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ShiftKind {
@@ -581,10 +579,8 @@ pub(super) enum CbType {
     Set(u8),
 }
 
-impl TryFrom<u8> for CbType {
-    type Error = UnsupportedCbOpcode;
-
-    fn try_from(bits: u8) -> Result<Self, Self::Error> {
+impl From<u8> for CbType {
+    fn from(bits: u8) -> Self {
         let family = bits >> 6;
         let selector = (bits >> 3) & 0b111;
         match family {
@@ -622,12 +618,11 @@ impl TryFrom<u8> for CbType {
                     },
                     _ => unreachable!(),
                 };
-                Ok(Self::Transform(transform))
+                Self::Transform(transform)
             }
-            1 => Ok(Self::Bit(selector)),
-            2 => Ok(Self::Clear(selector)),
-            3 => Ok(Self::Set(selector)),
-            _ => Err(UnsupportedCbOpcode),
+            1 => Self::Bit(selector),
+            2 => Self::Clear(selector),
+            _ => Self::Set(selector),
         }
     }
 }
@@ -638,13 +633,11 @@ pub(super) struct DecodedCbOpcode {
     pub(super) cb_type: CbType,
 }
 
-impl TryFrom<u8> for DecodedCbOpcode {
-    type Error = UnsupportedCbOpcode;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+impl From<u8> for DecodedCbOpcode {
+    fn from(value: u8) -> Self {
         let target = Target::from_bits(value);
-        let cb_type = CbType::try_from(value)?;
+        let cb_type = CbType::from(value);
 
-        Ok(Self { target, cb_type })
+        Self { target, cb_type }
     }
 }

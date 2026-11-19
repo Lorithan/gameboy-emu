@@ -59,7 +59,7 @@ fn result(value: u16, increment: bool) -> u16 {
 fn word_inc_dec_mappings_are_explicit() {
     for (opcode, target, increment) in CASES {
         assert_eq!(
-            DecodedOpcode::from(opcode),
+            DecodedOpcode::try_from(opcode).unwrap(),
             DecodedOpcode::Unary16 {
                 target,
                 operation: if increment {

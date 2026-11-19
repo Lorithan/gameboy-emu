@@ -34,7 +34,7 @@ fn hl_auto_update_mappings_are_explicit() {
             UnaryOperation::Decrement
         };
         assert_eq!(
-            DecodedOpcode::from(byte),
+            DecodedOpcode::try_from(byte).unwrap(),
             if store {
                 DecodedOpcode::StoreAToHL { operation }
             } else {

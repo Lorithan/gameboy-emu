@@ -15,8 +15,14 @@ fn machine(flags: u8, pc: u16) -> CPU {
 }
 #[test]
 fn absolute_a_mappings_are_independent() {
-    assert_eq!(DecodedOpcode::from(0xEA), DecodedOpcode::StoreAToAbsolute);
-    assert_eq!(DecodedOpcode::from(0xFA), DecodedOpcode::LoadAFromAbsolute);
+    assert_eq!(
+        DecodedOpcode::try_from(0xEA).unwrap(),
+        DecodedOpcode::StoreAToAbsolute
+    );
+    assert_eq!(
+        DecodedOpcode::try_from(0xFA).unwrap(),
+        DecodedOpcode::LoadAFromAbsolute
+    );
 }
 #[test]
 fn absolute_a_every_target_address_uses_little_endian_without_early_effects() {

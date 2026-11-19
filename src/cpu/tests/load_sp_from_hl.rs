@@ -15,7 +15,10 @@ fn machine(hl: u16, flags: u8, pc: u16) -> CPU {
 }
 #[test]
 fn load_sp_from_hl_mapping_is_explicit() {
-    assert_eq!(DecodedOpcode::from(0xF9), DecodedOpcode::TransferHLtoSP);
+    assert_eq!(
+        DecodedOpcode::try_from(0xF9).unwrap(),
+        DecodedOpcode::TransferHLtoSP
+    );
 }
 #[test]
 fn load_sp_from_hl_all_values_commit_on_idle_and_continue_to_next_opcode() {

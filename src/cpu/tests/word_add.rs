@@ -58,7 +58,7 @@ fn finish(cpu: &mut CPU, opcode: u8) {
 fn word_add_mappings_are_independent() {
     for (opcode, source) in CASES {
         assert_eq!(
-            DecodedOpcode::from(opcode),
+            DecodedOpcode::try_from(opcode).unwrap(),
             DecodedOpcode::AddHL { target: source }
         );
     }

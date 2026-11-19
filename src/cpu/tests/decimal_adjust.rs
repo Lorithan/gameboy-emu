@@ -18,7 +18,10 @@ fn machine(a: u8, flags: u8, pc: u16) -> CPU {
 
 #[test]
 fn decimal_adjust_opcode_mapping_is_explicit() {
-    assert_eq!(DecodedOpcode::from(0x27), DecodedOpcode::DecimalAdjust);
+    assert_eq!(
+        DecodedOpcode::try_from(0x27).unwrap(),
+        DecodedOpcode::DecimalAdjust
+    );
 }
 
 #[test]

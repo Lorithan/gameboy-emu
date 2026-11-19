@@ -88,7 +88,7 @@ fn explicit_transfer_matrix_decodes_every_direction_and_excludes_halt() {
             match (
                 registers[destination],
                 registers[source],
-                DecodedOpcode::from(opcode),
+                DecodedOpcode::try_from(opcode).unwrap(),
             ) {
                 (
                     Some(expected_destination),

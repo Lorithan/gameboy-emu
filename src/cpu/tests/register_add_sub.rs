@@ -58,13 +58,16 @@ fn reference(mut snapshot: CpuSnapShot, left: u8, right: u8, add: bool) -> CpuSn
 fn add_sub_register_mappings_and_exclusions_are_explicit() {
     for (add, sub, source) in CASES {
         assert!(
-            matches!(DecodedOpcode::from(add), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
+            matches!(DecodedOpcode::try_from(add).unwrap(), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Add { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
         );
         assert!(
-            matches!(DecodedOpcode::from(sub), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
+            matches!(DecodedOpcode::try_from(sub).unwrap(), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Sub { carry: false }, operand: Operand::Target(Target::Register(actual)) } if actual == source)
         );
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
+    assert!(matches!(
+        DecodedOpcode::try_from(0x76).unwrap(),
+        DecodedOpcode::Halt
+    ));
 }
 
 fn check_all_pairs(add: bool) {

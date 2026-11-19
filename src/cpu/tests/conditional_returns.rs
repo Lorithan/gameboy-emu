@@ -25,14 +25,17 @@ fn conditional_return_mappings_are_independent_and_leave_c9_unchanged() {
         (0xD0, JumpCondition::NC),
         (0xD8, JumpCondition::C),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::ConditionalReturn { condition } => assert_eq!(condition, expected),
             _ => panic!("incorrect conditional return {byte:02X}"),
         }
     }
-    assert!(matches!(DecodedOpcode::from(0xC9), DecodedOpcode::Return));
     assert!(matches!(
-        DecodedOpcode::from(0xD9),
+        DecodedOpcode::try_from(0xC9).unwrap(),
+        DecodedOpcode::Return
+    ));
+    assert!(matches!(
+        DecodedOpcode::try_from(0xD9).unwrap(),
         DecodedOpcode::ReturnFromInterrupt
     ));
 }

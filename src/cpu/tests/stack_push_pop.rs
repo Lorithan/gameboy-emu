@@ -10,7 +10,7 @@ use crate::cpu::{
 #[test]
 fn push_bc_decodes_to_the_stack_pair() {
     assert!(matches!(
-        DecodedOpcode::from(0xC5),
+        DecodedOpcode::try_from(0xC5).unwrap(),
         DecodedOpcode::Push {
             operand: PushOperand::BC
         }
@@ -25,11 +25,11 @@ fn all_stack_opcodes_select_the_independent_expected_pair() {
         (0xE5, 0xE1, PushOperand::HL),
         (0xF5, 0xF1, PushOperand::AF),
     ] {
-        match DecodedOpcode::from(push) {
+        match DecodedOpcode::try_from(push).unwrap() {
             DecodedOpcode::Push { operand } => assert_eq!(operand, expected),
             _ => panic!("incorrect PUSH mapping {push:02X}"),
         }
-        match DecodedOpcode::from(pop) {
+        match DecodedOpcode::try_from(pop).unwrap() {
             DecodedOpcode::Pop { operand } => assert_eq!(operand, expected),
             _ => panic!("incorrect POP mapping {pop:02X}"),
         }
@@ -136,7 +136,7 @@ fn stack_opcodes_select_every_word_and_capture_push_sources_for_each_pair() {
 #[test]
 fn pop_bc_decodes_to_the_stack_pair() {
     assert!(matches!(
-        DecodedOpcode::from(0xC1),
+        DecodedOpcode::try_from(0xC1).unwrap(),
         DecodedOpcode::Pop {
             operand: PushOperand::BC
         }

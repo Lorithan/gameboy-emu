@@ -64,17 +64,17 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
     for (opcode, source) in CASES {
         match source {
             Source::Register(register) => assert!(
-                matches!(DecodedOpcode::from(opcode), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Compare, operand: Operand::Target(Target::Register(actual)) } if actual == register)
+                matches!(DecodedOpcode::try_from(opcode).unwrap(), DecodedOpcode::Arithmetic { kind: ArithmeticKind::Compare, operand: Operand::Target(Target::Register(actual)) } if actual == register)
             ),
             Source::Memory => assert!(matches!(
-                DecodedOpcode::from(opcode),
+                DecodedOpcode::try_from(opcode).unwrap(),
                 DecodedOpcode::Arithmetic {
                     kind: ArithmeticKind::Compare,
                     operand: Operand::Target(Target::IndirectHL)
                 }
             )),
             Source::Immediate => assert!(matches!(
-                DecodedOpcode::from(opcode),
+                DecodedOpcode::try_from(opcode).unwrap(),
                 DecodedOpcode::Arithmetic {
                     kind: ArithmeticKind::Compare,
                     operand: Operand::Immediate
@@ -82,7 +82,10 @@ fn comparison_decodes_all_sources_and_preserves_unsupported_boundaries() {
             )),
         }
     }
-    assert!(matches!(DecodedOpcode::from(0x76), DecodedOpcode::Halt));
+    assert!(matches!(
+        DecodedOpcode::try_from(0x76).unwrap(),
+        DecodedOpcode::Halt
+    ));
 }
 
 #[test]

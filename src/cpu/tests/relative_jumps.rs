@@ -10,7 +10,7 @@ use crate::cpu::{
 #[test]
 fn unconditional_jump_decodes_to_always() {
     assert!(matches!(
-        DecodedOpcode::from(0x18),
+        DecodedOpcode::try_from(0x18).unwrap(),
         DecodedOpcode::RelativeJump {
             condition: JumpCondition::Always
         }
@@ -156,7 +156,7 @@ fn conditional_jumps_decode_to_the_correct_condition() {
         (0x30, JumpCondition::NC),
         (0x38, JumpCondition::C),
     ] {
-        match DecodedOpcode::from(byte) {
+        match DecodedOpcode::try_from(byte).unwrap() {
             DecodedOpcode::RelativeJump { condition } => assert_eq!(condition, expected),
             _ => panic!("missing jump mapping {byte:#04X}"),
         }
