@@ -4,9 +4,9 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register/tick/reload/write-edge/coarse-STOP slices #65-#68 passed their declared checks. Timer audit #69 added thirteen pinned fixtures; #70 corrected the demonstrated rapid_toggle failure through user-owned System fetch-boundary scheduling. Latest no-fail-fast fixture-inclusive regression, 2026-11-19: **484 passed, zero failed** (346 unit, 138 integration), including all eighteen external fixtures. Formatting and strict Clippy pass. See [timer results](testing/MOONEYE_TIMER.md) and [testing](TESTING.md); M3 awaits its completion review.
+M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) maps #53 and completed #65-#70 to implementation, independent local checks and thirteen timer ROM passes. Latest no-fail-fast fixture-inclusive regression at f0d38ef, 2026-11-19: **484 passed, zero failed** (346 unit, 138 integration), including all eighteen external fixtures. Formatting and strict Clippy pass. This documentation review reuses that verified application checkpoint; it adds no new test execution. See [timer results](testing/MOONEYE_TIMER.md) and [testing](TESTING.md).
 
-**Next: completion review of [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53) and the M3 gate.** [#70](https://github.com/Lorithan/gameboy-emu/issues/70) now passes its fresh-fetch, masking, in-progress instruction, five-cycle entry and STOP/EI coverage plus the unchanged rapid_toggle ROM. The [System correction](tasks/TIMER.md#70-fetch-boundary-correction) offers new requests after device advancement and refreshes the action before bus execution, without a second advance. This remains a coarse schedule, not exact T-state/pin certification. Review the milestone scope and remaining limits before closing #53/M3 or beginning dependent work. Coarse STOP remains explicit; #64 physical behavior and #52 DAA remain separate.
+**Next: M4 architecture and the first PPU design contract.** Define device ownership, register interfaces, timing/events, CPU memory-access policy and headless acceptance before user implementation. Keep the first issue small; agree the supported ROM-only interactive demo and desktop frontend scope before SDL2 work. No M4 application/build/dependency changes are introduced by this review. Current coarse timing, skipped boot and physical STOP limits remain explicit; #64 physical behavior and #52 DAA remain separate.
 
 Separate nonblocking follow-ups:
 
@@ -27,7 +27,7 @@ The user writes application code. The assistant leads architecture/planning, iss
 | M0: Foundation | Architecture, scope, timing, tests, repository | Broad decisions agreed; staged device timing/startup remains under #1 |
 | M1: Cartridge/memory | ROM-only loading, headers, initial mapping | Complete within documented limits |
 | M2: CPU | Registers, instructions, flags, control flow, stepping | Complete: 500 legal encodings, focused tests and five selected real ROM passes |
-| M3: Timers/interrupts | Programmable timer and clock/interrupt integration | Active design #53; DIV/service/standby foundations exist. Timing/interrupt tests and audited relevant ROM results required |
+| M3: Timers/interrupts | Programmable timer and clock/interrupt integration | Complete within [reviewed scope](M3_COMPLETION_REVIEW.md): local timing/interrupt checks and thirteen audited timer ROM passes |
 | M4: Video/controls | PPU, DMA, framebuffer, desktop input | Headless joypad exists; require visual fixtures, PPU/DMA/input checks and an agreed ROM-only interactive demo |
 | M5: Cartridge compatibility | MBC1, applicable persistent RAM | Bank/mode/boundary tests, save/load checks, selected supported software |
 | M6: Audio/release | DMG channels, playback/pacing, usability | Repeatable audio checks, listening review, regression and honest compatibility report |

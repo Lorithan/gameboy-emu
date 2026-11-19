@@ -16,7 +16,7 @@ One DMG M-cycle is four base ticks. System::step_machine_cycle currently:
 4. Offers fresh eligible interrupts before bus execution. If CPU accepts, refreshes the action from InterruptEntry without another device/time advance. Performs that read/write/idle and collects response samples; a replaced opcode fetch is represented by entry's first idle.
 5. Completes CPU execution, records the trace and applies acknowledgment/STOP-entry effects.
 
-This is a coarse advance-before-access convention, not arbitrary subcycle/pin accuracy. [Timer reload/write ordering](tasks/TIMER.md) must explicitly fit or deliberately revise it.
+This is a coarse advance-before-access convention, not arbitrary subcycle/pin accuracy. [Timer reload/write ordering](TIMER.md) must explicitly fit or deliberately revise it.
 
 ## Typed protocol and policy
 

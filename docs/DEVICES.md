@@ -1,6 +1,6 @@
 # Devices and startup
 
-Implemented ordinary-DMG skipped-boot profile. [Architecture](CORE_ARCHITECTURE.md) defines scheduling; [programmable timer design](tasks/TIMER.md) remains a proposal.
+Implemented ordinary-DMG skipped-boot profile. [Architecture](CORE_ARCHITECTURE.md) defines scheduling; [Timer](TIMER.md) records the implemented programmable timer contract.
 
 ## Cartridge and memory
 
@@ -26,7 +26,7 @@ Bus owns the controller. Internal IF starts 01 (reads E1); IE starts 00. IF uppe
 
 ## Divider phase
 
-Timer owns a wrapping u16 base-tick counter; DIV reads the high byte. Real M-cycles tick four times, including HALT/entry. DIV writes ignore their value and clear the whole counter; actual StopEntered resets it once. Neither resets monotonic elapsed_ticks. Stopped polling/input consumes no ticks. TIMA/TMA start zero; TAC stores low three bits and reads them OR F8. Tick and DIV/TAC write falling edges share Counting-only TIMA increments; overflow waits four future ticks before current-TMA reload and one-shot IF through Bus. Phase-dependent TIMA cancellation/protection and TMA propagation are locally verified. Writes preserve pending/reload phase; TAC never resets the divider. [Contracts](tasks/TIMER.md) and [hardware-source results](testing/MOONEYE_TIMER.md): all thirteen timer fixtures pass after the #70 System fetch-boundary correction. Coarse STOP remains separately scoped below; arbitrary T-state accuracy is not claimed.
+Timer owns a wrapping u16 base-tick counter; DIV reads the high byte. Real M-cycles tick four times, including HALT/entry. DIV writes ignore their value and clear the whole counter; actual StopEntered resets it once. Neither resets monotonic elapsed_ticks. Stopped polling/input consumes no ticks. TIMA/TMA start zero; TAC stores low three bits and reads them OR F8. Tick and DIV/TAC write falling edges share Counting-only TIMA increments; overflow waits four future ticks before current-TMA reload and one-shot IF through Bus. Phase-dependent TIMA cancellation/protection and TMA propagation are locally verified. Writes preserve pending/reload phase; TAC never resets the divider. [Contracts](TIMER.md) and [hardware-source results](testing/MOONEYE_TIMER.md): all thirteen timer fixtures pass after the #70 System fetch-boundary correction. Coarse STOP remains separately scoped below; arbitrary T-state accuracy is not claimed.
 
 The seed ABC8 at elapsed_ticks=0 is a **model-phase inference**, not an independently measured hidden register. Visible AB follows the [DMG startup profile](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md). Phase derives from pinned [Mooneye boot_div-dmgABCmgb](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/boot_div-dmgABCmgb.s) and our advance-before-access schedule:
 

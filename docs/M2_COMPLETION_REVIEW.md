@@ -20,4 +20,4 @@ This does not certify all hardware behavior, every game's compatibility or every
 - The inspected [Blargg individual builder](https://github.com/retrio/gb-test-roms/blob/c240dd7d700e5c0b00a7bbba52b53e4ee67b5f15/cpu_instrs/source/common/build_rom.s) needs a separate mapper/prerequisite/reporting audit.
 - [#64 physical STOP assessment](https://github.com/Lorithan/gameboy-emu/issues/64) is separate from completed deterministic integration #44.
 
-Next: [M3 timer contract #53](tasks/TIMER.md), before application implementation.
+The follow-on [M3 timer/interrupt gate](M3_COMPLETION_REVIEW.md) is now complete within its declared scope. The [project plan](PROJECT_PLAN.md) records current next work.

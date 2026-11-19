@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #70 on 2026-11-19: **484 passed, zero failed**, with no-fail-fast so all targets ran (346 unit, 138 integration). All 466 local tests and eighteen external fixtures pass after the user's System fetch-boundary correction. Formatting and strict Clippy pass. [Timer evidence](testing/MOONEYE_TIMER.md) retains the original rapid_toggle failure and records the corrected thirteen-fixture pass; M3 awaits its completion review, with no exact hardware timing claim.
+Latest fixture-inclusive regression, #70 on 2026-11-19 at f0d38ef: **484 passed, zero failed**, with no-fail-fast so all targets ran (346 unit, 138 integration). All 466 local tests and eighteen external fixtures pass after the user's System fetch-boundary correction. Formatting and strict Clippy pass. [Timer evidence](testing/MOONEYE_TIMER.md) retains the original rapid_toggle failure and corrected thirteen-fixture pass. The [M3 review](M3_COMPLETION_REVIEW.md) accepts the declared gate using that run, with no exact hardware timing claim or additional test execution for the documentation review.
 
 ## Commands
 
@@ -39,7 +39,7 @@ All eighteen artifacts are unchanged official prebuilt images from source revisi
 | div_timing | Passed | 4,235 | 16,940 | Same subset; resets DIV explicitly |
 | Thirteen timer fixtures | All passed | Per-fixture counts | Per-fixture counts | [Timer audit/results](testing/MOONEYE_TIMER.md), [manifest](../tests/fixtures/mooneye-timer.json) |
 
-Every fixture matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. Corrected rapid_toggle takes 4605 M-cycles /18420 ticks; its earlier failure is preserved in the timer record. Caps remain 1,000,000 M-cycles and 10 host seconds per run, including a separately bounded diagnostic rerun on rapid_toggle failure. These results are finite checks, not complete timing/serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) is unrun; the [M3 design](tasks/TIMER.md) awaits its completion review.
+Every fixture matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. Corrected rapid_toggle takes 4605 M-cycles /18420 ticks; its earlier failure is preserved in the timer record. Caps remain 1,000,000 M-cycles and 10 host seconds per run, including a separately bounded diagnostic rerun on rapid_toggle failure. These results are finite checks, not complete timing/serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) remains unrun and separate from the completed M3 gate.
 
 ## Runner contract
 
