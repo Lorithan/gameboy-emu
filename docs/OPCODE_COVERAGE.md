@@ -1,4 +1,8 @@
 # Opcode coverage
+## M2 functional completion review - 2026-11-18
+
+[The M2 review](M2_COMPLETION_REVIEW.md) finds the original gate satisfied: all 500 legal encodings implemented, focused result/flag/cycle tests, deterministic stepping and five actual external fixture results. M2 is complete for its declared functional scope, with physical accuracy limits retained. Broader external arithmetic/CB results are useful confidence work, not a retroactively added gate. #52 selects a non-blocking DAA table ROM; #53 starts M3 timer design. No new tests ran for this documentation-only review; last verified total remains 430 at f0283fa.
+
 ## Five external fixture results - 2026-11-18
 
 [The audited CPU subset](tasks/MOONEYE_CPU_SUBSET.md) adds passing if_ie_registers, interrupts/ie_push, ei_sequence and div_timing to reg_f. All 430 tests pass with real fixtures explicitly included, formatting and strict Clippy pass. Encoding implementation remains 500/500; this improves specific independent interrupt/divider evidence without establishing all arithmetic or instruction timing. M2 remains open for #51's completion/coverage review.
