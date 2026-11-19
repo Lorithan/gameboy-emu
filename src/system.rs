@@ -206,5 +206,8 @@ impl System {
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {
         self.memory.set_button(button, pressed);
+
+        let wake = self.memory.stop_wake_active();
+        self.cpu.wake_from_stop_if(wake);
     }
 }

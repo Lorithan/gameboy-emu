@@ -1,4 +1,4 @@
-use super::super::{InstructionStep, MachineStep, System, SystemError};
+use super::super::{InstructionStep, System, SystemError};
 use crate::{
     cpu::{CpuError, CycleAction, CycleOutcome},
     memory::{Button, Cartridge},
@@ -72,6 +72,8 @@ fn joypad_system_input_preserves_cpu_and_time_across_execution_states() {
         let mut s = state_case(case);
         let before = s.cpu_snapshot();
         let cpu_debug = format!("{:?}", s.cpu); // Includes phase, IME and suppression.
+        let interrupt_status = s.cpu.test_interrupt_status();
+        let mut woken_debug = None;
         let ticks = s.elapsed_ticks();
         let original: Vec<_> = (0u16..=65535).map(|addr| s.memory.read(addr)).collect();
         for (button, pressed, readback) in [
@@ -82,7 +84,22 @@ fn joypad_system_input_preserves_cpu_and_time_across_execution_states() {
         ] {
             s.set_button(button, pressed);
             assert_eq!(s.cpu_snapshot(), before);
-            assert_eq!(format!("{:?}", s.cpu), cpu_debug, "CPU state case {case}");
+            if case == 6 {
+                // Selected input now wakes Stopped immediately, even if the
+                // press is released before the next execution call.
+                assert_eq!(
+                    s.cpu.request_cycle().unwrap(),
+                    crate::cpu::CycleRequest::Execute(CycleAction::Read { addr: before.pc })
+                );
+                assert_eq!(s.cpu.test_interrupt_status(), interrupt_status);
+                let current = format!("{:?}", s.cpu);
+                if let Some(ref expected) = woken_debug {
+                    assert_eq!(&current, expected);
+                }
+                woken_debug = Some(current);
+            } else {
+                assert_eq!(format!("{:?}", s.cpu), cpu_debug, "CPU state case {case}");
+            }
             assert_eq!(s.elapsed_ticks(), ticks);
             for addr in 0u16..=65535 {
                 let expected = match addr {
@@ -98,11 +115,10 @@ fn joypad_system_input_preserves_cpu_and_time_across_execution_states() {
             }
         }
         if case == 6 {
-            assert!(matches!(
-                s.step_machine_cycle().unwrap(),
-                MachineStep::Stopped
-            ));
-            assert_eq!(s.elapsed_ticks(), ticks);
+            let trace = s.step_machine_cycle().map(expect_cycle).unwrap();
+            assert_eq!(trace.record.action, CycleAction::Read { addr: before.pc });
+            assert_eq!(trace.outcome, CycleOutcome::InstructionComplete);
+            assert_eq!(s.elapsed_ticks(), ticks + 4);
         } else if case == 7 {
             assert!(matches!(
                 s.step_machine_cycle(),

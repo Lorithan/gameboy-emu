@@ -1,6 +1,14 @@
 # Selected-line STOP entry and wake
 
-Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries, mandatory read sampling and conditional entry are implemented and verified; host-input wake remains the next slice. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
+Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries, read sampling, conditional entry and immediate host-input wake are verified for the declared deterministic scope. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
+
+## STOP wake completion verified - 2026-11-18
+
+User implemented guarded CPU wake_from_stop_if and System delivery after Bus button/IF updates. Fresh verification passes all 414 tests (312 unit, 102 integration), including 22 focused STOP-related tests and 13 focused joypad unit tests. Formatting, strict Clippy and whitespace checks pass. Assistant added five wake tests and migrated the earlier Stopped input-purity expectation explicitly; assertions for other states and unrelated memory remain intact. No assistant application logic edits, allowances, dependencies or fixtures.
+
+Evidence covers inactive guards, preserved registers/PC/IME/fetch latch, idempotence, all eight buttons/four selections, unselected/no-row inputs, rapid press/release between execution calls, stale IF/pre-entry pulses, one-byte/two-byte resume PC, IE/IME-independent wake, zero input time/divider effects, zero budgets, mapped-memory preservation and resumed divider phase. Pending enabled interrupts enter on the next step through five cycles and late acknowledgment; wake itself neither writes the stack nor acknowledges IF. A public-API test resumes INC B immediately after a full input pulse without an extra wake cycle. Existing fault/partial-entry/HALT/running purity checks pass.
+
+#48's declared deterministic scope is complete. #44 stays open for oscillator startup, physical edge timing, zombie power and nondeterministic wake-glitch accuracy. No external ROM ran, so M2's ROM gate remains open. Next planning work can revisit deferred #45's bounded ROM-validation contract and provenance before fixtures. Earlier pending-wake notes below are historical.
 
 ## Conditional-entry completion verified - 2026-11-18
 

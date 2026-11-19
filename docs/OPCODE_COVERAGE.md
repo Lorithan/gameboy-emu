@@ -1,4 +1,8 @@
 # Opcode coverage
+## Conditional STOP and selected-input wake - 2026-11-18
+
+[#48 deterministic scope](tasks/STOP_WAKE.md#stop-wake-completion-verified---2026-11-18) is verified: four conditional entry branches, divider reset/pause and selected-input wake are implemented. All 414 tests pass (312 unit, 102 integration), formatting and strict Clippy pass. Coverage remains 500/500 encodings for the declared scope. #44 retains physical oscillator/edge/glitch limits. No external ROM ran; M2's ROM gate remains open. Earlier no-wake statements describe historical checkpoints.
+
 ## Core STOP checkpoint - 2026-11-18
 
 STOP (10) now passes eight focused core-standby tests and the full 379-test suite (279 unit, 100 integration). Coverage is 244/244 legal non-prefix base plus 256/256 CB = 500/500 encodings. The CB dispatch byte is not a standalone instruction; eleven invalid base slots remain excluded. Decoder/protocol/EI/fault regressions retain their oracles with STOP's new completion event. See [completion evidence](tasks/STOP.md#core-standby-completion-verified---2026-11-18).

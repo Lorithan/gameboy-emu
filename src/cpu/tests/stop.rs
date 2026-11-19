@@ -25,6 +25,40 @@ fn responses() -> [CycleResponse; 3] {
 }
 
 #[test]
+fn stopped_wake_preserves_registers_ime_and_fetch_latch_and_is_idempotent() {
+    for pc in [0, 0x100, 0xFFFF] {
+        for ime in [
+            InterruptState::Disabled,
+            InterruptState::Delayed,
+            InterruptState::Enabled,
+        ] {
+            for suppressed in [false, true] {
+                let mut cpu = CPU::from_registers(Registers::dmg_post_boot(0xE7));
+                cpu.registers.pc = pc;
+                cpu.state = ExecutionState::Stopped;
+                cpu.interrupt_state = ime;
+                cpu.suppress_next_opcode_increment = suppressed;
+                let before = format!("{cpu:?}");
+                cpu.wake_from_stop_if(false);
+                assert_eq!(format!("{cpu:?}"), before);
+                let mut expected = cpu.clone();
+                expected.state = ExecutionState::FetchOpcode;
+                cpu.wake_from_stop_if(true);
+                assert_eq!(format!("{cpu:?}"), format!("{expected:?}"));
+                assert_eq!(
+                    cpu.request_cycle().unwrap(),
+                    CycleRequest::Execute(CycleAction::Read { addr: pc })
+                );
+                for wake in [true, false, true] {
+                    cpu.wake_from_stop_if(wake);
+                    assert_eq!(format!("{cpu:?}"), format!("{expected:?}"));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn stop_entry_preserves_registers_uses_conditional_padding_and_matures_ei() {
     assert_eq!(DecodedOpcode::from(0x10), DecodedOpcode::Stop);
     for pc in [0u16, 0x100, 0x7FFF, 0xFFFE, 0xFFFF] {

@@ -17,6 +17,187 @@ fn memory(s: &System) -> Vec<u8> {
 }
 
 #[test]
+fn stop_wake_uses_selected_buttons_and_retains_pulses_without_time_or_divider_effects() {
+    for selection in [0, 0x10, 0x20, 0x30] {
+        for (button, row) in [
+            (Button::Right, 0x10),
+            (Button::Left, 0x10),
+            (Button::Up, 0x10),
+            (Button::Down, 0x10),
+            (Button::A, 0x20),
+            (Button::B, 0x20),
+            (Button::Select, 0x20),
+            (Button::Start, 0x20),
+        ] {
+            let mut s = machine(&[0x10, 0, 0]);
+            s.memory.write(0xFF00, selection);
+            s.memory.write(0xFFFF, 0); // Wake must work with no eligible IRQ.
+            s.memory.write(0xFF0F, 0);
+            s.step_instruction(1).unwrap();
+            let before = s.cpu_snapshot();
+            let before_memory = memory(&s);
+            let stopped_debug = format!("{:?}", s.cpu);
+            let selected = selection & row == 0;
+            s.set_button(button, true);
+            s.set_button(button, false); // Entire pulse between execution calls.
+            assert_eq!(s.cpu_snapshot(), before);
+            assert_eq!(s.cpu.test_interrupt_status(), (false, false));
+            assert_eq!(s.elapsed_ticks(), 4);
+            assert_eq!(s.memory.read(0xFF04), 0);
+            for addr in 0u16..=65535 {
+                let expected = if addr == 0xFF0F && selected {
+                    0xF0
+                } else {
+                    before_memory[usize::from(addr)]
+                };
+                assert_eq!(
+                    s.memory.read(addr),
+                    expected,
+                    "selection {selection:02X}, {button:?}, address {addr:04X}"
+                );
+            }
+            assert!(matches!(
+                s.step_instruction(0).unwrap(),
+                InstructionStep::BudgetExhausted {
+                    mcycles: 0,
+                    ticks: 0
+                }
+            ));
+            if selected {
+                assert_eq!(
+                    s.cpu.request_cycle().unwrap(),
+                    CycleRequest::Execute(CycleAction::Read { addr: 0x102 })
+                );
+                for cycle in 1..=64 {
+                    assert!(matches!(
+                        s.step_instruction(1).unwrap(),
+                        InstructionStep::Complete {
+                            mcycles: 1,
+                            ticks: 4
+                        }
+                    ));
+                    assert_eq!(s.memory.read(0xFF04), if cycle < 64 { 0 } else { 1 });
+                }
+                assert_eq!(s.elapsed_ticks(), 260);
+                assert_eq!(s.memory.read(0xFF0F), 0xF0); // Wake never acknowledges IF.
+            } else {
+                assert_eq!(format!("{:?}", s.cpu), stopped_debug);
+                assert!(matches!(
+                    s.step_machine_cycle().unwrap(),
+                    MachineStep::Stopped
+                ));
+                assert_eq!(s.elapsed_ticks(), 4);
+            }
+        }
+    }
+}
+
+#[test]
+fn stop_wake_interrupt_arbitration_occurs_on_next_step_and_keeps_the_resume_address() {
+    for enabled in [false, true] {
+        for eligible in [false, true] {
+            for pending_at_entry in [false, true] {
+                // EI;STOP matures IME at completion without accepting an
+                // already pending interrupt before STOP's fetch.
+                let program: &[u8] = if enabled {
+                    &[0xFB, 0x10, 0, 0]
+                } else {
+                    &[0x10, 0, 0]
+                };
+                let mut s = machine(program);
+                if enabled {
+                    s.step_instruction(1).unwrap();
+                }
+                s.memory.write(0xFFFF, if pending_at_entry { 1 } else { 0 });
+                s.memory.write(0xFF0F, if pending_at_entry { 1 } else { 0 });
+                s.step_instruction(1).unwrap();
+                let before = s.cpu_snapshot();
+                let ticks = s.elapsed_ticks();
+                let expected_pc = 0x100 + u16::from(enabled) + if pending_at_entry { 1 } else { 2 };
+                assert_eq!(before.pc, expected_pc);
+                s.memory.write(0xFFFF, if eligible { 16 } else { 0 });
+                s.memory.write(0xFF0F, 0);
+                s.set_button(Button::A, true);
+                s.set_button(Button::A, false);
+                assert_eq!(s.cpu_snapshot(), before);
+                assert_eq!(s.cpu.test_interrupt_status(), (false, enabled));
+                assert_eq!(s.elapsed_ticks(), ticks);
+                assert_eq!(s.memory.read(0xFF0F), 0xF0);
+                assert_eq!(s.memory.read(0xFF04), 0);
+                assert_eq!((s.memory.read(0xFFFC), s.memory.read(0xFFFD)), (0, 0));
+                if enabled && eligible {
+                    for cycle in 0..5 {
+                        let trace = match s.step_machine_cycle().unwrap() {
+                            MachineStep::Cycle(t) => t,
+                            other => panic!("wake failed: {other:?}"),
+                        };
+                        assert_eq!(
+                            trace.record.action,
+                            match cycle {
+                                2 => CycleAction::Write {
+                                    addr: 0xFFFD,
+                                    value: (expected_pc >> 8) as u8
+                                },
+                                3 => CycleAction::Write {
+                                    addr: 0xFFFC,
+                                    value: expected_pc as u8
+                                },
+                                _ => CycleAction::Idle,
+                            }
+                        );
+                        assert_eq!(s.memory.read(0xFF0F), if cycle < 3 { 0xF0 } else { 0xE0 });
+                        if cycle == 4 {
+                            assert_eq!(
+                                trace.outcome,
+                                CycleOutcome::InterruptEntryComplete { vector: 0x60 }
+                            );
+                        }
+                    }
+                    assert_eq!(s.cpu_snapshot().pc, 0x60);
+                    assert_eq!(s.elapsed_ticks(), ticks + 20);
+                } else {
+                    assert!(matches!(
+                        s.step_instruction(1).unwrap(),
+                        InstructionStep::Complete {
+                            mcycles: 1,
+                            ticks: 4
+                        }
+                    ));
+                    assert_eq!(s.cpu_snapshot().pc, expected_pc + 1);
+                    assert_eq!(s.memory.read(0xFF0F), 0xF0);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn stop_wake_does_not_remember_input_before_entry_or_infer_wake_from_stale_if() {
+    let mut s = machine(&[0x10, 0, 0]);
+    s.set_button(Button::A, true);
+    s.set_button(Button::A, false);
+    s.memory.write(0xFFFF, 16); // Persistent eligible IF yields one-byte STOP.
+    s.step_instruction(1).unwrap();
+    assert_eq!(s.cpu_snapshot().pc, 0x101);
+    let before = format!("{:?}", s.cpu);
+    for _ in 0..3 {
+        s.set_button(Button::A, false);
+        assert!(matches!(
+            s.step_machine_cycle().unwrap(),
+            MachineStep::Stopped
+        ));
+    }
+    assert_eq!(format!("{:?}", s.cpu), before);
+    assert_eq!(s.elapsed_ticks(), 4);
+    s.set_button(Button::A, true);
+    assert_eq!(
+        s.cpu.request_cycle().unwrap(),
+        CycleRequest::Execute(CycleAction::Read { addr: 0x101 })
+    );
+    assert_eq!(s.elapsed_ticks(), 4);
+}
+
+#[test]
 fn conditional_stop_without_selected_input_or_pending_interrupt_enters_two_byte_stop() {
     check_stop_entry(false, false, 2, true, false);
 }

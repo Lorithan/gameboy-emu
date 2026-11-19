@@ -1,5 +1,7 @@
 # Headless joypad and JOYP interrupt edges
 
+Current STOP integration, 2026-11-18: [#48 wake evidence](STOP_WAKE.md#stop-wake-completion-verified---2026-11-18) supersedes #47's Stopped input-state preservation below. Selected input now changes Stopped to FetchOpcode immediately, preserving registers/IME/time/divider and retaining press/release pulses. Other execution states keep their CPU-state guarantees. All 414 tests pass, formatting and strict Clippy pass. No external ROM ran; #44 retains physical accuracy limits.
+
 Task: [#47](https://github.com/Lorithan/gameboy-emu/issues/47), next prerequisite of [#44](https://github.com/Lorithan/gameboy-emu/issues/44), following divider #46. Status: headless device/Bus/System input implemented by the user and verified 2026-11-18; all 401 tests pass. #47 is complete for this scope; STOP wake remains #44. User owns application implementation; assistant owns tests/docs/review. Completion evidence supersedes the incomplete-readback/input notes below.
 
 Specification baseline fa3183f: 390 passing tests (290 unit, 100 integration), formatting/strict Clippy passing. No emulator tests were rerun for the original documentation-only specification; later implementation evidence is recorded below.

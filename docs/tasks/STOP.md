@@ -1,5 +1,7 @@
 # STOP: core standby and device prerequisites
 
+Latest wake checkpoint, 2026-11-18: [#48 completion](STOP_WAKE.md#stop-wake-completion-verified---2026-11-18) verifies selected-input wake, retained pulses, resume PC, no input time/divider effects and subsequent ordinary interrupt entry. All 414 tests pass, formatting and strict Clippy pass. #48's deterministic scope is complete; #44 retains oscillator/edge/glitch accuracy limits. No external ROM ran. Earlier no-wake statements are historical.
+
 Latest conditional-entry checkpoint, 2026-11-18: [#48 entry evidence](STOP_WAKE.md#conditional-entry-completion-verified---2026-11-18) verifies the four selected-input/pending-interrupt branches, conditional PC padding, shared EI completion and divider reset only for actual STOP entry. All 409 tests pass, including 18 focused STOP-related tests; formatting, strict Clippy and whitespace checks pass. This replaces the earlier unconditional entry fallback. Host-input wake is the next user slice; #48/#44 stay open. No external ROM ran.
 
 Next proposed integration: [#48 selected-line entry and wake](STOP_WAKE.md), 2026-11-18. Begin with pure Joypad/Bus level queries; the new contract specifies conditional entry, mandatory CPU sampling and immediate zero-cycle input wake. It supersedes the unconditional two-byte STOP fallback only after implementation and verification. #44 remains open for hardware accuracy limits.

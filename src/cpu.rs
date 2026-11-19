@@ -314,6 +314,12 @@ impl CPU {
         }
     }
 
+    pub(crate) fn wake_from_stop_if(&mut self, wake: bool) {
+        if matches!(self.state, Stopped) && wake {
+            self.state = FetchOpcode;
+        }
+    }
+
     fn complete_cycle_inner(
         &mut self,
         response: CycleResponse,
