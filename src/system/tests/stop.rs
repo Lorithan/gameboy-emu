@@ -1,7 +1,7 @@
 use super::super::{InstructionStep, MachineStep, System};
 use crate::{
     cpu::{CycleAction, CycleOutcome, CycleRequest},
-    memory::Cartridge,
+    memory::{Button, Cartridge},
 };
 
 fn machine(bytes: &[u8]) -> System {
@@ -14,6 +14,150 @@ fn machine(bytes: &[u8]) -> System {
 
 fn memory(s: &System) -> Vec<u8> {
     (0u16..=65535).map(|addr| s.memory.read(addr)).collect()
+}
+
+#[test]
+fn conditional_stop_without_selected_input_or_pending_interrupt_enters_two_byte_stop() {
+    check_stop_entry(false, false, 2, true, false);
+}
+
+#[test]
+fn conditional_stop_without_selected_input_with_pending_interrupt_enters_one_byte_stop() {
+    check_stop_entry(false, true, 1, true, false);
+}
+
+#[test]
+fn conditional_stop_with_selected_input_without_pending_interrupt_enters_two_byte_halt() {
+    check_stop_entry(true, false, 2, false, true);
+}
+
+#[test]
+fn conditional_stop_with_selected_input_and_pending_interrupt_continues_after_one_byte() {
+    check_stop_entry(true, true, 1, false, false);
+}
+
+fn check_stop_entry(wake: bool, pending: bool, length: u16, stopped: bool, halted: bool) {
+    for selection in [0u8, 0x10, 0x20, 0x30] {
+        if wake && selection == 0x30 {
+            continue;
+        }
+        for delayed in [false, true] {
+            let program: &[u8] = if delayed {
+                &[0xFB, 0x10, 0, 0]
+            } else {
+                &[0x10, 0, 0]
+            };
+            let mut s = machine(program);
+            if delayed {
+                s.step_instruction(1).unwrap();
+            }
+            s.memory.write(0xFF00, selection);
+            // An unselected held button must not assert wake.
+            if wake {
+                let button = if selection == 0x20 {
+                    Button::Right
+                } else {
+                    Button::A
+                };
+                s.set_button(button, true);
+            } else if selection == 0x10 || selection == 0x30 {
+                s.set_button(Button::Right, true);
+            } else if selection == 0x20 {
+                s.set_button(Button::A, true);
+            }
+            // Overwrite generated joypad IF. Pending VBlank and upper IE
+            // bits verify that wake does not depend on joypad IE/IF.
+            s.memory.write(0xFFFF, 0xE1);
+            s.memory.write(0xFF0F, if pending { 1 } else { 0 });
+            let mut expected = s.cpu_snapshot();
+            let before_pc = expected.pc;
+            let ticks = s.elapsed_ticks();
+            let before_debug = format!("{:?}", s.cpu);
+            assert!(matches!(
+                s.step_instruction(0).unwrap(),
+                InstructionStep::BudgetExhausted {
+                    mcycles: 0,
+                    ticks: 0
+                }
+            ));
+            assert_eq!(format!("{:?}", s.cpu), before_debug);
+            let mut expected_memory = memory(&s);
+            if stopped {
+                expected_memory[0xFF04] = 0;
+            }
+            let trace = match s.step_machine_cycle().unwrap() {
+                MachineStep::Cycle(trace) => trace,
+                other => panic!("STOP fetch did not execute: {other:?}"),
+            };
+            assert_eq!(trace.record.action, CycleAction::Read { addr: before_pc });
+            assert_eq!(trace.record.read_value, Some(0x10));
+            assert_eq!(
+                (trace.record.tick_before, trace.record.tick_after),
+                (ticks, ticks + 4)
+            );
+            assert_eq!(
+                trace.outcome,
+                if stopped {
+                    CycleOutcome::StopEntered
+                } else {
+                    CycleOutcome::InstructionComplete
+                }
+            );
+            expected.pc = before_pc.wrapping_add(length);
+            assert_eq!(
+                s.cpu_snapshot(),
+                expected,
+                "wake {wake}, pending {pending}, selection {selection:02X}"
+            );
+            assert_eq!(s.cpu.test_interrupt_status(), (false, delayed));
+            assert_eq!(memory(&s), expected_memory);
+            assert_eq!(
+                s.cpu.request_cycle().unwrap(),
+                if stopped {
+                    CycleRequest::Stopped
+                } else if halted {
+                    CycleRequest::Execute(CycleAction::Idle)
+                } else {
+                    CycleRequest::Execute(CycleAction::Read { addr: expected.pc })
+                }
+            );
+            // With arbitration neutralized, HALT advances real clocks;
+            // STOP keeps DIV reset and produces no cycle at all.
+            s.memory.write(0xFFFF, 0);
+            if stopped {
+                for _ in 0..3 {
+                    assert!(matches!(
+                        s.step_machine_cycle().unwrap(),
+                        MachineStep::Stopped
+                    ));
+                }
+                assert_eq!(s.elapsed_ticks(), ticks + 4);
+                assert_eq!(s.memory.read(0xFF04), 0);
+            } else if halted {
+                for _ in 0..13 {
+                    let idle = match s.step_machine_cycle().unwrap() {
+                        MachineStep::Cycle(t) => t,
+                        other => panic!("HALT lost its clock: {other:?}"),
+                    };
+                    assert_eq!(idle.record.action, CycleAction::Idle);
+                    assert_eq!(idle.outcome, CycleOutcome::InProgress);
+                }
+                assert_eq!(s.cpu_snapshot(), expected);
+                assert_eq!(s.elapsed_ticks(), ticks + 56);
+                assert_eq!(s.memory.read(0xFF04), 0xAC);
+            } else {
+                assert!(matches!(
+                    s.step_instruction(1).unwrap(),
+                    InstructionStep::Complete {
+                        mcycles: 1,
+                        ticks: 4
+                    }
+                ));
+                expected.pc = expected.pc.wrapping_add(1);
+                assert_eq!(s.cpu_snapshot(), expected);
+            }
+        }
+    }
 }
 
 #[test]

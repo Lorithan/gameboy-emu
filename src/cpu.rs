@@ -15,7 +15,10 @@ use crate::{
     cpu::{
         opcode::*,
         registers::*,
-        state::{CycleTransition, ExecutionState, HaltBehavior, InterruptSelection, ReturnKind},
+        state::{
+            CycleTransition, ExecutionState, HaltBehavior, InterruptSelection, ReturnKind,
+            StopBehavior,
+        },
     },
     memory::Interrupt,
 };
@@ -245,10 +248,24 @@ impl CPU {
                 }
                 Ok(CycleOutcome::InstructionComplete)
             }
-            CycleTransition::StopFinished => {
-                self.state = Stopped;
-                Ok(CycleOutcome::StopEntered)
-            }
+            CycleTransition::StopFinished(behavior) => match behavior {
+                StopBehavior::Stop { skip_padding } => {
+                    if skip_padding {
+                        self.registers.increment_pc();
+                    }
+                    self.state = Stopped;
+                    Ok(CycleOutcome::StopEntered)
+                }
+                StopBehavior::Halt => {
+                    self.registers.increment_pc();
+                    self.state = Halted;
+                    Ok(CycleOutcome::InstructionComplete)
+                }
+                StopBehavior::Continue => {
+                    self.state = FetchOpcode;
+                    Ok(CycleOutcome::InstructionComplete)
+                }
+            },
             CycleTransition::Faulted(err) => {
                 self.state = Faulted(err);
                 Err(CpuError::UnsupportedOpcode(err))
@@ -302,7 +319,11 @@ impl CPU {
         response: CycleResponse,
     ) -> Result<CycleTransition, CpuError> {
         match self.state {
-            FetchOpcode => self.read_opcode(response.read_value()?, response.pending_interrupts()?),
+            FetchOpcode => self.read_opcode(
+                response.read_value()?,
+                response.pending_interrupts()?,
+                response.stop_wake_active()?,
+            ),
             DecodeCbOpcode => {
                 let value = response.read_value()?;
                 self.registers.increment_pc();
@@ -868,7 +889,12 @@ impl CPU {
         }
     }
 
-    fn read_opcode(&mut self, response: u8, pending: u8) -> Result<CycleTransition, CpuError> {
+    fn read_opcode(
+        &mut self,
+        response: u8,
+        pending: u8,
+        stop_wake_active: bool,
+    ) -> Result<CycleTransition, CpuError> {
         let opcode = DecodedOpcode::from(response);
 
         let op_addr = self.registers.pc;
@@ -1273,8 +1299,15 @@ impl CPU {
                 Ok(CycleTransition::HaltFinished(behavior))
             }
             DecodedOpcode::Stop => {
-                self.registers.increment_pc();
-                Ok(CycleTransition::StopFinished)
+                let interrupt_pending = pending & 0x1F != 0;
+                let behavior = match (stop_wake_active, interrupt_pending) {
+                    (false, pending) => StopBehavior::Stop {
+                        skip_padding: !pending,
+                    },
+                    (true, false) => StopBehavior::Halt,
+                    (true, true) => StopBehavior::Continue,
+                };
+                Ok(CycleTransition::StopFinished(behavior))
             }
             DecodedOpcode::Unknown => {
                 let fault = CpuFault {

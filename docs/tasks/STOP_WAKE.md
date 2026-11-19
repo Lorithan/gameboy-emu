@@ -1,6 +1,14 @@
 # Selected-line STOP entry and wake
 
-Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries and mandatory read sampling are implemented; conditional entry and host-input wake remain proposed work. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
+Task: [#48](https://github.com/Lorithan/gameboy-emu/issues/48), under [#44](https://github.com/Lorithan/gameboy-emu/issues/44). Divider #46 and headless JOYP #47 are complete. User owns application implementation; assistant owns tests/docs/review. Level queries, mandatory read sampling and conditional entry are implemented and verified; host-input wake remains the next slice. Original specification baseline was 03aff43 with 401 passing tests; slice evidence below supersedes it.
+
+## Conditional-entry completion verified - 2026-11-18
+
+User added the missing wrapping padding increment to the Halt completion arm. Fresh verification passes all 409 tests (308 unit, 101 integration), all 18 focused STOP-related tests, formatting, strict Clippy and whitespace checks. Assistant application logic changes: none. The failed-review notes below describe the previous intermediate state.
+
+CPU coverage now includes every pending-mask byte, both selected-line levels, all IME modes, PC wrapping, fetch suppression consumption, retry rejection and following actions across all four branches. Existing flags/register preservation tests now use conditional padding expectations. Four independent System tests cover real selected/unselected inputs, unrelated VBlank eligibility, upper IE noise, delayed EI, zero budgets, exact fetch/time/outcome, all mapped memory, actual-STOP-only divider reset, no-cycle stopped polling, retained HALT divider phase and continued fetch. These supply behavioral evidence for the previously structural System read-sample connection.
+
+This verifies the declared coarse DMG entry model, not oscillator startup, analog timing or power consumption. No external ROM was imported or run. #48/#44 remain open: System input still only updates Bus/IF, so selected input does not yet wake Stopped. Next: the guarded CPU transition and immediate input delivery described below, then pulse/IE/IME/purity/interrupt-entry acceptance. Preserve #47's CPU-state guarantees for other execution states and update its Stopped expectation explicitly.
 
 ## Read-sample slice review - 2026-11-18
 
@@ -29,6 +37,18 @@ The selected input level answers whether WAKE is active now. `JoypadEvent::Falli
 Propose adding mandatory `stop_wake_active: bool` to `CycleResponse::Read`, alongside value and pending_interrupts. System samples both signals after each bus read. Other read consumers ignore the wake sample. This keeps CPU independent of Bus and avoids optional data that could be missing at STOP completion. WriteDone/IdleDone and wrong-kind validation stay as they are. Assistant migrates test response builders with false as the ordinary default, then supplies explicit samples in STOP tests.
 
 ## Conditional entry
+
+### Conditional-entry acceptance review - 2026-11-18
+
+User implemented the three completion arms. Stop conditionally skips padding and emits StopEntered; Continue resumes FetchOpcode and emits InstructionComplete. Halt installs Halted/InstructionComplete but omits its unconditional padding increment. A selected held input with no pending eligible interrupt therefore leaves PC at P+1 instead of P+2. The required user fix is the shared wrapping PC increment in that arm; preserve existing shared EI promotion and divider event handling.
+
+Assistant migrated the old CPU unconditional-padding oracles, expanded CPU tests across all pending masks, both wake levels, IME modes, wrapping and fetch suppression, and added four separately runnable System branch tests. System cases exercise selected/unselected rows, unrelated VBlank pending flags, delayed EI, zero budgets, complete memory preservation, outcomes and real/no-cycle continuation; the HALT case will also check retained DIV phase after the PC assertion passes. Focused command cargo test --lib stop --quiet: 16 pass, two fail, both reproducing the omitted HALT-like padding increment. The other three System entry branches pass independently. Formatting, strict Clippy and whitespace checks pass. No full regression rerun with this known defect, no passing checkpoint claimed, no assistant application fix, no external ROM executed. #48/#44 remain open.
+
+### Behavior-selection review - 2026-11-18
+
+User implemented StopBehavior and its transition payload, threaded the Read wake sample into read_opcode and selected the documented branches using pending & 0x1F. Decode's unconditional padding increment is removed. Structural review agrees with the contract. The wrapper remains StopFinished(_) -> Stopped/StopEntered; it must consume the behavior before this slice is complete. Existing focused CPU STOP tests report one pass/two failures: ordinary no-pending entry now lacks its padding increment, and an old suppressed-fetch/pending test still expects unconditional padding. Assistant will migrate that obsolete oracle and add the full four-branch acceptance matrix when the wrapper is implemented. No full suite rerun or new passing checkpoint claimed; no assistant application edits or external ROM execution.
+
+The wrapper must conditionally skip padding for Stop, always skip for Halt and never skip for Continue. Install Stopped/StopEntered, Halted/InstructionComplete or FetchOpcode/InstructionComplete respectively. Preserve shared delayed-EI bookkeeping and the existing System reset hook, which only actual StopEntered triggers. These completion changes are the next user slice; host-input wake remains separate.
 
 The [Pan Docs STOP chart](https://raw.githubusercontent.com/gbdev/pandocs/master/src/imgs/stop_diagram.svg) distinguishes these DMG branches. The [CPU internals reference](https://gist.github.com/SonoSooS/c0055300670d678b5ae8433e20bea595) also describes the pending/no-WAKE branch as zombie mode. Translate them into this project's coarse model as follows:
 

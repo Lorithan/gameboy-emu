@@ -228,6 +228,13 @@ pub(super) enum HaltBehavior {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(super) enum StopBehavior {
+    Stop { skip_padding: bool },
+    Halt,
+    Continue,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CycleTransition {
     Continue(ExecutionState),
     InstructionFinished,
@@ -235,6 +242,6 @@ pub(super) enum CycleTransition {
     InterruptSelectionResolved { interrupt: InterruptSelection },
     InterruptEntryCancelled,
     HaltFinished(HaltBehavior),
-    StopFinished,
+    StopFinished(StopBehavior),
     Faulted(CpuFault),
 }
