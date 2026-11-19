@@ -164,7 +164,8 @@ fn every_unimplemented_address_ignores_writes_without_corrupting_storage() {
     bus.write(0xC000, 0x35);
     bus.write(0xDFFF, 0x76);
     for address in 0u16..=u16::MAX {
-        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFF | 0xFF0F) {
+        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFF | 0xFF04 | 0xFF0F)
+        {
             continue;
         }
         assert_eq!(bus.read(address), 0xFF, "address {address:#06X}");
@@ -193,6 +194,7 @@ fn full_address_space_routes_to_expected_storage() {
             0xC000..=0xDFFF => expected_ram[usize::from(address - 0xC000)],
             0xE000..=0xFDFF => expected_ram[usize::from(address - 0xE000)],
             0xFF80..=0xFFFE => expected_hram[usize::from(address - 0xFF80)],
+            0xFF04 => 0xAB,
             0xFF0F => 0xE1,
             0xFFFF => 0,
             _ => 0xFF,
@@ -209,6 +211,68 @@ fn bus_instances_do_not_share_work_ram() {
     assert_eq!(first.read(0xE000), 0x35);
     assert_eq!(second.read(0xC000), 0);
     assert_eq!(second.read(0xE000), 0);
+}
+
+#[test]
+fn divider_bus_advances_four_base_ticks_per_cycle_and_is_instance_local() {
+    let (mut first, _) = fixture();
+    let (second, _) = fixture();
+    assert_eq!(first.read(0xFF04), 0xAB);
+    for mcycles in 0u32..=16_384 {
+        let expected = ((43_976 + mcycles * 4) % 65_536 / 256) as u8;
+        for _ in 0..2 {
+            assert_eq!(first.read(0xFF04), expected, "cycle {mcycles}");
+        }
+        assert_eq!(second.read(0xFF04), 0xAB);
+        if mcycles < 16_384 {
+            first.advance_mcycle();
+        }
+    }
+    first.write(0xFF04, 0xA5);
+    assert_eq!(first.read(0xFF04), 0);
+    assert_eq!(second.read(0xFF04), 0xAB);
+}
+
+#[test]
+fn divider_bus_resets_phase_and_preserves_every_other_address() {
+    let (mut bus, _) = fixture();
+    bus.write(0xC123, 0x35);
+    bus.write(0xFF80, 0xA6);
+    bus.write(0xFF0F, 0x15);
+    bus.write(0xFFFF, 0xA7);
+    let before: Vec<_> = (0u16..=65535).map(|addr| bus.read(addr)).collect();
+    for value in 0u8..=255 {
+        for _ in 0..63 {
+            bus.advance_mcycle();
+        }
+        bus.write(0xFF04, value);
+        assert_eq!(bus.read(0xFF04), 0);
+        for _ in 0..63 {
+            bus.advance_mcycle();
+        }
+        assert_eq!(bus.read(0xFF04), 0);
+        bus.advance_mcycle();
+        assert_eq!(bus.read(0xFF04), 1);
+        // Enter STOP with a nonzero hidden phase to verify this forwarding
+        // operation also clears more than the visible upper byte.
+        bus.advance_mcycle();
+        bus.on_stop_entered();
+        assert_eq!(bus.read(0xFF04), 0);
+        for _ in 0..63 {
+            bus.advance_mcycle();
+        }
+        assert_eq!(bus.read(0xFF04), 0);
+        bus.advance_mcycle();
+        assert_eq!(bus.read(0xFF04), 1);
+    }
+    for addr in 0u16..=65535 {
+        let expected = if addr == 0xFF04 {
+            1
+        } else {
+            before[usize::from(addr)]
+        };
+        assert_eq!(bus.read(addr), expected, "address {addr:04X}");
+    }
 }
 
 #[test]

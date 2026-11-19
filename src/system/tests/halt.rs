@@ -1,4 +1,5 @@
 use super::super::{InstructionStep, System};
+use super::divider_oracle::clocked_byte;
 use crate::step_support::expect_cycle;
 use crate::{
     cpu::{CycleAction, CycleOutcome},
@@ -56,7 +57,10 @@ fn halt_completes_once_then_bounded_idles_preserve_state_and_memory() {
         assert_eq!(t.outcome, CycleOutcome::InProgress);
         assert_eq!(s.elapsed_ticks() - start, 52);
         for addr in 0u16..=65535 {
-            assert_eq!(s.memory.read(addr), memory[usize::from(addr)]);
+            assert_eq!(
+                s.memory.read(addr),
+                clocked_byte(memory[usize::from(addr)], addr, s.elapsed_ticks())
+            );
         }
     }
 }

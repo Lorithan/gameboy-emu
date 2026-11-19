@@ -23,7 +23,8 @@ fn stop_entry_has_one_read_then_no_cycle_polls_and_preserves_all_memory() {
     for padding in [0, 4, 0xD3, 0xFF] {
         let mut s = machine(&[0x10, padding, 0x04]);
         let mut expected = s.cpu_snapshot();
-        let original_memory = memory(&s);
+        let mut original_memory = memory(&s);
+        original_memory[0xFF04] = 0; // STOP resets DIV; other memory is preserved.
         let trace = match s.step_machine_cycle().unwrap() {
             MachineStep::Cycle(trace) => trace,
             other => panic!("STOP entry must execute a cycle, got {other:?}"),
@@ -221,7 +222,8 @@ fn stop_opcode_and_padding_pc_wrap_across_hram_ie_and_rom() {
             }
         ));
         let mut expected = s.cpu_snapshot();
-        let before_memory = memory(&s);
+        let mut before_memory = memory(&s);
+        before_memory[0xFF04] = 0;
         assert_eq!(expected.pc, pc);
         assert!(matches!(
             s.step_instruction(100).unwrap(),

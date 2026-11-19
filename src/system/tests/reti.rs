@@ -1,4 +1,5 @@
 use super::super::{InstructionStep, System};
+use super::divider_oracle::clocked_byte;
 use crate::response_support::expect_execute;
 use crate::step_support::expect_cycle;
 use crate::{
@@ -108,7 +109,10 @@ fn reti_bus_reads_exact_traces_and_all_budget_resumes_preserve_memory() {
             );
             assert_eq!(s.elapsed_ticks(), 28);
             for addr in 0u16..=65535 {
-                assert_eq!(s.memory.read(addr), original[usize::from(addr)]);
+                assert_eq!(
+                    s.memory.read(addr),
+                    clocked_byte(original[usize::from(addr)], addr, s.elapsed_ticks())
+                );
             }
         }
     }

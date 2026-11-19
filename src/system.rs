@@ -100,6 +100,7 @@ impl System {
         let mut read_value = None;
 
         self.elapsed_ticks += 4;
+        self.memory.advance_mcycle();
 
         let outcome = match action {
             crate::cpu::CycleAction::Idle => self.cpu.complete_cycle(CycleResponse::IdleDone),
@@ -138,6 +139,9 @@ impl System {
                 let trace = CycleTrace { record, outcome };
                 if let CycleOutcome::InterruptSelected { interrupt } = outcome {
                     self.memory.acknowledge_interrupt(interrupt);
+                }
+                if matches!(outcome, CycleOutcome::StopEntered) {
+                    self.memory.on_stop_entered();
                 }
                 Ok(MachineStep::Cycle(trace))
             }

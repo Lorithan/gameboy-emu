@@ -1,9 +1,12 @@
 mod cartridge;
 mod interrupts;
+mod timer;
 
 pub use cartridge::Cartridge;
 pub use interrupts::Interrupt;
 use interrupts::InterruptController;
+
+use crate::memory::timer::Timer;
 
 #[cfg(test)]
 mod tests;
@@ -13,6 +16,7 @@ pub struct Bus {
     ram: [u8; 8 * 1024],
     hram: [u8; 0x7F],
     interrupt_controller: InterruptController,
+    timer: Timer,
 }
 
 impl Bus {
@@ -22,6 +26,7 @@ impl Bus {
             ram: [0; 8 * 1024],
             hram: [0; 0x7F],
             interrupt_controller: InterruptController::post_boot(),
+            timer: Timer::dmg_post_boot(),
         }
     }
 
@@ -33,6 +38,7 @@ impl Bus {
             }
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize],
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize],
+            0xFF04 => self.timer.read_div(),
             0xFF0F => self.interrupt_controller.read_flag(),
             0xFFFF => self.interrupt_controller.read_enable(),
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
@@ -44,6 +50,7 @@ impl Bus {
         match addr {
             0xC000..=0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize] = value,
+            0xFF04 => self.timer.write_div(value),
             0xFF0F => self.interrupt_controller.write_flag(value),
             0xFFFF => self.interrupt_controller.write_enable(value),
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = value,
@@ -65,5 +72,15 @@ impl Bus {
 
     pub(crate) fn pending_interrupts(&self) -> u8 {
         self.interrupt_controller.pending_interrupts()
+    }
+
+    pub(crate) fn advance_mcycle(&mut self) {
+        for _ in 0..4 {
+            self.timer.tick();
+        }
+    }
+
+    pub(crate) fn on_stop_entered(&mut self) {
+        self.timer.on_stop_entered();
     }
 }

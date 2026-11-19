@@ -1,3 +1,4 @@
+use super::divider_oracle::clocked_byte;
 use crate::outcome_support::instruction_complete;
 use crate::step_support::expect_cycle;
 
@@ -54,7 +55,7 @@ fn cb_memory_variants_change_only_completed_target_and_echo_alias() {
                     for addr in 0u16..=65535 {
                         assert_eq!(
                             system.memory.read(addr),
-                            expected[usize::from(addr)],
+                            clocked_byte(expected[usize::from(addr)], addr, system.elapsed_ticks()),
                             "CB {opcode:02X}, target {target:04X}, phase {phase}, changed {addr:04X}"
                         );
                     }

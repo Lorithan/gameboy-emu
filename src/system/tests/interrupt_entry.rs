@@ -1,4 +1,5 @@
 use super::super::{InstructionStep, System, SystemError};
+use super::divider_oracle::clocked_byte;
 use crate::step_support::expect_cycle;
 use crate::{
     cpu::{CpuError, CycleAction, CycleOutcome},
@@ -122,7 +123,11 @@ fn interrupt_entry_exact_traces_budgets_and_full_memory_effects() {
                     for addr in 0u16..=65535 {
                         assert_eq!(
                             s.memory.read(addr),
-                            expected_memory[usize::from(addr)],
+                            clocked_byte(
+                                expected_memory[usize::from(addr)],
+                                addr,
+                                s.elapsed_ticks()
+                            ),
                             "SP {sp:04X} budget {budget} phase {phase} address {addr:04X}"
                         );
                     }

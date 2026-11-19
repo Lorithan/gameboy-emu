@@ -3,7 +3,7 @@
 
 STOP (10) now passes eight focused core-standby tests and the full 379-test suite (279 unit, 100 integration). Coverage is 244/244 legal non-prefix base plus 256/256 CB = 500/500 encodings. The CB dispatch byte is not a standalone instruction; eleven invalid base slots remain excluded. Decoder/protocol/EI/fault regressions retain their oracles with STOP's new completion event. See [completion evidence](tasks/STOP.md#core-standby-completion-verified---2026-11-18).
 
-This is implemented/tested encoding coverage for the declared scope. STOP uses the documented core approximation and has no emulated wake path yet; divider reset, selected JOYP wake and conditional/edge behavior remain #44. No external ROM suite ran and M2's ROM-validation gate remains open. Earlier remaining-STOP/HALT counts below are historical.
+This is implemented/tested encoding coverage for the declared scope. STOP uses the documented core approximation and has no emulated wake path yet. Divider reset/pause is now verified under #46 with the full 390-test suite; selected JOYP wake and conditional/edge behavior remain #44. No external ROM suite ran and M2's ROM-validation gate remains open. Earlier remaining-STOP/HALT counts below are historical.
 
 ## Current HALT checkpoint - 2026-11-18
 

@@ -4,9 +4,13 @@ use crate::step_support::expect_cycle;
 
 mod cb_integration;
 mod di_ei;
+mod divider;
+mod divider_oracle;
 mod halt;
 mod reti;
 mod stop;
+
+use divider_oracle::clocked_byte;
 
 use super::System;
 use crate::{cpu::CpuSnapShot, memory::Cartridge};
@@ -58,7 +62,10 @@ fn restarts_write_only_the_return_word_across_bus_boundaries_and_pauses() {
                     }
                 }
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), memory[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(memory[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
                 expected.pc = match budget {
                     0 => 0x0103,
@@ -124,7 +131,14 @@ fn conditional_returns_preserve_all_memory_and_obey_stack_bus_boundaries() {
                     let mut expected = system.cpu_snapshot();
                     system.step_instruction(budget).unwrap();
                     for addr in 0u16..=65535 {
-                        assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                        assert_eq!(
+                            system.memory.read(addr),
+                            clocked_byte(
+                                memory_before[usize::from(addr)],
+                                addr,
+                                system.elapsed_ticks()
+                            )
+                        );
                     }
                     if budget < cycles {
                         system.step_instruction(100).unwrap();
@@ -136,7 +150,14 @@ fn conditional_returns_preserve_all_memory_and_obey_stack_bus_boundaries() {
                     assert_eq!(system.cpu_snapshot(), expected);
                     assert_eq!(system.elapsed_ticks(), 28 + cycles * 4);
                     for addr in 0u16..=65535 {
-                        assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                        assert_eq!(
+                            system.memory.read(addr),
+                            clocked_byte(
+                                memory_before[usize::from(addr)],
+                                addr,
+                                system.elapsed_ticks()
+                            )
+                        );
                     }
                 }
             }
@@ -201,7 +222,11 @@ fn call_writes_only_return_bytes_at_the_correct_pause_and_ret_preserves_memory()
                     for addr in 0u16..=65535 {
                         assert_eq!(
                             system.memory.read(addr),
-                            expected_memory[usize::from(addr)],
+                            clocked_byte(
+                                expected_memory[usize::from(addr)],
+                                addr,
+                                system.elapsed_ticks()
+                            ),
                             "CALL {byte:02X}, equal {equal}, SP {sp:04X}, budget {budget}, memory {addr:04X}"
                         );
                     }
@@ -233,7 +258,14 @@ fn call_writes_only_return_bytes_at_the_correct_pause_and_ret_preserves_memory()
                         expected.sp = sp;
                         assert_eq!(system.cpu_snapshot(), expected);
                         for addr in 0u16..=65535 {
-                            assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+                            assert_eq!(
+                                system.memory.read(addr),
+                                clocked_byte(
+                                    memory_before[usize::from(addr)],
+                                    addr,
+                                    system.elapsed_ticks()
+                                )
+                            );
                         }
                     }
                 }
@@ -272,7 +304,14 @@ fn ret_without_a_prior_call_reads_ordinary_bus_data_and_never_writes() {
         assert_eq!(system.cpu_snapshot(), expected);
         assert_eq!(system.elapsed_ticks(), 28);
         for addr in 0u16..=65535 {
-            assert_eq!(system.memory.read(addr), memory_before[usize::from(addr)]);
+            assert_eq!(
+                system.memory.read(addr),
+                clocked_byte(
+                    memory_before[usize::from(addr)],
+                    addr,
+                    system.elapsed_ticks()
+                )
+            );
         }
     }
 }
@@ -332,7 +371,11 @@ fn stack_cycles_obey_bus_mapping_and_preserve_other_memory_at_every_pause() {
                 for addr in 0u16..=65535 {
                     assert_eq!(
                         system.memory.read(addr),
-                        expected_memory[usize::from(addr)],
+                        clocked_byte(
+                            expected_memory[usize::from(addr)],
+                            addr,
+                            system.elapsed_ticks()
+                        ),
                         "pair {pair}, SP {sp:04X}, budget {budget}, addr {addr:04X}"
                     );
                 }
@@ -364,7 +407,11 @@ fn stack_cycles_obey_bus_mapping_and_preserve_other_memory_at_every_pause() {
                 for addr in 0u16..=65535 {
                     assert_eq!(
                         system.memory.read(addr),
-                        memory_before_pop[usize::from(addr)]
+                        clocked_byte(
+                            memory_before_pop[usize::from(addr)],
+                            addr,
+                            system.elapsed_ticks()
+                        )
                     );
                 }
             }
@@ -752,7 +799,10 @@ fn system_uses_nonzero_checksum_boot_flags() {
 fn system_moves_the_validated_cartridge_into_its_bus_unchanged() {
     let (system, rom) = construct_system(0, 0xE7);
     for address in 0u16..=0x7FFF {
-        assert_eq!(system.memory.read(address), rom[usize::from(address)]);
+        assert_eq!(
+            system.memory.read(address),
+            clocked_byte(rom[usize::from(address)], address, system.elapsed_ticks())
+        );
     }
 }
 
@@ -923,7 +973,7 @@ fn logic_preserves_the_entire_bus_through_every_budget_pause() {
                 for addr in 0u16..=65535 {
                     assert_eq!(
                         system.memory.read(addr),
-                        memory[usize::from(addr)],
+                        clocked_byte(memory[usize::from(addr)], addr, system.elapsed_ticks()),
                         "opcode {:02X} budget {budget} addr {addr:04X}",
                         rom[0x0100]
                     );
@@ -932,7 +982,10 @@ fn logic_preserves_the_entire_bus_through_every_budget_pause() {
                 if budget < cycles {
                     system.step_instruction(100).unwrap();
                     for addr in 0u16..=65535 {
-                        assert_eq!(system.memory.read(addr), memory[usize::from(addr)]);
+                        assert_eq!(
+                            system.memory.read(addr),
+                            clocked_byte(memory[usize::from(addr)], addr, system.elapsed_ticks())
+                        );
                     }
                 }
             }
@@ -959,7 +1012,10 @@ fn complement_carry_preserve_all_memory_and_mapped_aliases() {
         for budget in [0, 1] {
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
         }
     }
@@ -984,7 +1040,10 @@ fn accumulator_rotates_leave_all_memory_unchanged() {
         for budget in [0, 1] {
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
         }
     }
@@ -1016,7 +1075,10 @@ fn decimal_adjust_preserves_every_memory_location_in_both_modes() {
         for budget in [0, 1] {
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
         }
     }
@@ -1041,12 +1103,18 @@ fn word_inc_dec_preserve_all_memory_through_budget_pauses() {
                 .collect();
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
             if budget < 2 {
                 system.step_instruction(100).unwrap();
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
             }
         }
@@ -1072,12 +1140,18 @@ fn word_add_preserves_all_memory_across_every_pause() {
                 .collect();
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
             if budget < 2 {
                 system.step_instruction(100).unwrap();
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
             }
         }
@@ -1104,12 +1178,18 @@ fn signed_sp_operations_preserve_all_memory_at_every_pause() {
                     .collect();
                 system.step_instruction(budget).unwrap();
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
                 if budget < cycles {
                     system.step_instruction(100).unwrap();
                     for addr in 0u16..=65535 {
-                        assert_eq!(system.memory.read(addr), before[usize::from(addr)]);
+                        assert_eq!(
+                            system.memory.read(addr),
+                            clocked_byte(before[usize::from(addr)], addr, system.elapsed_ticks())
+                        );
                     }
                 }
             }
@@ -1165,7 +1245,14 @@ fn indirect_pair_transfers_only_change_permitted_store_bytes_and_echo_aliases() 
                         }
                     }
                     for address in 0u16..=65535 {
-                        assert_eq!(system.memory.read(address), expected[usize::from(address)]);
+                        assert_eq!(
+                            system.memory.read(address),
+                            clocked_byte(
+                                expected[usize::from(address)],
+                                address,
+                                system.elapsed_ticks()
+                            )
+                        );
                     }
                     if phase < 2 {
                         system.step_instruction(100).unwrap();
@@ -1219,7 +1306,14 @@ fn hl_auto_update_preserves_memory_except_permitted_store_and_echo_bytes() {
                         }
                     }
                     for address in 0u16..=65535 {
-                        assert_eq!(system.memory.read(address), expected[usize::from(address)]);
+                        assert_eq!(
+                            system.memory.read(address),
+                            clocked_byte(
+                                expected[usize::from(address)],
+                                address,
+                                system.elapsed_ticks()
+                            )
+                        );
                     }
                     if phase < 2 {
                         system.step_instruction(100).unwrap();
@@ -1271,7 +1365,14 @@ fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
                         }
                     }
                     for address in 0u16..=65535 {
-                        assert_eq!(system.memory.read(address), expected[usize::from(address)]);
+                        assert_eq!(
+                            system.memory.read(address),
+                            clocked_byte(
+                                expected[usize::from(address)],
+                                address,
+                                system.elapsed_ticks()
+                            )
+                        );
                     }
                     if phase < 4 {
                         system.step_instruction(100).unwrap();
@@ -1319,7 +1420,10 @@ fn ldh_only_changes_mapped_hram_at_final_store_completion() {
                         expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
                     }
                     for addr in 0u16..=65535 {
-                        assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                        assert_eq!(
+                            system.memory.read(addr),
+                            clocked_byte(expected[usize::from(addr)], addr, system.elapsed_ticks())
+                        );
                     }
                     if phase < cycles {
                         system.step_instruction(100).unwrap();
@@ -1350,12 +1454,18 @@ fn load_sp_from_hl_preserves_all_memory_at_every_pause() {
                 .collect();
             system.step_instruction(budget).unwrap();
             for addr in 0u16..=65535 {
-                assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                assert_eq!(
+                    system.memory.read(addr),
+                    clocked_byte(expected[usize::from(addr)], addr, system.elapsed_ticks())
+                );
             }
             if budget < 2 {
                 system.step_instruction(100).unwrap();
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(expected[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
             }
         }
@@ -1411,7 +1521,10 @@ fn store_sp_absolute_changes_only_each_completed_mapped_byte_and_aliases() {
                     }
                 }
                 for addr in 0u16..=65535 {
-                    assert_eq!(system.memory.read(addr), expected[usize::from(addr)]);
+                    assert_eq!(
+                        system.memory.read(addr),
+                        clocked_byte(expected[usize::from(addr)], addr, system.elapsed_ticks())
+                    );
                 }
                 if phase < 5 {
                     system.step_instruction(100).unwrap();

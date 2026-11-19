@@ -167,7 +167,9 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 let mapped = (0x80..=0xFF).contains(&offset);
                 assert_eq!(
                     system.cpu_snapshot().af,
-                    u16::from(if offset == 0x0F {
+                    u16::from(if offset == 0x04 {
+                        0 // A DIV write resets the counter instead of storing the byte.
+                    } else if offset == 0x0F {
                         value | 0xE0
                     } else if mapped {
                         value
@@ -182,7 +184,9 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 complete(&mut system, 1);
                 assert_eq!(
                     system.cpu_snapshot().af,
-                    u16::from(if offset == 0x0F {
+                    u16::from(if offset == 0x04 {
+                        0
+                    } else if offset == 0x0F {
                         (255 - value) | 0xE0
                     } else if mapped {
                         255 - value

@@ -1,6 +1,6 @@
 # Divider clock and STOP reset
 
-Task: [#46](https://github.com/Lorithan/gameboy-emu/issues/46), first prerequisite of [#44](https://github.com/Lorithan/gameboy-emu/issues/44), targeting the M3 timer foundation. Status: proposed contract, 2026-11-18; application implementation has not started. User owns application changes; assistant owns tests, documentation and review.
+Task: [#46](https://github.com/Lorithan/gameboy-emu/issues/46), first prerequisite of [#44](https://github.com/Lorithan/gameboy-emu/issues/44), targeting the M3 timer foundation. Status: divider/Bus/System integration implemented by the user and verified on 2026-11-18. All 390 tests pass. User owns application changes; assistant owns tests, documentation and review. Earlier proposed/pending notes below describe prior slices.
 
 Baseline: current main has documentation through 676f330; the last emulator checkpoint is 6df35c5 with 379 passing tests (279 unit, 100 integration), formatting and strict Clippy passing. No emulator tests were rerun for this planning task. M2's ROM gate remains open; the user selected these STOP prerequisites as current work.
 
@@ -92,3 +92,23 @@ Acceptance cases:
 - [Pan Docs shared counter](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_Obscure_Behaviour.md): DIV as visible system-counter state and the future edge-sensitive timer/audio connections.
 - [Pan Docs startup table](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md): visible AB for normal DMG, distinct from DMG0.
 - [Mooneye boot_div-dmgABCmgb](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/boot_div-dmgABCmgb.s) and [common header](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/common/common.s): MIT-licensed source, DMG ABC phase/result reference. Source version and expected values are recorded here; no external source/binary fixture was copied or executed.
+
+## Timer and Bus review - 2026-11-18
+
+User implemented the private counter, ABC8 constructor, wrapping base tick, upper-byte read, full reset operations, FF04 mapping and Bus advance/STOP-entry forwarding. Assistant added four Timer tests and two Bus tests. All six pass: exhaustive counter reads/ticks/reset phases, all reset byte values, 255/256-tick boundaries, sourced startup vectors, four ticks per Bus M-cycle, instance isolation and preservation of every other address.
+
+The full run passed 384 tests (285 unit, 99 integration) and found one stale all-offset LDH oracle that still expected FF04 to be unmapped. Assistant corrected its read-after-reset expectation to zero; both LDH tests then pass. Full suite was not repeated after that test-only migration. Existing Bus mapping/unmapped-address oracles now include DIV. Library check, formatting and whitespace checks pass. Clippy reports only unused clock/STOP hooks in production; strict warnings-as-errors cannot pass until System calls them. No allowances were added. No external ROM ran.
+
+System currently advances elapsed_ticks only; it neither clocks Bus nor forwards StopEntered. Next user slice: call memory.advance_mcycle once for a real cycle after the stopped/request-error guard and before the bus action; forward memory.on_stop_entered on the successful StopEntered event after CPU completion. Preserve interrupt acknowledgment and existing cycle counts. Assistant will then verify System phase/reset/pause behavior and migrate time-dependent memory oracles. #46 and #44 remain open.
+
+## Divider completion verified - 2026-11-18
+
+System now calls advance_mcycle after accepting a real cycle and before its bus action, then forwards StopEntered after successful CPU completion. No clock/reset calls occur on stopped/request-error returns. Counter ownership, FF04 mapping and the model-calibrated ABC8 startup remain as specified. No application behavior was changed by the assistant.
+
+All 11 focused divider tests pass (four Timer, two Bus, five System). Fresh full suite passes all 390 tests (290 unit, 100 integration); formatting, strict Clippy and whitespace checks pass, with the previously unused hooks now used in production. No allowances, dependencies or external fixtures were added. No external ROM suite ran.
+
+The new System tests execute an original synthetic version of the six boot-DIV read spacings and observe the expected values at cycles 14/78/141/205/269/334. They also cover partial/resumed DIV writes, lower-phase reset and 64-cycle restart, HALT clocking, a DIV transition positioned in each of the five interrupt-entry phases, STOP entry/polling and zero/large budgets, completion versus sticky request errors, and test-controlled phase checks proving stopped polls neither advance nor reset again.
+
+Existing full-memory oracles now compute the expected DIV byte from the specified startup phase and checked elapsed time in programs without DIV reset or STOP. Every other address retains its original expected value and diagnostics. STOP oracles expect DIV zero explicitly; the all-offset LDH oracle expects reset-on-write. This is an I/O-oracle migration, not a broad exclusion of device memory.
+
+#46 is complete for the counter/FF04/STOP-reset foundation. #44 remains open for headless JOYP input and STOP wake, held-input/pending-at-entry branches and finer timing. TIMA/TMA/TAC, timer interrupts and audio effects remain separate contracts. ABC8 remains a translation into this coarse timing convention, not an external-ROM or physical-edge accuracy claim. Next planning work is the JOYP device/input contract before user implementation; #45 stays deferred and M2's external-validation gate remains open.

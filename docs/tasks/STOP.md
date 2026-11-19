@@ -2,7 +2,7 @@
 
 Core task: [#43](https://github.com/Lorithan/gameboy-emu/issues/43), M2. Device follow-up: [#44](https://github.com/Lorithan/gameboy-emu/issues/44), dependent on M3 divider/timer and M4 joypad work.
 
-Status: core standby implemented by the user and acceptance verified on 2026-11-18. The padding-increment review finding is resolved; all 379 tests pass. #43 is complete for this declared approximation. Divider/joypad and finer STOP behavior remain #44. User owns application implementation; assistant owns tests, documentation and review. Historical proposal/review notes below are superseded by completion evidence.
+Status: core standby implemented and verified under #43, followed by divider reset/pause under #46 on 2026-11-18. Latest suite: all 390 tests pass. Joypad wake and finer STOP behavior remain #44. User owns application implementation; assistant owns tests, documentation and review. Historical proposal/review notes below are superseded by completion evidence.
 
 Baseline: published b9c765e, 371 previously passing tests (271 unit, 100 integration), formatting and strict Clippy passing. STOP is currently unsupported; coverage remains 243/244 legal non-prefix base plus all 256 CB encodings. No emulator tests were rerun for this documentation-only proposal.
 
@@ -111,6 +111,8 @@ User clarified that #44 is the current focus; external ROM runner proposal #45 i
 Acceptance should show FF04 phase/wrap/reset, HALT continuing divider clocks, STOP resetting/pausing once, host input delivery without elapsed-time movement, selected versus unselected buttons, joypad requests independent of IME/IE gating, and normal resumed execution/entry. Review held inputs and eligible interrupts at STOP entry against the hardware branch diagram before claiming those cases or closing #44. The current always-standby decoder must eventually be revisited for those conditional cases; bolting on a generic resume method is insufficient.
 
 Additional primary references: [joypad register](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Joypad_Input.md), [joypad interrupt](https://github.com/gbdev/pandocs/blob/master/src/Interrupt_Sources.md#int-60--joypad-interrupt), [shared counter and timer edges](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Timer_Obscure_Behaviour.md). No application changes, fixtures or new test run accompany this roadmap.
+
+Divider prerequisite #46 is now implemented and verified: System advances devices for the STOP opcode cycle, resets the counter once after StopEntered, and advances nothing on later stopped polls. All 390 tests pass, including 11 divider tests; [evidence](DIVIDER.md#divider-completion-verified---2026-11-18). This completes the roadmap's divider slice only. JOYP/input/wake and conditional STOP cases still require their contracts; no external ROM ran.
 
 ## CycleRequest migration review - 2026-11-18
 
