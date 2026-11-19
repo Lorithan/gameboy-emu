@@ -1,0 +1,51 @@
+{
+  "suite": "Gekkio/mooneye-test-suite",
+  "source_revision": "31510e12eea6286d36eea060a6adde755e1067aa",
+  "shared_provenance_manifest": "mooneye-reg-f.json",
+  "archive_sha256": "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+  "verification": "Each ROM and symbol file matches its pinned official ZIP entry; all font regions match the pinned source asset identified in the shared manifest",
+  "target": "DMG, current skipped-boot startup; tests explicitly initialize relevant IF/IE or DIV state",
+  "rom_format": "All are 32768 bytes, cartridge/ROM-size/RAM-size codes zero, header checksum 2d",
+  "components": "Same suite MIT notice, Darkrose font attribution and distribution limits as shared_provenance_manifest; no binaries committed",
+  "expected": {
+    "outcome": "Passed",
+    "ff01_packet_and_b_c_d_e_h_l": [3, 5, 8, 13, 21, 34],
+    "mcycle_limit_per_fixture": 1000000,
+    "host_time_limit_seconds_per_fixture": 10
+  },
+  "fixtures": [
+    {
+      "id": "if_ie_registers",
+      "source_path": "acceptance/if_ie_registers.s",
+      "rom_path": "acceptance/if_ie_registers.gb",
+      "sha256": "d055b2b4c44902cf827296a06b17cea4f2c84f6b7d540c777cb1d1049ef35e61",
+      "symbols_sha256": "b6a386f698b9c1a768e7393cc60baaba0299e24612a826d8f2422fa3bcc484ab",
+      "checks": "IF upper bits, IE gating, software serial request, acknowledgment and RETI"
+    },
+    {
+      "id": "ie_push",
+      "source_path": "acceptance/interrupts/ie_push.s",
+      "rom_path": "acceptance/interrupts/ie_push.gb",
+      "sha256": "f80df1b48ca2f81d4ec43b9c66be5f0b30f0d409603d256cc5c7cfc6241c0120",
+      "symbols_sha256": "3da386c1bce0f8be024069970ff3b9f72cf568ecefad1a7d46287a4794dc932a",
+      "checks": "Upper-write cancellation/vector zero/IF preservation, IME after cancellation, lower-write too-late cancellation, changed source priority",
+      "ppu_note": "disable_ppu_safe waits through bounded 65536-iteration LY timeout with fallback FF; approximately 851968 M-cycles in the loop, inside the declared budget"
+    },
+    {
+      "id": "ei_sequence",
+      "source_path": "acceptance/ei_sequence.s",
+      "rom_path": "acceptance/ei_sequence.gb",
+      "sha256": "dcd7f37e8fe7d8eb38cab6732a5826e0bb0278fd1e1d9e297c28d205da1b69e1",
+      "symbols_sha256": "b0f25eb4e2a61008b96bf660707f36574ec7d90732ed909b868889dc80edb574",
+      "checks": "Consecutive EI instructions and buffered interrupt return address 01a2"
+    },
+    {
+      "id": "div_timing",
+      "source_path": "acceptance/div_timing.s",
+      "rom_path": "acceptance/div_timing.gb",
+      "sha256": "382a9cd42a60ef0a3f03ef834d476a32907f1b3a42b40de5bd3d9705ae9a9734",
+      "symbols_sha256": "1c00d01e324cbe2a45f531b586c6f77a2b28f2dd9199c9d8c6308c7be1288d9c",
+      "checks": "DIV increment boundary and reset of its hidden counter"
+    }
+  ]
+}

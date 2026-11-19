@@ -1,4 +1,8 @@
 # Opcode coverage
+## Five external fixture results - 2026-11-18
+
+[The audited CPU subset](tasks/MOONEYE_CPU_SUBSET.md) adds passing if_ie_registers, interrupts/ie_push, ei_sequence and div_timing to reg_f. All 430 tests pass with real fixtures explicitly included, formatting and strict Clippy pass. Encoding implementation remains 500/500; this improves specific independent interrupt/divider evidence without establishing all arithmetic or instruction timing. M2 remains open for #51's completion/coverage review.
+
 ## First external ROM evidence - 2026-11-18
 
 [Pinned Mooneye reg_f](tasks/MOONEYE_REG_F.md) passed in 3,946 M-cycles / 15,784 ticks. All 426 tests pass when explicitly including the external fixture, formatting and strict Clippy pass. This adds independent F-mask/stack/register-path evidence; it does not establish full CPU accuracy or close M2. Implemented encoding coverage remains 500/500. #50 selects the next audited subset; earlier no-external-ROM statements are historical.

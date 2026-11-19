@@ -24,11 +24,49 @@ fn mooneye_reg_f_external() {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("target/test-roms/mooneye/acceptance/bits/reg_f.gb")
         });
+    assert_external_pass(&path);
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-subset.ps1"]
+fn mooneye_cpu_if_ie_registers() {
+    run_cpu_fixture("acceptance/if_ie_registers.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-subset.ps1"]
+fn mooneye_cpu_ie_push() {
+    run_cpu_fixture("acceptance/interrupts/ie_push.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-subset.ps1"]
+fn mooneye_cpu_ei_sequence() {
+    run_cpu_fixture("acceptance/ei_sequence.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-subset.ps1"]
+fn mooneye_cpu_div_timing() {
+    run_cpu_fixture("acceptance/div_timing.gb");
+}
+
+fn run_cpu_fixture(relative: &str) {
+    let root = std::env::var_os("MOONEYE_CPU_ROM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/test-roms/mooneye")
+        });
+    assert_external_pass(&root.join(relative));
+}
+
+fn assert_external_pass(path: &std::path::Path) {
     let started = std::time::Instant::now();
-    let report = runner::run_file(&path, runner::REG_F_LIMITS)
+    let report = runner::run_file(path, runner::MOONEYE_LIMITS)
         .unwrap_or_else(|error| panic!("external fixture setup failed: {error}"));
     eprintln!(
-        "Mooneye reg_f: {:?}, {} M-cycles, {} ticks, host {:?}, packet {:?}, CPU {:?}",
+        "Mooneye {}: {:?}, {} M-cycles, {} ticks, host {:?}, packet {:?}, CPU {:?}",
+        path.display(),
         report.outcome,
         report.mcycles,
         report.ticks,
@@ -55,7 +93,7 @@ fn system(program: &[u8]) -> System {
 fn limits(mcycles: u64) -> Limits {
     Limits {
         mcycles,
-        ..runner::REG_F_LIMITS
+        ..runner::MOONEYE_LIMITS
     }
 }
 

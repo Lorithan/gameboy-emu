@@ -1,4 +1,4 @@
-//! Test-only observer for the audited Mooneye reg_f fast-report path.
+//! Test-only observer for the audited Mooneye CPU fixtures in tests/fixtures.
 //! This observes requested FF01 writes; it does not emulate serial hardware.
 use std::{
     collections::VecDeque,
@@ -22,7 +22,7 @@ pub struct Limits {
     pub wall_time: Duration,
 }
 
-pub const REG_F_LIMITS: Limits = Limits {
+pub const MOONEYE_LIMITS: Limits = Limits {
     mcycles: 1_000_000,
     wall_time: Duration::from_secs(10),
 };
