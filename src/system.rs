@@ -116,7 +116,7 @@ impl System {
         self.cpu.wake_if_pending(pending_interrupts);
         self.cpu.try_accept_interrupt(pending_interrupts);
 
-        let action = match self.cpu.request_cycle() {
+        let mut action = match self.cpu.request_cycle() {
             Ok(CycleRequest::Execute(action)) => action,
             Ok(CycleRequest::Stopped) => return Ok(MachineStep::Stopped),
             Err(err) => return Err(SystemError::CpuRequestError(err)),
@@ -127,6 +127,15 @@ impl System {
 
         self.elapsed_ticks += 4;
         self.memory.advance_mcycle();
+
+        let pending_interrupts = self.memory.pending_interrupts();
+        if self.cpu.try_accept_interrupt(pending_interrupts) {
+            action = match self.cpu.request_cycle() {
+                Ok(CycleRequest::Execute(action)) => action,
+                Ok(CycleRequest::Stopped) => return Ok(MachineStep::Stopped),
+                Err(err) => return Err(SystemError::CpuRequestError(err)),
+            };
+        }
 
         let outcome = match action {
             crate::cpu::CycleAction::Idle => self.cpu.complete_cycle(CycleResponse::IdleDone),

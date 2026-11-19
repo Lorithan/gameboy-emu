@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, timer audit #69 on 2026-11-19: **478 passed, 1 failed**, with no-fail-fast so all targets ran. All 461 local tests and 17 external fixtures pass; pinned rapid_toggle explicitly reports failure, tracked by [#70](https://github.com/Lorithan/gameboy-emu/issues/70). Formatting and strict Clippy pass. Last all-green checkpoint is 2b28f50 with 466 tests, before the thirteen new timer fixtures. Application source is unchanged by this audit. [Timer evidence](testing/MOONEYE_TIMER.md) records twelve passes and the reproducible failing boundary; no complete M3/hardware timing claim.
+Latest fixture-inclusive regression, #70 on 2026-11-19: **484 passed, zero failed**, with no-fail-fast so all targets ran (346 unit, 138 integration). All 466 local tests and eighteen external fixtures pass after the user's System fetch-boundary correction. Formatting and strict Clippy pass. [Timer evidence](testing/MOONEYE_TIMER.md) retains the original rapid_toggle failure and records the corrected thirteen-fixture pass; M3 awaits its completion review, with no exact hardware timing claim.
 
 ## Commands
 
@@ -24,7 +24,7 @@ The execution-policy flag applies only to that process. Scripts reject missing/m
 cargo test --all-features --no-fail-fast --quiet -- --include-ignored
 ```
 
-The timer script and fixture-inclusive suite currently fail rapid_toggle; keep that failure visible. A negative invalid-byte probe verified that the timer script rejects a hash mismatch before Cargo starts. `cargo test --test cpu_rom_runner` runs synthetic runner acceptance and leaves external fixtures ignored. Unit/ignored/empty runs are not external passes.
+The timer script and fixture-inclusive suite now pass rapid_toggle without changing its source expectation or budget. A negative invalid-byte probe previously verified that the timer script rejects a hash mismatch before Cargo starts. `cargo test --test cpu_rom_runner` runs synthetic runner acceptance and leaves external fixtures ignored. Unit/ignored/empty runs are not external passes.
 
 ## Actual external results
 
@@ -37,9 +37,9 @@ All eighteen artifacts are unchanged official prebuilt images from source revisi
 | interrupts/ie_push | Passed | 852,459 | 3,409,836 | Same subset; bounded PPU-helper timeout documented |
 | ei_sequence | Passed | 3,943 | 15,772 | Same subset |
 | div_timing | Passed | 4,235 | 16,940 | Same subset; resets DIV explicitly |
-| Thirteen timer fixtures | Twelve passed; rapid_toggle reported failure | Per-fixture counts | Per-fixture counts | [Timer audit/results](testing/MOONEYE_TIMER.md), [manifest](../tests/fixtures/mooneye-timer.json) |
+| Thirteen timer fixtures | All passed | Per-fixture counts | Per-fixture counts | [Timer audit/results](testing/MOONEYE_TIMER.md), [manifest](../tests/fixtures/mooneye-timer.json) |
 
-Every passing fixture matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. rapid_toggle instead reports six42 hex; bounded body diagnostics observe BCFFD8 versus source-expected FFD9. Caps remain 1,000,000 M-cycles and 10 host seconds per run, including a separately bounded diagnostic rerun on rapid_toggle failure. These results are finite checks, not complete timing/serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) is unrun; the [M3 design](tasks/TIMER.md) stays open for the demonstrated timer/CPU boundary defect.
+Every fixture matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. Corrected rapid_toggle takes 4605 M-cycles /18420 ticks; its earlier failure is preserved in the timer record. Caps remain 1,000,000 M-cycles and 10 host seconds per run, including a separately bounded diagnostic rerun on rapid_toggle failure. These results are finite checks, not complete timing/serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) is unrun; the [M3 design](tasks/TIMER.md) awaits its completion review.
 
 ## Runner contract
 

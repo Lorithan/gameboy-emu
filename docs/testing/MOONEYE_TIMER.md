@@ -1,6 +1,6 @@
 # Pinned Mooneye timer validation
 
-Source/prerequisite audit and explicit execution, 2026-11-19, [#69](https://github.com/Lorithan/gameboy-emu/issues/69) under timer design #53. Twelve fixtures pass; rapid_toggle reports a reproducible failure tracked by [#70](https://github.com/Lorithan/gameboy-emu/issues/70). Assistant owns fixtures/tests/review; application fixes remain user-owned. No application/configuration/dependency change or ROM binary is introduced. Emulator base is 2b28f50; this work adds tests/metadata only.
+Source/prerequisite audit and explicit execution, 2026-11-19, [#69](https://github.com/Lorithan/gameboy-emu/issues/69) under timer design #53. All thirteen fixtures pass after the user's [#70](https://github.com/Lorithan/gameboy-emu/issues/70) System fetch-boundary correction. The initial audit at e344a68 reproduced twelve passes and rapid_toggle failure on application base 2b28f50; that evidence is retained below. Assistant owns fixtures/tests/review; the user wrote the application fix. No configuration/dependency change or ROM binary is introduced.
 
 ## Identity and prerequisites
 
@@ -36,12 +36,12 @@ Select one with -Fixture tima_reload (or another manifest ID); optionally supply
 
 ## Actual results
 
-The checksum-gated thirteen-fixture command was executed, followed by a sequential rerun to capture complete reports and an isolated rapid_toggle reproduction. Counts/outcomes agree. Limits stayed unchanged. Passing fixtures emitted the first packet/register signature decimal 3,5,8,13,21,34; rapid_toggle emitted six42 hex in packet and registers, an explicit reported failure. No timeout, STOP, CPU fault or malformed report occurred. Full snapshots and observed host durations are in the manifest; durations are environment-specific diagnostics, not performance promises.
+The initial checksum-gated run, sequential rerun and isolated rapid_toggle reproduction agreed on twelve passes and one explicit failure (six42 hex). After the user correction, both isolated rapid_toggle and the checksum-gated thirteen-fixture rerun pass with the first packet/register signature decimal 3,5,8,13,21,34. Limits stayed unchanged. No timeout, STOP, CPU fault or malformed report occurred. The twelve other fixture counts are unchanged; current counts follow. The manifest retains baseline snapshots/durations plus the corrected verification record; host durations are environment-specific diagnostics, not performance promises.
 
 | Fixture | Actual outcome | M-cycles | Base ticks |
 | --- | --- | ---: | ---: |
 | div_write | Passed | 721,229 | 2,884,916 |
-| rapid_toggle | ReportedFailure | 4,852 | 19,408 |
+| rapid_toggle | Passed | 4,605 | 18,420 |
 | tim00 | Passed | 4,476 | 17,904 |
 | tim00_div_trigger | Passed | 4,210 | 16,840 |
 | tim01 | Passed | 3,996 | 15,984 |
@@ -54,10 +54,10 @@ The checksum-gated thirteen-fixture command was executed, followed by a sequenti
 | tima_write_reloading | Passed | 4,321 | 17,284 |
 | tma_write_reloading | Passed | 4,337 | 17,348 |
 
-These are finite hardware-source comparisons, not full physical timing or STOP certification. Reload/write passes provide independent evidence for the current chosen TMA propagation rule and M-cycle access convention, while rapid_toggle shows that at least one timer/CPU boundary remains wrong. Expected pass criteria remain unchanged for the failing fixture; it is not marked expected-failure or omitted from required runs.
+These are finite hardware-source comparisons, not full physical timing or STOP certification. Reload/write passes support the chosen TMA propagation rule and M-cycle access convention; rapid_toggle now supports the corrected interrupt/fetch boundary. Hashes, expected pass criteria and budgets remain unchanged.
 
-## rapid_toggle investigation
+## rapid_toggle failure and correction
 
-Pinned source asserts BC=FFD9 at test_finish=0190. Bounded test-only diagnostics observe BC=FFD8 there at tick2792, before report macros replace the registers. The final trace includes TAC=00 write at tick2748 with BCFFD9, DEC BC fetch at tick2752, idle completion at tick2756 changing BC to FFD8, interrupt-entry start at2760, Timer selection/acknowledgment at2772, entry complete at0050 at2776, and JP to0190 at2792. Stacked return PC is016E.
+Before correction, pinned source asserts BC=FFD9 at test_finish=0190, while bounded test-only diagnostics observed BC=FFD8 there at tick2792, before report macros replaced the registers. The failing trace included TAC=00 write at tick2748 with BCFFD9, DEC BC fetch at tick2752, idle completion at tick2756 changing BC to FFD8, interrupt-entry start at2760, Timer selection/acknowledgment at2772, entry complete at0050 at2776, and JP to0190 at2792. Stacked return PC was016E.
 
-The extra decrement before service is measured. Whether the cause is request assertion phase, fetch-boundary acceptance or another CPU/timer timing detail needs source-backed investigation; public traces alone do not prove a fix. Do not shorten the reload delay, raise budgets, patch ROMs or weaken the BC assertion simply to force a pass. [#70](https://github.com/Lorithan/gameboy-emu/issues/70) owns the user implementation follow-up; the fixture regression and bounded diagnostics are retained. #53 and M3 remain open. DAA #52 and physical STOP #64 remain separate.
+Source review and a synthetic red regression supported the [fetch-boundary contract](../tasks/TIMER.md#70-fetch-boundary-correction). The user added a fresh interrupt offer after device advancement and refreshes the CPU action on acceptance before bus execution, with no second advance. The synthetic regression now passes, as does the unchanged ROM's assertion/report path. No shorter reload delay, higher budget, ROM patch or weakened assertion was used. Existing instruction/entry/masking/pause controls and distinct delayed-EI versus fully enabled STOP-fetch tests accompany this correction. #53/M3 await their completion review; DAA #52 and physical STOP #64 remain separate.

@@ -32,6 +32,204 @@ fn ready(pc: u16, sp: u16) -> System {
     s
 }
 
+// Original synthetic programs, not copied ROM code. With DIV reset, TAC=05
+// overflows FF on cycle four and reloads/requests Timer IF on cycle five.
+fn timer_boundary_machine(program: &[u8], ime: bool, enable: u8) -> System {
+    let mut s = ready(0xC000, 0xFFFE);
+    if !ime {
+        s.memory.write(0xC000, 0xF3); // DI before timer setup.
+        s.step_instruction(1).unwrap();
+    }
+    let start = s.cpu_snapshot().pc;
+    for (offset, &byte) in program.iter().enumerate() {
+        s.memory.write(start + offset as u16, byte);
+    }
+    s.memory.write(0xFF0F, 0);
+    s.memory.write(0xFFFF, enable);
+    s.memory.write(0xFF04, 0);
+    s.memory.write(0xFF05, 0xFF);
+    s.memory.write(0xFF06, 0x42);
+    s.memory.write(0xFF07, 5);
+    for _ in 0..4 {
+        let _ = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(s.memory.read(0xFF0F), 0xE0);
+    }
+    assert_eq!(s.memory.read(0xFF05), 0);
+    s
+}
+
+#[test]
+fn timer_reload_during_fetch_starts_entry_without_executing_dec_bc() {
+    // #70 proposed coarse contract: a request raised while the next fetch
+    // cycle advances can replace that fetch. Gekkio's GB CTR rev199, LDH and
+    // DEC detailed timings, associate interrupt checks with fetch_cycle;
+    // pinned rapid_toggle independently expects no extra DEC before service.
+    // Entry is still five M-cycles in our existing trace abstraction (the
+    // discarded hardware opcode read is represented by the first idle).
+    assert_timer_boundary_entry(false);
+}
+
+#[test]
+fn timer_reload_during_already_requested_entry_preserves_trace_and_pause_budgets() {
+    assert_timer_boundary_entry(true);
+}
+
+fn assert_timer_boundary_entry(already_requested: bool) {
+    for pause in 0..=5 {
+        let mut s = timer_boundary_machine(&[0, 0, 0, 0, 0x0B], true, 4);
+        if already_requested {
+            s.memory.request_interrupt(Interrupt::Timer);
+        }
+        let before = s.cpu_snapshot();
+        let ticks = s.elapsed_ticks();
+        let result = s.step_instruction(pause).unwrap();
+        assert_eq!(s.elapsed_ticks(), ticks + pause * 4);
+        assert_eq!(s.cpu_snapshot().bc, before.bc, "pause {pause}: extra DEC");
+        if pause < 5 {
+            assert!(
+                matches!(result, InstructionStep::BudgetExhausted { mcycles, ticks }
+                if mcycles == pause && ticks == pause * 4)
+            );
+        } else {
+            assert!(matches!(
+                result,
+                InstructionStep::InterruptEntered {
+                    vector: 0x50,
+                    mcycles: 5,
+                    ticks: 20
+                }
+            ));
+        }
+        let paused = s.cpu_snapshot();
+        let flags = s.memory.read(0xFF0F);
+        s.step_instruction(0).unwrap();
+        assert_eq!(s.cpu_snapshot(), paused);
+        assert_eq!(s.memory.read(0xFF0F), flags);
+        assert_eq!(s.elapsed_ticks(), ticks + pause * 4);
+        for phase in pause..5 {
+            let trace = expect_cycle(s.step_machine_cycle().unwrap());
+            let action = match phase {
+                2 => CycleAction::Write {
+                    addr: 0xFFFD,
+                    value: (before.pc >> 8) as u8,
+                },
+                3 => CycleAction::Write {
+                    addr: 0xFFFC,
+                    value: before.pc as u8,
+                },
+                _ => CycleAction::Idle,
+            };
+            assert_eq!(trace.record.action, action, "entry phase {phase}");
+            assert_eq!(trace.record.read_value, None);
+            assert_eq!(
+                (trace.record.tick_before, trace.record.tick_after),
+                (ticks + phase * 4, ticks + (phase + 1) * 4)
+            );
+            assert_eq!(
+                trace.outcome,
+                match phase {
+                    3 => CycleOutcome::InterruptSelected {
+                        interrupt: Interrupt::Timer
+                    },
+                    4 => CycleOutcome::InterruptEntryComplete { vector: 0x50 },
+                    _ => CycleOutcome::InProgress,
+                }
+            );
+            assert_eq!(s.memory.read(0xFF0F), if phase < 3 { 0xE4 } else { 0xE0 });
+        }
+        let mut expected = before;
+        expected.pc = 0x50;
+        expected.sp = 0xFFFC;
+        assert_eq!(s.cpu_snapshot(), expected);
+        assert_eq!(s.elapsed_ticks(), ticks + 20);
+        // DIV continues through entry: reload at 20, next falling edge at 32.
+        assert_eq!(s.memory.read(0xFF05), 0x43);
+        assert_eq!(s.memory.read(0xFFFC), before.pc as u8);
+        assert_eq!(s.memory.read(0xFFFD), (before.pc >> 8) as u8);
+        assert_eq!(s.cpu.test_interrupt_status(), (false, false));
+    }
+}
+
+#[test]
+fn timer_reload_during_fetch_respects_ime_and_ie_masks() {
+    for (ime, enable) in [(false, 4), (true, 0), (false, 0)] {
+        let mut s = timer_boundary_machine(&[0, 0, 0, 0, 0x0B], ime, enable);
+        let mut expected = s.cpu_snapshot();
+        let ticks = s.elapsed_ticks();
+        let fetch = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(fetch.record.action, CycleAction::Read { addr: expected.pc });
+        assert_eq!(fetch.record.read_value, Some(0x0B));
+        assert_eq!(fetch.outcome, CycleOutcome::InProgress);
+        assert_eq!(s.memory.read(0xFF05), 0x42);
+        assert_eq!(s.memory.read(0xFF0F), 0xE4);
+        let finish = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(finish.record.action, CycleAction::Idle);
+        assert_eq!(finish.outcome, CycleOutcome::InstructionComplete);
+        expected.pc += 1;
+        expected.bc -= 1;
+        assert_eq!(s.cpu_snapshot(), expected);
+        assert_eq!(s.elapsed_ticks(), ticks + 8);
+        assert_eq!(s.memory.read(0xFF0F), 0xE4);
+        assert_eq!(s.cpu.test_interrupt_status(), (false, ime));
+    }
+}
+
+#[test]
+fn timer_reload_during_operand_cb_or_internal_cycle_finishes_current_instruction() {
+    for (program, action, value, bc, af) in [
+        (
+            &[0, 0, 0, 0x06, 0xA5][..],
+            CycleAction::Read { addr: 0xC004 },
+            Some(0xA5),
+            0xA513,
+            0x01B0,
+        ),
+        (
+            &[0, 0, 0, 0xCB, 0x00][..],
+            CycleAction::Read { addr: 0xC004 },
+            Some(0),
+            0x0013,
+            0x0180,
+        ),
+        (
+            &[0, 0, 0, 0x0B][..],
+            CycleAction::Idle,
+            None,
+            0x0012,
+            0x01B0,
+        ),
+    ] {
+        let mut s = timer_boundary_machine(program, true, 4);
+        let mut expected = s.cpu_snapshot();
+        let ticks = s.elapsed_ticks();
+        let trace = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(trace.record.action, action);
+        assert_eq!(trace.record.read_value, value);
+        assert_eq!(trace.outcome, CycleOutcome::InstructionComplete);
+        assert_eq!((s.memory.read(0xFF05), s.memory.read(0xFF0F)), (0x42, 0xE4));
+        expected.pc = if value.is_some() { 0xC005 } else { 0xC004 };
+        expected.bc = bc;
+        expected.af = af;
+        assert_eq!(s.cpu_snapshot(), expected);
+        assert_eq!(s.elapsed_ticks(), ticks + 4);
+        assert!(matches!(
+            s.step_instruction(5).unwrap(),
+            InstructionStep::InterruptEntered {
+                vector: 0x50,
+                mcycles: 5,
+                ticks: 20
+            }
+        ));
+        expected.pc = 0x50;
+        expected.sp = 0xFFFC;
+        assert_eq!(s.cpu_snapshot(), expected);
+        assert_eq!(s.memory.read(0xFFFC), if value.is_some() { 5 } else { 4 });
+        assert_eq!(s.memory.read(0xFFFD), 0xC0);
+        assert_eq!(s.memory.read(0xFF0F), 0xE0);
+        assert_eq!(s.elapsed_ticks(), ticks + 24);
+    }
+}
+
 // Independent model of externally observable writes, including IF read masks.
 fn write_expected(memory: &mut [u8], addr: u16, value: u8) {
     match addr {

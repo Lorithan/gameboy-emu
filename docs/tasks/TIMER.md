@@ -1,6 +1,6 @@
 # M3 programmable timer design brief
 
-Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Local slices #65-#68 are verified for their declared coarse scope. [Thirteen pinned timer fixtures](../testing/MOONEYE_TIMER.md) were audited and executed under #69: twelve pass, rapid_toggle reports failure. [#70](https://github.com/Lorithan/gameboy-emu/issues/70) investigates BCFFD8 versus expected FFD9 before a user-owned implementation fix. Latest full fixture-inclusive run: 478 passed, one failed; M3/#53 remain open. User owns application code; assistant owns design/tests/review. [DIV](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define current boundaries.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53), awaiting M3 completion review. Local slices #65-#68 are verified for their declared coarse scope. All [thirteen pinned timer fixtures](../testing/MOONEYE_TIMER.md) pass after the user's [#70](https://github.com/Lorithan/gameboy-emu/issues/70) System fetch-boundary correction. Latest full fixture-inclusive run: 484 passed, zero failed (346 unit, 138 integration), including eighteen external fixtures; formatting and strict Clippy pass. User owns application code; assistant owns design/tests/review. [DIV](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define current boundaries.
 
 ## First implementation slice: register storage and mapping
 
@@ -47,7 +47,7 @@ Primary write-effect source: [Pan Docs timer circuitry](https://raw.githubuserco
 
 [#68](https://github.com/Lorithan/gameboy-emu/issues/68), verified without application changes. Actual StopEntered clears only the counter once: no manufactured TIMA edge, phase cancellation/restart, register change or IF request/clear. Keep on_stop_entered separate from write_div. This deliberately retains the existing project approximation; reviewed references establish reset and stopped clocks but not the physical reset-to-TIMA edge detail. That hardware assessment remains #64.
 
-While Stopped, System returns before real ticks: Counting, every remaining overflow delay and Reloading are retained. Reads/polls/input do not progress them. Selected JOYP input wakes without clocks/reload/acknowledgment; remaining delay resumes on real ticks. IF/IE alone cannot wake Stopped. A reload/IF produced during STOP's final executing cycle survives entry/pause and may be serviced by ordinary arbitration after selected-input wake. HALT-like/Continue branches do not reset DIV and keep TIMA clocking.
+While Stopped, System returns before real ticks: Counting, every remaining overflow delay and Reloading are retained. Reads/polls/input do not progress them. Selected JOYP input wakes without clocks/reload/acknowledgment; remaining delay resumes on real ticks. IF/IE alone cannot wake Stopped. If IME gating permits STOP to execute (including delayed EI), a reload/IF produced during its fetch survives entry/pause and may be serviced by ordinary arbitration after selected-input wake. With IME already enabled, #70 arbitration replaces that STOP fetch before execution. HALT-like/Continue branches do not reset DIV and keep TIMA clocking.
 
 Five new tests cover counter/control/phase reset preservation and exact remaining-tick resume, overflow on entry with whole-memory/register/time-pure stopped polls, IF-only rejection and press/release wake, reload/IF on STOP's fetch cycle followed by five-cycle late-acknowledged timer entry, and conditional HALT-like/Continue traces. All 466 tests pass (341 unit, 125 integration), including five hash-verified existing fixtures; formatting, strict Clippy and whitespace pass. Focused runs passed 27 STOP and 25 timer tests (overlapping sets). Tests/docs only; no new hardware STOP or external timer ROM result. Next audit pinned timer fixtures and calibrate the current model against actual execution.
 
@@ -55,7 +55,7 @@ Five new tests cover counter/control/phase reset preservation and exact remainin
 
 1. **Registers/startup:** specified and implemented above. Extend these methods with reviewed edge/reload behavior in later slices.
 2. **Write-induced edges:** #67 above is locally verified; hardware timer audit/calibration remains required.
-3. **Calibration:** ordinary rate/DIV-trigger and TIMA/TMA reload-write fixtures pass; rapid_toggle fails at a timer/CPU boundary. Inspect source-backed request/fetch/DEC timing under #70 before changing the model.
+3. **Calibration:** all thirteen selected timer fixtures pass, including rapid_toggle after the #70 correction below. Review M3 scope/limits before closing the gate; finite fixture passes do not certify every T-state alignment.
 4. **STOP interactions:** coarse policy above is agreed/verified; physical reset-edge fidelity remains #64, not silently equated with DIV writes.
 5. **Effects/order:** Timer-to-Bus event delivery and normal CPU arbitration are implemented; preserve the declared ordering or explicitly revise it if evidence requires.
 6. **Evidence:** independent frequency/edge/register/reload/collision/IF/HALT/STOP tests, then a pinned bounded timer-ROM selection with startup/device/reporting/license audit. No unrelated PPU/audio/frontend work.
@@ -64,9 +64,25 @@ Five new tests cover counter/control/phase reset preservation and exact remainin
 
 1. Register storage/mapping #65 and ordinary tick/reload/write-phase #66 are complete for their scope.
 2. DIV/TAC write edges #67 and agreed STOP policy #68 are complete for their declared scope.
-3. Thirteen pinned timer fixtures have run; next investigate/fix rapid_toggle #70 and rerun while preserving the other results and System regressions.
+3. All thirteen pinned timer fixtures and the full 484-test suite pass after #70. Next review the #53/M3 completion gate and retain documented limits.
 
 Finalize interfaces/invariants before each slice. An overflow placeholder must not be presented as timer correctness. [M3 gate](../PROJECT_PLAN.md#milestones) requires timing/interrupt tests and relevant real ROM evidence, not just compilation.
+
+## #70 fetch-boundary correction
+
+Investigation 2026-11-19: [Gekkio GB Complete Technical Reference](https://gekkio.fi/files/gb-docs/gbctr.pdf), revision 199 dated November 6, 2026, detailed LDH timing (printed page36) checks interrupts in the following fetch_cycle; DEC rr (printed page80) separates its operation from the next fetch. [CPU internals](https://gist.github.com/SonoSooS/c0055300670d678b5ae8433e20bea595#isr-and-nmi) describes interrupt dispatch replacing the fetched instruction with return-PC correction. Together with pinned rapid_toggle's independent FFD9 expectation, these support making a device request visible before committing the next opcode in our coarse model. They do not establish an exact T-state sampling point or certify all four-tick alignments.
+
+User implemented the reviewed System-only correction:
+
+1. Preserve beginning-of-cycle arbitration and HALT wake. Request a provisional action; Stopped and existing faults still return before clocks.
+2. Advance elapsed time and Bus devices exactly once, as today.
+3. Offer the freshly computed pending mask to CPU::try_accept_interrupt before any bus action. CPU still owns the FetchOpcode/IME eligibility gate; do not infer fetch eligibility from a Read action, which can also be an operand or CB suffix.
+4. If accepted, refresh the requested action from the CPU. Its new InterruptEntry state requests Idle. Execute/record that refreshed action and complete its matching response in the already elapsed cycle. Never execute or complete the stale opcode read, and never add a second advance or a sixth entry cycle.
+5. Preserve late IE/IF capture, selection/acknowledgment, five-cycle entry, EI/DI/RETI, current HALT wake, STOP/fault clocks and timer phases. No Timer/CPU protocol change was required.
+
+Post-advance sampling is an explicit coarse projection, not exact pin timing. The unchanged rapid_toggle now passes at 4605 M-cycles /18420 ticks, with the ordinary first pass packet and register signature. All thirteen timer fixtures pass; the timer delay and CPU protocol are unchanged.
+
+Four original synthetic tests in src/system/tests/interrupt_entry.rs cover fresh requests during opcode fetch, already-pending requests across all pause budgets, IME/IE masking, and requests during an immediate operand, CB suffix or internal DEC completion. All pass. The fresh-fetch regression failed before the user change and now verifies idle/idle/high-write/low-write/idle, preserved BC, the unexecuted opcode address on the stack, one acknowledgment, twenty ticks and no instruction completion. The tests use real DIV/TIMA ticking and ordinary instructions. An existing STOP test now uses NOP;EI;STOP so delayed IME still permits entry and retains the reload IRQ; a separate new test preserves EI;NOP;STOP and verifies that fully enabled arbitration replaces STOP, retains its opcode return address and never resets DIV or skips padding. This explicitly supersedes that old enabled-fetch expectation without removing its delayed-EI STOP coverage.
 
 ## Source audit starting points
 

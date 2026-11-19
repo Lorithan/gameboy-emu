@@ -22,6 +22,22 @@
                      "host_time_limit_seconds_per_fixture":  10
                  },
     "limits_review":  "div_write has 65535 iterations of an eleven-M-cycle loop, approximately 720884 M-cycles plus setup/reporting; other bodies are short bounded instruction sequences or rapid-toggle loop. Retain existing caps; timeouts/errors/malformed reports remain failures.",
+    "latest_verification": {
+        "date": "2026-11-19",
+        "emulator_base_commit": "e344a68f53eb5a96a561f49fe78fbc9b1e488e05",
+        "emulator_change": "User #70 System fresh interrupt offer/action refresh after device advancement; five-cycle entry unchanged",
+        "all_thirteen_outcome": "Passed",
+        "counts": "The twelve other fixture counts below are unchanged; their observed records and rapid_toggle's original failure are baseline evidence",
+        "rapid_toggle": {
+            "outcome": "Passed",
+            "mcycles": 4605,
+            "ticks": 18420,
+            "packet": [3, 5, 8, 13, 21, 34],
+            "cpu_hex": {"af": "2210", "bc": "0305", "de": "080D", "hl": "1522", "pc": "4AB3", "sp": "E000"},
+            "host_duration": "2.0679ms"
+        },
+        "full_regression": "484 passed, zero failed, including all eighteen hash-verified external fixtures"
+    },
     "fixtures":  [
                      {
                          "id":  "div_write",

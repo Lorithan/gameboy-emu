@@ -84,7 +84,9 @@ fn stop_freezes_new_overflow_until_selected_input_and_the_first_resumed_cycle() 
 
 #[test]
 fn stop_retains_reload_irq_from_its_fetch_cycle_until_wake_and_late_acknowledgment() {
-    let mut s = machine(&[0xFB, 0, 0x10, 0, 0]);
+    // EI is still delayed during STOP's fetch; its completion enables IME.
+    // Fully enabled fetch-time requests instead replace STOP (next test).
+    let mut s = machine(&[0, 0xFB, 0x10, 0, 0]);
     s.memory.write(0xFF0F, 0);
     s.memory.write(0xFFFF, 4);
     s.memory.write(0xFF05, 255);
@@ -147,6 +149,60 @@ fn stop_retains_reload_irq_from_its_fetch_cycle_until_wake_and_late_acknowledgme
     expected.sp = 0xFFFC;
     assert_eq!(s.cpu_snapshot(), expected);
     assert_eq!(s.memory.read(0xFF05), 0x43);
+}
+
+#[test]
+fn enabled_reload_irq_during_stop_fetch_prevents_stop_and_padding_skip() {
+    let mut s = machine(&[0xFB, 0, 0x10, 0, 0]);
+    s.memory.write(0xFF0F, 0);
+    s.memory.write(0xFFFF, 4);
+    s.memory.write(0xFF05, 255);
+    s.memory.write(0xFF06, 0x42);
+    s.memory.write(0xFF07, 5);
+    for _ in 0..2 {
+        let _ = expect_cycle(s.step_machine_cycle().unwrap());
+    }
+    let before = s.cpu_snapshot();
+    assert_eq!(before.pc, 0x102);
+    assert_eq!(s.cpu.test_interrupt_status(), (false, true));
+    for cycle in 1..=5 {
+        let trace = expect_cycle(s.step_machine_cycle().unwrap());
+        assert_eq!(trace.record.tick_after, 8 + cycle * 4);
+        assert_eq!(
+            trace.record.action,
+            match cycle {
+                3 => CycleAction::Write {
+                    addr: 0xFFFD,
+                    value: 1
+                },
+                4 => CycleAction::Write {
+                    addr: 0xFFFC,
+                    value: 2
+                },
+                _ => CycleAction::Idle,
+            }
+        );
+        assert_eq!(trace.record.read_value, None);
+        assert_eq!(
+            trace.outcome,
+            match cycle {
+                4 => CycleOutcome::InterruptSelected {
+                    interrupt: crate::memory::Interrupt::Timer
+                },
+                5 => CycleOutcome::InterruptEntryComplete { vector: 0x50 },
+                _ => CycleOutcome::InProgress,
+            }
+        );
+        assert_eq!(s.memory.read(0xFF0F), if cycle < 4 { 0xE4 } else { 0xE0 });
+        assert_eq!(s.memory.read(0xFF04), 0xAB); // STOP never resets DIV.
+    }
+    let mut expected = before;
+    expected.pc = 0x50;
+    expected.sp = 0xFFFC;
+    assert_eq!(s.cpu_snapshot(), expected);
+    assert_eq!((s.memory.read(0xFFFC), s.memory.read(0xFFFD)), (2, 1));
+    assert_eq!(s.memory.read(0xFF05), 0x43);
+    assert_eq!(s.cpu.test_interrupt_status(), (false, false));
 }
 
 #[test]
