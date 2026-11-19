@@ -672,13 +672,7 @@ impl CPU {
                 }
             }
             Unary16 { target, value } => {
-                match target {
-                    Register16::BC => self.registers.set_bc(value),
-                    Register16::DE => self.registers.set_de(value),
-                    Register16::HL => self.registers.set_hl(value),
-                    Register16::SP => self.registers.set_sp(value),
-                }
-
+                self.registers.set16(target, value);
                 Ok(CycleTransition::InstructionFinished)
             }
             Addition16 { lhs, rhs } => {
@@ -964,12 +958,7 @@ impl CPU {
                 }
             },
             DecodedOpcode::Unary16 { operation, target } => {
-                let mut value = match target {
-                    Register16::BC => self.registers.bc(),
-                    Register16::DE => self.registers.de(),
-                    Register16::HL => self.registers.hl(),
-                    Register16::SP => self.registers.sp,
-                };
+                let mut value = self.registers.get16(target);
 
                 value = match operation {
                     UnaryOperation::Increment => value.wrapping_add(1),
@@ -1017,13 +1006,7 @@ impl CPU {
             }
             DecodedOpcode::AddHL { target } => {
                 let lhs = self.registers.hl();
-                let rhs = match target {
-                    Register16::BC => self.registers.bc(),
-                    Register16::DE => self.registers.de(),
-                    Register16::HL => self.registers.hl(),
-                    Register16::SP => self.registers.sp,
-                };
-
+                let rhs = self.registers.get16(target);
                 let next_state = Addition16 { lhs, rhs };
                 Ok(CycleTransition::Continue(next_state))
             }
@@ -1324,12 +1307,7 @@ impl CPU {
     ) -> CycleTransition {
         let value = (value as u16) << 8 | low as u16;
 
-        match destination {
-            Register16::BC => self.registers.set_bc(value),
-            Register16::DE => self.registers.set_de(value),
-            Register16::HL => self.registers.set_hl(value),
-            Register16::SP => self.registers.set_sp(value),
-        }
+        self.registers.set16(destination, value);
 
         self.registers.increment_pc();
         CycleTransition::InstructionFinished

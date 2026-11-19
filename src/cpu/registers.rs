@@ -173,4 +173,22 @@ impl Registers {
             Register::L => self.l = value,
         }
     }
+
+    pub(super) fn get16(&self, register: Register16) -> u16 {
+        match register {
+            Register16::BC => self.bc(),
+            Register16::DE => self.de(),
+            Register16::HL => self.hl(),
+            Register16::SP => self.sp,
+        }
+    }
+
+    pub(super) fn set16(&mut self, register: Register16, value: u16) {
+        match register {
+            Register16::BC => self.set_bc(value),
+            Register16::DE => self.set_de(value),
+            Register16::HL => self.set_hl(value),
+            Register16::SP => self.set_sp(value),
+        }
+    }
 }
