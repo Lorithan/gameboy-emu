@@ -1,4 +1,4 @@
-use crate::{cpu::CpuError, memory::Interrupt};
+use crate::{cpu::UnexpectedCycleResponse, memory::Interrupt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleAction {
@@ -104,14 +104,12 @@ pub enum CycleKind {
     Idle,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UnexpectedCycleResponse {
-    pub expected: CycleKind,
-    pub received: CycleKind,
-}
-
-impl From<UnexpectedCycleResponse> for CpuError {
-    fn from(err: UnexpectedCycleResponse) -> Self {
-        CpuError::UnexpectedCycleResponse(err)
+impl std::fmt::Display for CycleKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CycleKind::Read => write!(f, "read"),
+            CycleKind::Write => write!(f, "write"),
+            CycleKind::Idle => write!(f, "idle"),
+        }
     }
 }

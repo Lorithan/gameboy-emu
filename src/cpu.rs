@@ -1,4 +1,5 @@
 mod cycles;
+pub mod error;
 mod opcode;
 mod registers;
 mod state;
@@ -9,6 +10,7 @@ mod tests;
 use std::ops::{Shl, Shr};
 
 pub use cycles::*;
+pub use error::{CpuError, CpuFault, OpcodeEncoding, UnexpectedCycleResponse};
 pub use registers::Registers;
 
 use crate::{
@@ -39,25 +41,6 @@ pub struct CpuSnapShot {
     pub hl: u16,
     pub pc: u16,
     pub sp: u16,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OpcodeEncoding {
-    Base(u8),
-    Cb(u8),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct CpuFault {
-    pub opcode: OpcodeEncoding,
-    pub addr: u16,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum CpuError {
-    UnsupportedOpcode(CpuFault),
-    UnexpectedCycleResponse(UnexpectedCycleResponse),
-    NoCycleRequested,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
