@@ -1,5 +1,7 @@
 # STOP: core standby and device prerequisites
 
+Next proposed integration: [#48 selected-line entry and wake](STOP_WAKE.md), 2026-11-18. Begin with pure Joypad/Bus level queries; the new contract specifies conditional entry, mandatory CPU sampling and immediate zero-cycle input wake. It supersedes the unconditional two-byte STOP fallback only after implementation and verification. #44 remains open for hardware accuracy limits.
+
 Core task: [#43](https://github.com/Lorithan/gameboy-emu/issues/43), M2. Device follow-up: [#44](https://github.com/Lorithan/gameboy-emu/issues/44), dependent on M3 divider/timer and M4 joypad work.
 
 Status: core standby #43, divider reset/pause #46 and headless JOYP/input #47 are implemented and verified on 2026-11-18. Latest suite: all 401 tests pass. Joypad wake and finer STOP behavior remain #44. User owns application implementation; assistant owns tests, documentation and review. Historical proposal/review notes below are superseded by completion evidence.
