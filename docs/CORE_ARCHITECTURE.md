@@ -6,6 +6,8 @@ Implemented contract, 2026-11-19. [Plan](PROJECT_PLAN.md) · [CPU](CPU.md) · [d
 
 The frontend will own System. System owns CPU and Bus; CPU owns registers, execution state and IME; Bus owns Cartridge, WRAM/HRAM, interrupt controller, Timer and Joypad. CPU never borrows Bus: System performs requested accesses and returns typed responses. Use ordinary ownership, not shared Rc/RefCell storage. There is no shared Memory trait or separate ALU object. Core library execution is independent of SDL2 and host pacing.
 
+Agreed M4 architecture, not yet implemented: Bus will also own PPU, which will own VRAM/OAM, registers, rendering state and frame output. System will expose narrow read-only display output and relevant observation/events through Bus; frontend access does not require direct ownership or mutable PPU access. PPU advances one dot per base tick alongside Timer within the existing four-tick loop. [First PPU slice #71](tasks/PPU_FOUNDATION.md) specifies only zeroed video-memory storage and Bus routing. Register startup/modes, access restrictions, exact event/frame interfaces and DMA policy need their dependent contracts before implementation.
+
 ## Machine-cycle schedule
 
 One DMG M-cycle is four base ticks. System::step_machine_cycle currently:

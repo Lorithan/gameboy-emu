@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); next is M4 architecture and the first PPU contract.
+Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); current work is [#71, the first PPU storage/mapping slice](tasks/PPU_FOUNDATION.md).
 
 | Guide | Contents |
 | --- | --- |
