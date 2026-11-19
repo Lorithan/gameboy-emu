@@ -1,6 +1,16 @@
 # First external CPU ROM validation
 
-Task: [#45](https://github.com/Lorithan/gameboy-emu/issues/45), M2. Status: proposed contract, researched 2026-11-18. No fixture or runner has been added and no external ROM has been run. Baseline 6df35c5 has 379 passing tests; they were not rerun for this documentation-only work.
+Design task: [#45](https://github.com/Lorithan/gameboy-emu/issues/45), M2. The runner contract is selected and its synthetic acceptance is implemented. Actual fixture preparation/execution is the next small task, [#49](https://github.com/Lorithan/gameboy-emu/issues/49). No external ROM has been imported or run. The original proposal baseline was 6df35c5 with 379 passing tests; current evidence below supersedes it.
+
+## Synthetic runner checkpoint - 2026-11-18
+
+Assistant implemented tests/support/rom_runner.rs and tests/cpu_rom_runner.rs using public APIs only. The helper captures the first six FF01 writes and requires the matching register signature. It reports Passed, ReportedFailure, MalformedReport, TimedOut with cycle/wall-time reason, UnexpectedStop or ExecutionError. Reports include fixture identity, packet, consumed cycles/ticks, CPU snapshot and the last 64 successfully completed cycle traces. SystemError retains a failed completion's cycle record separately; that real cycle is counted, while request failures and stopped polls count zero. Timing/counts are relative to runner entry.
+
+All 11 runner acceptance tests pass: exact success/failure, each wrong signature register, malformed-first-packet rejection, partial output, wrong-address writes, incidental breakpoint bytes, exact cycle-boundary success, loops/HALT/STOP, sticky fault records/counts, zero wall-time budget, bounded history and missing/invalid/valid file loading. Synthetic programs are original test data built in memory; they jump past the header and use the ordinary loader. No external suite code or binary is embedded. The full suite passes 425 tests (312 unit, 113 integration); formatting, strict Clippy and whitespace checks pass. No application logic, configuration or dependencies changed.
+
+Reproduce the harness acceptance with `cargo test --test cpu_rom_runner`. It does not run Mooneye. run_file is ready for a fixture whose provenance/digest has already been verified, but there is deliberately no real-fixture test entry or ignored external-pass claim yet. Pinned reg_f/reporter sources were rechecked at the recorded revision. WLA-DX tools/make/cmake were not found on the current PowerShell PATH; that does not rule out an installation elsewhere. The upstream prebuilt index was inaccessible through the web tool in this session. These facts do not establish an artifact/build identity; #49 must resolve provenance/tooling before a real run.
+
+#45's specification is complete; #49 tracks the remaining artifact origin, digest, build/component notices, explicit real-fixture invocation and first measured result. User has no newly demonstrated CPU bug to implement at this checkpoint. Assistant owns that fixture/runner work; resulting failures become small user-owned issues. One reg_f result will not close M2's wider independent-validation gate.
 
 ## First slice
 
