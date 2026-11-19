@@ -425,7 +425,9 @@ fn word_operand_states_load_every_value_without_partial_register_updates() {
     ] {
         for value in 0u16..=u16::MAX {
             let mut cpu = CPU::from_registers(Registers::dmg_post_boot(1));
-            cpu.state = ExecutionState::ReadImmediate16Low { destination };
+            cpu.state = ExecutionState::ReadImm16Low {
+                then: super::state::Imm16Use::LoadRegister(destination),
+            };
             let mut expected = cpu.snapshot();
             assert!(
                 !cpu.complete_cycle(response(
@@ -477,7 +479,9 @@ fn word_operand_states_preserve_pending_data_on_missing_reads_and_wrap_pc() {
                 registers.pc = start;
                 registers.set_af(0x0100 | flags << 4);
                 let mut cpu = CPU::from_registers(registers);
-                cpu.state = ExecutionState::ReadImmediate16Low { destination };
+                cpu.state = ExecutionState::ReadImm16Low {
+                    then: super::state::Imm16Use::LoadRegister(destination),
+                };
                 for byte in [0x34, 0x12] {
                     let pending = cpu.snapshot();
                     assert!(

@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Shared immediate-word checkpoint verified - 2026-11-19
+
+User added Imm16Use and shared ReadImm16Low/High, removed the six old Low/High pairs and wired LoadImmediate16, AbsoluteJump, Call, LoadAFromAbsolute, StoreAToAbsolute and StoreStackPointer. Each validated operand read increments PC once; the high handler assembles from_le_bytes and calls finish_imm16. CALL captures the current PC after that increment and splits it with to_le_bytes. Existing branch/stack/store captures and downstream cycles are preserved; no wrapper completion or interrupt changes. Computing return-address bytes for untaken CALL is harmless and has no side effect.
+
+Assistant migrated the two register-word state setups to Imm16Use::LoadRegister and retained all independent result/flag/trace/capture/retry expectations. Full suite passed 442 tests (317 unit, 125 integration), explicitly including five external fixtures with pinned hashes checked. User then removed the unused store_immediate_word helper; this was the only remaining application change and resolves the strict Clippy failure. Final formatting, strict Clippy and whitespace checks pass. No full suite repetition was needed for deleting an uncalled private function. No assistant application edits or new dependencies. [#59](https://github.com/Lorithan/gameboy-emu/issues/59) records this checkpoint; #54 ALU extraction remains queued, and stack push consolidation requires its own contract.
+
 ## Fetch-state suppression checkpoint verified - 2026-11-19
 
 User completed #58 by replacing the CPU latch with FetchOpcode { skip_increment }. Ordinary construction/completion/wake uses false; HALT suppression uses true. Request matching ignores the payload, while validated completion passes it to read_opcode. The original opcode address is still captured before increment/suppression and decode handling; returned transitions consume the fetch state through the wrapper, with repeated HALT allowed to rearm. Interrupt acceptance reads the same payload and preserves the wrapping return-PC rewind before capturing entry PC/SP. Rejected arbitration and wrong-kind responses preserve state.

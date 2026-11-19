@@ -19,6 +19,16 @@ pub(super) enum ReturnKind {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(super) enum Imm16Use {
+    LoadRegister(Register16),
+    Jump { taken: bool },
+    Call { taken: bool, stack_addr: u16 },
+    LoadAFromAbsolute,
+    StoreAToAbsolute { value: u8 },
+    StoreSp { sp: u16 },
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(super) enum ExecutionState {
     FetchOpcode {
         skip_increment: bool,
@@ -32,19 +42,12 @@ pub(super) enum ExecutionState {
     ReadImmediate8 {
         target: Destination,
     },
-    ReadImmediate16Low {
-        destination: Register16,
+    ReadImm16Low {
+        then: Imm16Use,
     },
-    ReadImmediate16High {
-        destination: Register16,
+    ReadImm16High {
         low: u8,
-    },
-    ReadJumpLow {
-        taken: bool,
-    },
-    ReadJumpHigh {
-        taken: bool,
-        low: u8,
+        then: Imm16Use,
     },
     ReadMemory {
         addr: u16,
@@ -100,15 +103,6 @@ pub(super) enum ExecutionState {
         addr: u16,
         low: u8,
         target: PushOperand,
-    },
-    ReadCallLow {
-        taken: bool,
-        stack_addr: u16,
-    },
-    ReadCallHigh {
-        taken: bool,
-        low: u8,
-        stack_addr: u16,
     },
     Call {
         jump_addr: u16,
@@ -166,26 +160,8 @@ pub(super) enum ExecutionState {
         offset: i8,
         hl: bool,
     },
-    ReadAbsoluteLow,
-    ReadAbsoluteHigh {
-        low: u8,
-    },
-    StoreAToAbsoluteLow {
-        value: u8,
-    },
-    StoreAToAbsoluteHigh {
-        value: u8,
-        low: u8,
-    },
     TransferHLtoSP {
         hl: u16,
-    },
-    ReadLowToStoreSp {
-        sp: u16,
-    },
-    ReadHighToStoreSp {
-        sp: u16,
-        low: u8,
     },
     WriteSpLow {
         sp_low: u8,

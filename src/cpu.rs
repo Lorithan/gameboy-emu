@@ -19,8 +19,8 @@ use crate::{
         opcode::*,
         registers::*,
         state::{
-            CycleTransition, ExecutionState, HaltBehavior, InterruptSelection, ReturnKind,
-            StopBehavior,
+            CycleTransition, ExecutionState, HaltBehavior, Imm16Use, InterruptSelection,
+            ReturnKind, StopBehavior,
         },
     },
     memory::Interrupt,
@@ -84,22 +84,12 @@ impl CPU {
         match self.state {
             FetchOpcode { .. }
             | DecodeCbOpcode
-            | ReadAbsoluteLow
-            | ReadAbsoluteHigh { .. }
-            | StoreAToAbsoluteLow { .. }
-            | StoreAToAbsoluteHigh { .. }
             | ReadDisplacement { .. }
             | ReadImmediate8 { .. }
-            | ReadImmediate16Low { .. }
-            | ReadJumpLow { .. }
-            | ReadJumpHigh { .. }
-            | ReadCallLow { .. }
-            | ReadCallHigh { .. }
-            | ReadImmediate16High { .. }
+            | ReadImm16Low { .. }
+            | ReadImm16High { .. }
             | ReadSpOffset { .. }
             | ReadHighMemoryImmediate { .. }
-            | ReadLowToStoreSp { .. }
-            | ReadHighToStoreSp { .. }
             | ReadImmediateAccumulator { .. } => Ok(CycleRequest::Execute(CycleAction::Read {
                 addr: self.registers.pc,
             })),
@@ -437,39 +427,19 @@ impl CPU {
                     }
                 }
             }
-            ReadImmediate16Low { destination } => {
-                let value = response.read_value()?;
-
+            ReadImm16Low { then } => {
+                let low = response.read_value()?;
                 self.registers.increment_pc();
-                let next_state = ReadImmediate16High {
-                    destination,
-                    low: value,
-                };
+
+                let next_state = ReadImm16High { low, then };
                 Ok(CycleTransition::Continue(next_state))
             }
-            ReadImmediate16High { destination, low } => {
-                Ok(self.store_immediate_word(destination, low, response.read_value()?))
-            }
-            ReadJumpLow { taken } => {
-                let value = response.read_value()?;
-
-                self.registers.increment_pc();
-                let next_state = ReadJumpHigh { taken, low: value };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ReadJumpHigh { taken, low } => {
-                let value = response.read_value()?;
-
+            ReadImm16High { low, then } => {
+                let high = response.read_value()?;
                 self.registers.increment_pc();
 
-                if taken {
-                    let next_state = ApplyJump {
-                        target: ((value as u16) << 8) | low as u16,
-                    };
-                    Ok(CycleTransition::Continue(next_state))
-                } else {
-                    Ok(CycleTransition::InstructionFinished)
-                }
+                let value = u16::from_le_bytes([low, high]);
+                Ok(self.finish_imm16(value, then))
             }
             ReadMemory { destination, .. } => {
                 Ok(self.store_fetched(destination, response.read_value()?))
@@ -571,42 +541,6 @@ impl CPU {
 
                 self.registers.sp = addr.wrapping_add(1);
                 Ok(CycleTransition::InstructionFinished)
-            }
-            ReadCallLow { taken, stack_addr } => {
-                let low = response.read_value()?;
-
-                self.registers.increment_pc();
-                let next_state = ReadCallHigh {
-                    taken,
-                    low,
-                    stack_addr,
-                };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ReadCallHigh {
-                taken,
-                low,
-                stack_addr,
-            } => {
-                let high = response.read_value()?;
-                self.registers.increment_pc();
-
-                let jump_addr = (high as u16) << 8 | low as u16;
-
-                if taken {
-                    let return_addr = self.registers.pc;
-
-                    let next_state = Call {
-                        jump_addr,
-                        stack_addr,
-                        return_addr_high: (return_addr >> 8) as u8,
-                        return_addr_low: (return_addr & 0xFF) as u8,
-                    };
-
-                    Ok(CycleTransition::Continue(next_state))
-                } else {
-                    Ok(CycleTransition::InstructionFinished)
-                }
             }
             Call {
                 jump_addr,
@@ -718,41 +652,6 @@ impl CPU {
                 let next_state = ApplySpOffset { sp, offset, hl };
                 Ok(CycleTransition::Continue(next_state))
             }
-            ReadAbsoluteLow => {
-                let low = response.read_value()?;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let next_state = ReadAbsoluteHigh { low };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ReadAbsoluteHigh { low } => {
-                let high = response.read_value()?;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let addr = ((high as u16) << 8) | low as u16;
-
-                let next_state = ReadMemory {
-                    addr,
-                    destination: Register::A,
-                };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            StoreAToAbsoluteLow { value } => {
-                let low = response.read_value()?;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let next_state = StoreAToAbsoluteHigh { value, low };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            StoreAToAbsoluteHigh { value, low } => {
-                let high = response.read_value()?;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let addr = ((high as u16) << 8) | low as u16;
-
-                let next_state = WriteMemory { addr, value };
-                Ok(CycleTransition::Continue(next_state))
-            }
             ApplySpOffset { sp, offset, hl } => {
                 let result = sp.wrapping_add_signed(offset as i16);
 
@@ -792,29 +691,6 @@ impl CPU {
                 self.registers.set_sp(hl);
 
                 Ok(CycleTransition::InstructionFinished)
-            }
-            ReadLowToStoreSp { sp } => {
-                let low = response.read_value()?;
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let next_state = ReadHighToStoreSp { sp, low };
-                Ok(CycleTransition::Continue(next_state))
-            }
-            ReadHighToStoreSp { sp, low } => {
-                let high = response.read_value()?;
-
-                self.registers.pc = self.registers.pc.wrapping_add(1);
-
-                let addr = (high as u16) << 8 | low as u16;
-                let sp_low = (sp & 0xFF) as u8;
-                let sp_high = (sp >> 8) as u8;
-
-                let next_state = WriteSpLow {
-                    sp_low,
-                    sp_high,
-                    addr,
-                };
-                Ok(CycleTransition::Continue(next_state))
             }
             WriteSpLow { sp_high, addr, .. } => {
                 let addr = addr.wrapping_add(1);
@@ -949,7 +825,9 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::LoadImmediate16 { destination } => {
-                let next_state = ReadImmediate16Low { destination };
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::LoadRegister(destination),
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Unary { operation, target } => match target {
@@ -1064,7 +942,9 @@ impl CPU {
             DecodedOpcode::AbsoluteJump { condition } => {
                 let taken = condition.is_met(&self.registers);
 
-                let next_state = ReadJumpLow { taken };
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::Jump { taken },
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::JumpHL => {
@@ -1095,7 +975,9 @@ impl CPU {
                 let taken = condition.is_met(&self.registers);
                 let stack_addr = self.registers.sp.wrapping_sub(1);
 
-                let next_state = ReadCallLow { taken, stack_addr };
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::Call { taken, stack_addr },
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Return => {
@@ -1206,11 +1088,18 @@ impl CPU {
                 };
                 Ok(CycleTransition::Continue(next_state))
             }
-            DecodedOpcode::LoadAFromAbsolute => Ok(CycleTransition::Continue(ReadAbsoluteLow)),
+            DecodedOpcode::LoadAFromAbsolute => {
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::LoadAFromAbsolute,
+                };
+                Ok(CycleTransition::Continue(next_state))
+            }
             DecodedOpcode::StoreAToAbsolute => {
                 let value = self.registers.a;
 
-                let next_state = StoreAToAbsoluteLow { value };
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::StoreAToAbsolute { value },
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::LoadHighMemory {
@@ -1253,7 +1142,9 @@ impl CPU {
             }
             DecodedOpcode::StoreStackPointer => {
                 let sp = self.registers.sp;
-                let next_state = ReadLowToStoreSp { sp };
+                let next_state = ReadImm16Low {
+                    then: Imm16Use::StoreSp { sp },
+                };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::DecodeCbOpcode => Ok(CycleTransition::Continue(DecodeCbOpcode)),
@@ -1310,20 +1201,6 @@ impl CPU {
     fn store_fetched(&mut self, destination: Register, value: u8) -> CycleTransition {
         self.registers.set(destination, value);
 
-        CycleTransition::InstructionFinished
-    }
-
-    fn store_immediate_word(
-        &mut self,
-        destination: Register16,
-        low: u8,
-        value: u8,
-    ) -> CycleTransition {
-        let value = (value as u16) << 8 | low as u16;
-
-        self.registers.set16(destination, value);
-
-        self.registers.increment_pc();
         CycleTransition::InstructionFinished
     }
 
@@ -1523,6 +1400,61 @@ impl CPU {
                 self.registers.set_flag(Flag::Z, result == 0);
 
                 result
+            }
+        }
+    }
+
+    fn finish_imm16(&mut self, value: u16, then: Imm16Use) -> CycleTransition {
+        match then {
+            Imm16Use::LoadRegister(register16) => {
+                self.registers.set16(register16, value);
+                CycleTransition::InstructionFinished
+            }
+            Imm16Use::Jump { taken } => {
+                if taken {
+                    let next_state = ApplyJump { target: value };
+                    CycleTransition::Continue(next_state)
+                } else {
+                    CycleTransition::InstructionFinished
+                }
+            }
+            Imm16Use::Call { taken, stack_addr } => {
+                let [return_addr_low, return_addr_high] = self.registers.pc.to_le_bytes();
+                if taken {
+                    let next_state = Call {
+                        jump_addr: value,
+                        stack_addr,
+                        return_addr_high,
+                        return_addr_low,
+                    };
+                    CycleTransition::Continue(next_state)
+                } else {
+                    CycleTransition::InstructionFinished
+                }
+            }
+            Imm16Use::LoadAFromAbsolute => {
+                let next_state = ReadMemory {
+                    addr: value,
+                    destination: Register::A,
+                };
+                CycleTransition::Continue(next_state)
+            }
+            Imm16Use::StoreAToAbsolute { value: a_value } => {
+                let next_state = WriteMemory {
+                    addr: value,
+                    value: a_value,
+                };
+                CycleTransition::Continue(next_state)
+            }
+            Imm16Use::StoreSp { sp } => {
+                let sp_low = (sp & 0xFF) as u8;
+                let sp_high = (sp >> 8) as u8;
+                let next_state = WriteSpLow {
+                    sp_low,
+                    sp_high,
+                    addr: value,
+                };
+                CycleTransition::Continue(next_state)
             }
         }
     }
