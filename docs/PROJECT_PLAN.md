@@ -4,9 +4,9 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory foundation and M2 functional CPU execution are complete, including the selected CPU cleanup. M3 register foundation #65 is implemented: TIMA/TMA storage and masked TAC readback are routed through Bus, with five new acceptance tests. Latest executable verification, 2026-11-19: **447 passing tests** (322 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting and strict Clippy pass. No timer counting/reload/IRQ correctness is claimed yet. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
+M1 cartridge/memory and M2 functional CPU execution/cleanup are complete. M3 register foundation #65 and tick-driven TIMA/reload/write-phase slice #66 are implemented for the declared coarse schedule. Latest executable verification, 2026-11-19: **456 passing tests** (331 unit, 125 integration), including five hash-verified existing external fixtures; formatting and strict Clippy pass. DIV/TAC write edges, pending STOP interactions and external timer conformance remain incomplete. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
 
-**Next: settle divider-edge counting and overflow-boundary behavior under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53).** [Register storage/mapping #65](tasks/TIMER.md#first-implementation-slice-register-storage-and-mapping) is complete. Edge effects, reload/write phases and event ordering need a reviewed contract before dependent implementation; #53 remains open.
+**Next: specify DIV/TAC write-induced edges and STOP interactions under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53).** [Tick/reload/write-phase #66](tasks/TIMER.md#tick-reload-and-write-phase-contract) is verified locally, including all-byte phase writes and actual CPU reload-cycle accesses. Hardware timer ROM audits/runs and phase calibration remain required; #53 stays open.
 
 Separate nonblocking follow-ups:
 

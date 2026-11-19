@@ -93,7 +93,9 @@ impl Bus {
 
     pub(crate) fn advance_mcycle(&mut self) {
         for _ in 0..4 {
-            self.timer.tick();
+            if let timer::TimerEvent::InterruptRequested = self.timer.tick() {
+                self.request_interrupt(Interrupt::Timer);
+            }
         }
     }
 

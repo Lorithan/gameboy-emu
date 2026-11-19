@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest executable verification: timer-register foundation #65, 2026-11-19, **447 passes** (322 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting and strict Clippy pass. Five new tests cover register startup/masks/isolation/read purity, Bus mapping/phase/full-memory preservation and CPU LDH trace/time round trips. Existing FF05-07 fallback/LDH oracles were explicitly migrated. This does not establish timer counting/reload/IRQ behavior or add an external timer ROM result.
+Latest executable verification: tick/reload/write-phase #66, 2026-11-19, **456 passes** (331 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Nine tests added since register foundation #65 cover exhaustive divider/TAC input, ordinary periods, delayed one-shot reload/IF, all-byte phase writes, cancellation/old-IF preservation and CPU reload-cycle writes. Earlier register/Bus/LDH oracles remain intact. DIV/TAC write-edge, STOP pending-reload and external timer calibration work remains; no new timer ROM result is claimed.
 
 ## Commands
 

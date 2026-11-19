@@ -1,6 +1,49 @@
 use super::fixture;
 
 #[test]
+fn tima_cancellation_preserves_existing_if_bits_and_prevents_a_new_timer_request() {
+    for flags in [0x11, 0x15] {
+        let (mut bus, _) = fixture();
+        bus.write(0xFF0F, flags);
+        bus.write(0xFF05, 0xFF);
+        bus.write(0xFF06, 0x42);
+        bus.write(0xFF07, 5);
+        bus.advance_mcycle();
+        bus.advance_mcycle();
+        assert_eq!(bus.read(0xFF05), 0);
+        bus.write(0xFF05, 0x99);
+        bus.advance_mcycle();
+        assert_eq!(bus.read(0xFF05), 0x99);
+        assert_eq!(bus.read(0xFF0F), 0xE0 + flags);
+    }
+}
+
+#[test]
+fn timer_reload_requests_if_at_the_next_mcycle_without_repeating_or_requiring_ie() {
+    let (mut bus, _) = fixture();
+    bus.write(0xFF0F, 0x11);
+    bus.write(0xFFFF, 0);
+    bus.write(0xFF05, 0xFF);
+    bus.write(0xFF06, 0x42);
+    bus.write(0xFF07, 5);
+    // ABC8 reaches the fast timer's falling edge after eight base ticks.
+    bus.advance_mcycle();
+    assert_eq!((bus.read(0xFF05), bus.read(0xFF0F)), (0xFF, 0xF1));
+    bus.advance_mcycle();
+    assert_eq!((bus.read(0xFF05), bus.read(0xFF0F)), (0, 0xF1));
+    bus.advance_mcycle();
+    assert_eq!((bus.read(0xFF05), bus.read(0xFF0F)), (0x42, 0xF5));
+    assert_eq!(
+        bus.pending_interrupts(),
+        0,
+        "IF request must not depend on IE"
+    );
+    bus.write(0xFF0F, 0x11);
+    bus.advance_mcycle();
+    assert_eq!((bus.read(0xFF05), bus.read(0xFF0F)), (0x42, 0xF1));
+}
+
+#[test]
 fn timer_bus_writes_exhaust_bytes_and_preserve_irq_storage_and_divider_phase() {
     for target in [0xFF05, 0xFF06, 0xFF07] {
         for value in 0u8..=255 {

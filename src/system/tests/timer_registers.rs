@@ -6,6 +6,50 @@ use crate::{
 };
 
 #[test]
+fn reload_cycle_cpu_write_ignores_tima_but_updates_tma_and_tima_together() {
+    for offset in [5u8, 6] {
+        let mut rom = vec![0; 32768];
+        rom[0x14D] = 0xE7;
+        rom[0x100..0x102].copy_from_slice(&[0xE0, offset]);
+        let mut system = System::new(Cartridge::from_bytes(&rom).unwrap());
+        system.memory.write(0xFF05, 0xFF);
+        system.memory.write(0xFF06, 0x42);
+        system.memory.write(0xFF07, 5);
+        let initial = system.cpu_snapshot();
+        for cycle in 1..=3 {
+            let trace = expect_cycle(system.step_machine_cycle().unwrap());
+            assert_eq!(trace.record.tick_after, cycle * 4);
+            if cycle == 2 {
+                assert_eq!(system.memory.read(0xFF05), 0);
+                assert_eq!(system.memory.read(0xFF0F), 0xE1);
+            }
+            if cycle == 3 {
+                assert_eq!(
+                    trace.record.action,
+                    CycleAction::Write {
+                        addr: 0xFF00 + u16::from(offset),
+                        value: 1
+                    }
+                );
+                assert_eq!(trace.outcome, CycleOutcome::InstructionComplete);
+            }
+        }
+        assert_eq!(
+            system.memory.read(0xFF05),
+            if offset == 5 { 0x42 } else { 1 }
+        );
+        assert_eq!(
+            system.memory.read(0xFF06),
+            if offset == 5 { 0x42 } else { 1 }
+        );
+        assert_eq!(system.memory.read(0xFF0F), 0xE5);
+        let mut expected = initial;
+        expected.pc = 0x102;
+        assert_eq!(system.cpu_snapshot(), expected);
+    }
+}
+
+#[test]
 fn timer_registers_round_trip_through_cpu_bus_cycles_with_exact_traces_and_time() {
     for offset in [5u8, 6, 7] {
         for value in 0u8..=255 {

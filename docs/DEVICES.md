@@ -14,7 +14,7 @@ Cartridge accepts validated unchanged 32 KiB ROM-only images with no cartridge R
 | FF80-FFFE | 127-byte HRAM |
 | FF00 | JOYP |
 | FF04 | DIV |
-| FF05-FF07 | TIMA/TMA/TAC storage/readback only |
+| FF05-FF07 | TIMA/TMA/TAC with tick-driven counting and reload/write phases; write-edge integration incomplete |
 | FF0F / FFFF | IF / IE |
 | Other | Read FF, ignore writes; unimplemented hardware |
 
@@ -26,7 +26,7 @@ Bus owns the controller. Internal IF starts 01 (reads E1); IE starts 00. IF uppe
 
 ## Divider phase
 
-Timer owns a wrapping u16 base-tick counter; DIV reads the high byte. Real M-cycles tick four times, including HALT/entry. DIV writes ignore their value and clear the whole counter; actual StopEntered resets it once. Neither resets monotonic elapsed_ticks. Stopped polling/input consumes no ticks. TIMA/TMA now start zero and retain/read all written bits; TAC stores low three bits and reads them OR F8. This verified register-only foundation does not yet count TIMA or generate timer requests; DIV/TAC edges, reload and STOP interactions remain #53 design work.
+Timer owns a wrapping u16 base-tick counter; DIV reads the high byte. Real M-cycles tick four times, including HALT/entry. DIV writes ignore their value and clear the whole counter; actual StopEntered resets it once. Neither resets monotonic elapsed_ticks. Stopped polling/input consumes no ticks. TIMA/TMA start zero; TAC stores low three bits and reads them OR F8. Enabled divider falling edges now increment TIMA; overflow waits four further ticks before current-TMA reload and a one-shot IF event through Bus. Phase-dependent TIMA cancellation/protection and TMA propagation are locally verified. [Detailed contract](tasks/TIMER.md#tick-reload-and-write-phase-contract); DIV/TAC write edges and pending-reload STOP interactions remain incomplete.
 
 The seed ABC8 at elapsed_ticks=0 is a **model-phase inference**, not an independently measured hidden register. Visible AB follows the [DMG startup profile](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md). Phase derives from pinned [Mooneye boot_div-dmgABCmgb](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/boot_div-dmgABCmgb.s) and our advance-before-access schedule:
 
