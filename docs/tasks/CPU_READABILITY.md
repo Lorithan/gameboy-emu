@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Private ALU extraction checkpoint verified - 2026-11-19
+
+User completed #54: private mod alu declares another impl CPU in cpu/alu.rs containing increment, decrement, add, sub, execute_accumulator, rotate, shift and execute_cb_transform. The five parent-called methods use pub(super); add/sub/shift remain private. CPU still owns all state, and call sites are unchanged. The user-approved shift cleanup replaces shl/shr calls with equivalent << and >> operators and removes their trait imports. Imports use current CPU-local names and registers::Flag. Body-by-body comparison found only visibility, Flag qualification and equivalent shift syntax changes, allowing method order/whitespace. Inline DAA, signed-SP arithmetic, dispatch, immediate-word completion and cycle handling remain in cpu.rs.
+
+All 442 unchanged tests pass (317 unit, 125 integration), explicitly including five external fixtures with pinned hashes checked. Formatting, strict Clippy and whitespace checks pass. No test migration, helper-mirroring tests, assistant application edits, public API or dependency changes were needed. Next proposed slice is a design review for moving read_opcode into a private dispatch module; explicitly review CPU-private method visibility before implementation. Completion extraction and stack push consolidation remain independent proposals.
+
 ## Shared immediate-word checkpoint verified - 2026-11-19
 
 User added Imm16Use and shared ReadImm16Low/High, removed the six old Low/High pairs and wired LoadImmediate16, AbsoluteJump, Call, LoadAFromAbsolute, StoreAToAbsolute and StoreStackPointer. Each validated operand read increments PC once; the high handler assembles from_le_bytes and calls finish_imm16. CALL captures the current PC after that increment and splits it with to_le_bytes. Existing branch/stack/store captures and downstream cycles are preserved; no wrapper completion or interrupt changes. Computing return-address bytes for untaken CALL is harmless and has no side effect.
@@ -84,7 +90,7 @@ The existing state/transition design is suitable. complete_cycle validates respo
 
 The readability problem is concentration: cpu.rs is about 1,600 lines and combines a roughly 575-line pending-state handler, 430-line opcode handler and arithmetic/bit helpers. These are different things to look up while debugging. Splitting coherent method groups makes navigation easier without changing the machine model. The exhaustive matches may remain long; file separation alone does not prove behavior is simpler or more correct.
 
-## First slice: move arithmetic helpers
+## Original first slice: move arithmetic helpers (completed above)
 
 Add private mod alu in cpu.rs and another impl CPU block in cpu/alu.rs. This is the same CPU type with the same owned fields, not another component instance.
 
@@ -94,7 +100,7 @@ Move these existing methods unchanged:
 - add, sub and execute_accumulator
 - rotate, shift and execute_cb_transform
 
-Current parent-module callers require pub(super) on increment, decrement, execute_accumulator, rotate and execute_cb_transform. add, sub and shift are only called within the moved group and can remain private. Keep CPU fields private. Use direct imports from super::opcode and super::registers, plus super::CPU; move std::ops::{Shl, Shr} with the methods. Parent-owned set_register remains callable from the child module.
+Parent-module callers require pub(super) on increment, decrement, execute_accumulator, rotate and execute_cb_transform. add, sub and shift are only called within the moved group and remain private. Keep CPU fields private. The user subsequently approved replacing Shl/Shr method calls with shift operators, removing those trait imports. Register selection now uses Registers::set following its separately completed ownership refactor; the original CPU set_register helper no longer exists.
 
 Keep method bodies, call sites, inputs/results, flag writes and captured carry behavior unchanged. Leave inline DAA, signed-SP arithmetic, opcode dispatch and cycle transitions in their current locations for this first move. Consolidating additional arithmetic can be considered independently after this checkpoint.
 
