@@ -1,6 +1,6 @@
 # Mooneye CPU, interrupt and divider subset
 
-Task [#50](https://github.com/Lorithan/gameboy-emu/issues/50), completed 2026-11-18. Follow-up to the [first reg_f result](MOONEYE_REG_F.md). Assistant owns tests/review; no user application fix was needed. This is a finite four-ROM subset, not a complete CPU-suite pass.
+Task [#50](https://github.com/Lorithan/gameboy-emu/issues/50), completed 2026-11-18. Follow-up to the [first reg_f result](MOONEYE_REG_F.md). This record preserves original source/artifact audits and measurements; [testing guide](../TESTING.md) gives current aggregate verification. Assistant owns tests/review; no user application fix was needed. This is a finite four-ROM subset, not a complete CPU-suite pass.
 
 ## Source and prerequisite audit
 
@@ -44,6 +44,6 @@ The script verifies all four ROM hashes before Cargo runs. To run one fixture, a
 
 The external tests are individually opt-in/ignored in an ordinary fixture-free checkout; ignored results are never external passes. After verified execution, `cargo test --all-features --quiet -- --include-ignored` passes all 430 tests (312 unit, 118 integration), including all five real external fixtures, with no ignored tests in that run. Formatting, strict Clippy and whitespace checks pass. No application/configuration/dependency changes or ROM binaries committed.
 
-## Coverage and next decision
+## Coverage and limits
 
-#50 is complete. We now have five narrow, independent external results. They strengthen F masking, selected interrupt semantics and divider timing. General arithmetic/DAA/CB instruction-result coverage remains based on our focused tests; these ROMs do not establish every instruction's timing, PPU/DMA interactions or physical STOP behavior. M2 remains open while [#51](https://github.com/Lorithan/gameboy-emu/issues/51) reviews the actual completion criteria, maps remaining evidence and selects the next bounded instruction-result validation scope. #44 keeps physical STOP limits separate.
+#50 is complete. Together with reg_f, these are five narrow independent results for F masking, selected interrupt semantics and DIV timing. General arithmetic/DAA/CB coverage remains primarily local; the ROMs do not certify every instruction's timing, PPU/DMA or physical STOP. [#51 completed M2's functional review](../M2_COMPLETION_REVIEW.md); external DAA #52 remains unrun. Physical STOP assessment is separately tracked by #64, after deterministic integration #44 completed. Original run counts above are historical measurements; current aggregate checks are in the testing guide.

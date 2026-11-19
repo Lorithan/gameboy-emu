@@ -1,6 +1,6 @@
 # First external CPU result: Mooneye reg_f
 
-Task [#49](https://github.com/Lorithan/gameboy-emu/issues/49), completed 2026-11-18. Contract: [CPU_ROM_VALIDATION.md](CPU_ROM_VALIDATION.md). Fixture metadata: [mooneye-reg-f.json](../../tests/fixtures/mooneye-reg-f.json). User supplied the extracted ROMs; assistant verified the fixture and added the explicit test invocation. No application logic, dependencies, configuration or ROM headers were changed.
+Task [#49](https://github.com/Lorithan/gameboy-emu/issues/49), completed 2026-11-18. Current runner contract: [testing guide](../TESTING.md). Fixture metadata: [mooneye-reg-f.json](../../tests/fixtures/mooneye-reg-f.json). This record preserves the original artifact audit and measurements; current aggregate verification is in the testing guide. User supplied the extracted ROMs; assistant verified the fixture and added the explicit test invocation. No application logic, dependencies, configuration or ROM headers were changed.
 
 ## Artifact and provenance
 
@@ -43,6 +43,6 @@ The script checks SHA-256 against the committed manifest before invoking the exa
 
 Ordinary cargo test leaves the external test explicitly ignored, so a checkout without locally supplied fixtures stays usable. That ignored result is not external validation. The command above executes it explicitly and requires a pass. After fixture verification, the full regression was also run with `cargo test --all-features --quiet -- --include-ignored`: all 426 tests pass (312 unit, 114 integration), including the actual external test, with no ignored tests in that run. Formatting, strict Clippy and whitespace checks pass.
 
-## Next scope
+## Scope after completion
 
-#49 is complete. M2 stays open for broader independent validation. [#50](https://github.com/Lorithan/gameboy-emu/issues/50) audits a small next Mooneye subset and its device/startup/reporting dependencies before more execution. No other external ROM result is claimed. The archive's availability does not imply all tests are runnable on the current core.
+#49 and the subsequent [#50 subset](MOONEYE_CPU_SUBSET.md) are complete; [M2's functional gate](../M2_COMPLETION_REVIEW.md) is closed. This record's counts describe the original run, not the latest aggregate suite. The archive's availability does not imply every test is supported. External DAA #52 remains unrun; consult the [current plan](../PROJECT_PLAN.md) before selecting new fixtures.
