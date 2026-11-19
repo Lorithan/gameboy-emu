@@ -1,7 +1,7 @@
 use crate::cpu::{
-    Register,
+    Register, Registers,
     error::IllegalOpcode,
-    registers::{Flag, Flags, Register16},
+    registers::{Flag, Register16},
 };
 
 #[cfg(test)]
@@ -62,13 +62,13 @@ pub(super) enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub(super) fn jump(&self, flag: Flags) -> bool {
+    pub(super) fn is_met(&self, reg: &Registers) -> bool {
         match self {
             JumpCondition::Always => true,
-            JumpCondition::Z => flag.get(Flag::Z),
-            JumpCondition::NZ => !flag.get(Flag::Z),
-            JumpCondition::C => flag.get(Flag::C),
-            JumpCondition::NC => !flag.get(Flag::C),
+            JumpCondition::Z => reg.get_flag(Flag::Z),
+            JumpCondition::NZ => !reg.get_flag(Flag::Z),
+            JumpCondition::C => reg.get_flag(Flag::C),
+            JumpCondition::NC => !reg.get_flag(Flag::C),
         }
     }
 }

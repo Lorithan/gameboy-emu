@@ -67,7 +67,7 @@ pub struct Registers {
     pub(super) c: u8,
     pub(super) d: u8,
     pub(super) e: u8,
-    pub(super) f: Flags,
+    f: Flags,
     pub(super) h: u8,
     pub(super) l: u8,
     /// Program counter
@@ -148,5 +148,29 @@ impl Registers {
 
     pub(super) fn increment_pc(&mut self) {
         self.pc = self.pc.wrapping_add(1);
+    }
+
+    pub(super) fn get(&self, register: Register) -> u8 {
+        match register {
+            Register::A => self.a,
+            Register::B => self.b,
+            Register::C => self.c,
+            Register::D => self.d,
+            Register::E => self.e,
+            Register::H => self.h,
+            Register::L => self.l,
+        }
+    }
+
+    pub(super) fn set(&mut self, register: Register, value: u8) {
+        match register {
+            Register::A => self.a = value,
+            Register::B => self.b = value,
+            Register::C => self.c = value,
+            Register::D => self.d = value,
+            Register::E => self.e = value,
+            Register::H => self.h = value,
+            Register::L => self.l = value,
+        }
     }
 }

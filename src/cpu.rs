@@ -322,13 +322,13 @@ impl CPU {
 
                 match target {
                     Target::Register(register) => {
-                        let value = self.get_register(register);
+                        let value = self.registers.get(register);
 
                         match cb_type {
                             CbType::Transform(operation) => {
                                 let result = self.execute_cb_transform(value, operation);
 
-                                self.set_register(register, result);
+                                self.registers.set(register, result);
                                 Ok(CycleTransition::InstructionFinished)
                             }
                             CbType::Bit(bit) => {
@@ -341,13 +341,13 @@ impl CPU {
                             CbType::Clear(bit) => {
                                 let result = value & (!(1 << bit));
 
-                                self.set_register(register, result);
+                                self.registers.set(register, result);
                                 Ok(CycleTransition::InstructionFinished)
                             }
                             CbType::Set(bit) => {
                                 let result = value | (1 << bit);
 
-                                self.set_register(register, result);
+                                self.registers.set(register, result);
                                 Ok(CycleTransition::InstructionFinished)
                             }
                         }
@@ -902,11 +902,11 @@ impl CPU {
                 source,
             } => match source {
                 Target::Register(register) => {
-                    let value = self.get_register(register);
+                    let value = self.registers.get(register);
 
                     match destination {
                         Target::Register(register) => {
-                            self.set_register(register, value);
+                            self.registers.set(register, value);
                             Ok(CycleTransition::InstructionFinished)
                         }
                         Target::IndirectHL => {
@@ -946,12 +946,12 @@ impl CPU {
             }
             DecodedOpcode::Unary { operation, target } => match target {
                 Target::Register(register) => {
-                    let mut value = self.get_register(register);
+                    let mut value = self.registers.get(register);
                     value = match operation {
                         UnaryOperation::Increment => self.increment(value),
                         UnaryOperation::Decrement => self.decrement(value),
                     };
-                    self.set_register(register, value);
+                    self.registers.set(register, value);
 
                     Ok(CycleTransition::InstructionFinished)
                 }
@@ -992,15 +992,15 @@ impl CPU {
 
                 match operand {
                     Operand::Target(Target::Register(register)) => {
-                        let left = self.get_register(Register::A);
-                        let right = self.get_register(register);
+                        let left = self.registers.get(Register::A);
+                        let right = self.registers.get(register);
 
                         self.execute_accumulator(operation, left, right);
 
                         Ok(CycleTransition::InstructionFinished)
                     }
                     Operand::Target(Target::IndirectHL) => {
-                        let value = self.get_register(Register::A);
+                        let value = self.registers.get(Register::A);
                         let next_state = ReadMemoryAccumulator {
                             addr: self.registers.hl(),
                             value,
@@ -1009,7 +1009,7 @@ impl CPU {
                         Ok(CycleTransition::Continue(next_state))
                     }
                     Operand::Immediate => {
-                        let value = self.get_register(Register::A);
+                        let value = self.registers.get(Register::A);
                         let next_state = ReadImmediateAccumulator { value, operation };
                         Ok(CycleTransition::Continue(next_state))
                     }
@@ -1028,8 +1028,8 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::ComplementAccumulator => {
-                let value = !self.get_register(Register::A);
-                self.set_register(Register::A, value);
+                let value = !self.registers.get(Register::A);
+                self.registers.set(Register::A, value);
                 self.registers.set_flag(Flag::N, true);
                 self.registers.set_flag(Flag::H, true);
                 Ok(CycleTransition::InstructionFinished)
@@ -1048,10 +1048,10 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             DecodedOpcode::Rotate { direction } => {
-                let value = self.get_register(Register::A);
+                let value = self.registers.get(Register::A);
                 let (result, carry_out) = self.rotate(value, direction);
 
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
                 self.registers.set_flag(Flag::C, carry_out);
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, false);
@@ -1059,13 +1059,13 @@ impl CPU {
                 Ok(CycleTransition::InstructionFinished)
             }
             DecodedOpcode::RelativeJump { condition } => {
-                let taken = condition.jump(self.registers.f);
+                let taken = condition.is_met(&self.registers);
 
                 let next_state = ReadDisplacement { taken };
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::AbsoluteJump { condition } => {
-                let taken = condition.jump(self.registers.f);
+                let taken = condition.is_met(&self.registers);
 
                 let next_state = ReadJumpLow { taken };
                 Ok(CycleTransition::Continue(next_state))
@@ -1095,7 +1095,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::Call { condition } => {
-                let taken = condition.jump(self.registers.f);
+                let taken = condition.is_met(&self.registers);
                 let stack_addr = self.registers.sp.wrapping_sub(1);
 
                 let next_state = ReadCallLow { taken, stack_addr };
@@ -1109,7 +1109,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::ConditionalReturn { condition } => {
-                let taken = condition.jump(self.registers.f);
+                let taken = condition.is_met(&self.registers);
 
                 let next_state = ReturnConditional {
                     taken,
@@ -1130,7 +1130,7 @@ impl CPU {
                 Ok(CycleTransition::Continue(next_state))
             }
             DecodedOpcode::DecimalAdjust => {
-                let mut a = self.get_register(Register::A);
+                let mut a = self.registers.get(Register::A);
                 if self.registers.get_flag(Flag::N) {
                     // after subtraction
                     if self.registers.get_flag(Flag::C) {
@@ -1150,7 +1150,7 @@ impl CPU {
                     }
                 }
 
-                self.set_register(Register::A, a);
+                self.registers.set(Register::A, a);
                 self.registers.set_flag(Flag::Z, a == 0);
                 self.registers.set_flag(Flag::H, false);
                 Ok(CycleTransition::InstructionFinished)
@@ -1304,40 +1304,16 @@ impl CPU {
     }
 
     fn store_immediate(&mut self, register: Register, value: u8) -> CycleTransition {
-        self.set_register(register, value);
+        self.registers.set(register, value);
 
         self.registers.increment_pc();
         CycleTransition::InstructionFinished
     }
 
     fn store_fetched(&mut self, destination: Register, value: u8) -> CycleTransition {
-        self.set_register(destination, value);
+        self.registers.set(destination, value);
 
         CycleTransition::InstructionFinished
-    }
-
-    fn set_register(&mut self, destination: Register, value: u8) {
-        match destination {
-            Register::A => self.registers.a = value,
-            Register::B => self.registers.b = value,
-            Register::C => self.registers.c = value,
-            Register::D => self.registers.d = value,
-            Register::E => self.registers.e = value,
-            Register::H => self.registers.h = value,
-            Register::L => self.registers.l = value,
-        }
-    }
-
-    fn get_register(&self, register: Register) -> u8 {
-        match register {
-            Register::A => self.registers.a,
-            Register::B => self.registers.b,
-            Register::C => self.registers.c,
-            Register::D => self.registers.d,
-            Register::E => self.registers.e,
-            Register::H => self.registers.h,
-            Register::L => self.registers.l,
-        }
     }
 
     fn store_immediate_word(
@@ -1425,15 +1401,15 @@ impl CPU {
         match operation {
             ArithmeticKind::Add { carry } => {
                 let result = self.add(left, right, carry);
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
             }
             ArithmeticKind::Sub { carry } => {
                 let result = self.sub(left, right, carry);
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
             }
             ArithmeticKind::And => {
                 let result = left & right;
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
                 self.registers.set_flag(registers::Flag::Z, result == 0);
                 self.registers.set_flag(registers::Flag::N, false);
                 self.registers.set_flag(registers::Flag::H, true);
@@ -1441,7 +1417,7 @@ impl CPU {
             }
             ArithmeticKind::Xor => {
                 let result = left ^ right;
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
                 self.registers.set_flag(registers::Flag::Z, result == 0);
                 self.registers.set_flag(registers::Flag::N, false);
                 self.registers.set_flag(registers::Flag::H, false);
@@ -1449,7 +1425,7 @@ impl CPU {
             }
             ArithmeticKind::Or => {
                 let result = left | right;
-                self.set_register(Register::A, result);
+                self.registers.set(Register::A, result);
                 self.registers.set_flag(registers::Flag::Z, result == 0);
                 self.registers.set_flag(registers::Flag::N, false);
                 self.registers.set_flag(registers::Flag::H, false);

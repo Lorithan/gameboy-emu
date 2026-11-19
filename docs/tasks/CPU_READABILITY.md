@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Byte-register ownership checkpoint verified - 2026-11-19
+
+User moved all seven byte-register selector mappings from CPU into Registers::get/set and updated CPU callers without moving arithmetic or completion effects. JumpCondition::is_met now takes a Registers reference and queries get_flag; the four conditional JR/JP/CALL/RET sites retain their evaluation timing. Registers::f is private again. Existing instruction-result, pair aliasing, flag, branch and protocol tests remain unchanged; all 441 tests pass (316 unit, 125 integration), including all five pinned external fixtures with hashes rechecked. Formatting, strict Clippy and whitespace checks pass. No assistant application edits or new tests.
+
+The remaining register-ownership slice is [#57](https://github.com/Lorithan/gameboy-emu/issues/57): add get16/set16 for BC/DE/HL/SP and replace the four selector matches in Unary16 completion, Unary16 decode, AddHL decode and store_immediate_word. Reuse current pair methods, preserve operand capture/write timing, flags, arithmetic wrapping and CPU-owned PC/state effects. AF/stack selectors remain separate. Verify with existing 16-bit instruction/pair/retry tests and the full fixture-inclusive suite; do not combine with subsequent state or module consolidation.
+
 ## Infallible helper checkpoint verified - 2026-11-19
 
 For #56, user changed store_immediate, store_fetched and store_immediate_word to return CycleTransition directly. Callers wrap returned transitions in Ok; response.read_value()? still validates input before mutation. Immediate reads increment PC once, ReadMemoryAndUpdateHL retains captured-address wrapping, and only the shared wrapper applies completion/state effects. That HL branch still discards store_fetched's InstructionFinished value; replacing the call with set_register remains optional readability polish, not a behavioral defect.

@@ -1,4 +1,8 @@
 # Game Boy emulator project plan
+## Current checkpoint - byte-register ownership and private flags verified, 2026-11-19
+
+User moved byte-register get/set onto Registers and updated all CPU callers; JumpCondition::is_met queries Registers::get_flag and f is private again. Review confirms unchanged byte mappings and all four branch-condition call sites. All 441 tests pass (316 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting, strict Clippy and whitespace checks pass. No assistant application edits or additional tests were needed for this mechanical move. Next is [#57](https://github.com/Lorithan/gameboy-emu/issues/57): get16/set16 and the four remaining Register16 selection matches, preserving capture timing and CPU-owned PC/state changes. [Evidence and boundaries](tasks/CPU_READABILITY.md#byte-register-ownership-checkpoint-verified---2026-11-19). M2 stays complete.
+
 ## Current checkpoint - infallible completion helpers verified, 2026-11-19
 
 User completed #56: store_immediate, store_fetched and store_immediate_word return CycleTransition directly; fallible callers retain response validation before effects. Review confirms unchanged PC increments, captured-address HL wrapping and wrapper-owned completion. All 441 tests pass (316 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting, strict Clippy and whitespace checks pass. No assistant application edits or new tests were needed for this signature-only change. [Evidence](tasks/CPU_READABILITY.md#infallible-helper-checkpoint-verified---2026-11-19). Next proposed slice is register access ownership on Registers; fetch suppression, state consolidation and #54 extraction remain separate. M2 stays complete.
