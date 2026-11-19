@@ -1,0 +1,61 @@
+{
+  "suite": "Gekkio/mooneye-test-suite",
+  "source_revision": "31510e12eea6286d36eea060a6adde755e1067aa",
+  "source_path": "acceptance/bits/reg_f.s",
+  "target": "DMG, skipped boot ROM, current documented post-boot state",
+  "archive": {
+    "url": "https://gekkio.fi/files/mooneye-test-suite/mts-20260714-0944-31510e1/mts-20260714-0944-31510e1.zip",
+    "sha256": "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+    "version": "mts-20260714-0944-31510e1"
+  },
+  "rom": {
+    "archive_path": "mts-20260714-0944-31510e1/acceptance/bits/reg_f.gb",
+    "cache_path": "target/test-roms/mooneye/acceptance/bits/reg_f.gb",
+    "size": 32768,
+    "sha256": "4b193e887ee3ac82b38b796729e1503e9a78da3e1140f8bd5600d0884f2e2627",
+    "cartridge_type": 0,
+    "rom_size_code": 0,
+    "ram_size_code": 0,
+    "header_checksum": "2d"
+  },
+  "symbols": {
+    "sha256": "36324ca3629e8ff1043fc8adbd8baf4f9b7b39b63e56da47c87c9e8ce1fac594",
+    "format": "WLA symbol version 3",
+    "main_address": "00:0150",
+    "font_file_offset": "4000",
+    "font_length": "07f0"
+  },
+  "build_provenance": {
+    "kind": "Official prebuilt archive; local ROM, symbols and LICENSE match archive entries",
+    "workflow": ".github/workflows/ci.yml at source_revision",
+    "wla_dx_revision": "89a90a56be5c2b8cf19a9afa3e1b32384ddb1a97",
+    "invocation": "make clean all; wla-gb -I common -o object source; wlalink -d -S linkfile output",
+    "local_rebuild": false,
+    "attestation": "Archive/version and source workflow provenance; not an independently reproduced build"
+  },
+  "components": [
+    {
+      "name": "Mooneye suite source",
+      "copyright": "2014-2022 Joonas Javanainen",
+      "license": "MIT",
+      "notice_path": "target/test-roms/mooneye/LICENSE",
+      "notice_sha256": "8a9a9fe1603b7566d56978c89a6442ae1db2dd96042fb94c20b9647c47afae88"
+    },
+    {
+      "name": "Darkrose font, common/font.bin",
+      "source_url": "https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/common/font.bin",
+      "attribution_url": "https://opengameart.org/content/8x8-ascii-bitmap-font-with-c-source",
+      "sha256": "29f4022ac990575e2300ac5035ec66f57f40d3b54ca043905d0f113f91e87549",
+      "verification": "All 2032 bytes match the ROM region at 4000-47ef",
+      "upstream_notice": "OGA distinguishes GPLv3-or-later font.c from additional GPLv2/CC-BY-SA choices for font.png",
+      "derivation_status": "Exact conversion from OGA assets to font.bin not independently established; do not label the complete ROM exclusively MIT"
+    }
+  ],
+  "expected": {
+    "outcome": "Passed",
+    "ff01_packet_and_b_c_d_e_h_l": [3, 5, 8, 13, 21, 34],
+    "mcycle_limit": 1000000,
+    "host_time_limit_seconds": 10
+  },
+  "distribution": "ROM/archive remain in ignored cache; no binary redistribution in repository"
+}

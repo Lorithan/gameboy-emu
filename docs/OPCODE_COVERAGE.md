@@ -1,4 +1,8 @@
 # Opcode coverage
+## First external ROM evidence - 2026-11-18
+
+[Pinned Mooneye reg_f](tasks/MOONEYE_REG_F.md) passed in 3,946 M-cycles / 15,784 ticks. All 426 tests pass when explicitly including the external fixture, formatting and strict Clippy pass. This adds independent F-mask/stack/register-path evidence; it does not establish full CPU accuracy or close M2. Implemented encoding coverage remains 500/500. #50 selects the next audited subset; earlier no-external-ROM statements are historical.
+
 ## Conditional STOP and selected-input wake - 2026-11-18
 
 [#48 deterministic scope](tasks/STOP_WAKE.md#stop-wake-completion-verified---2026-11-18) is verified: four conditional entry branches, divider reset/pause and selected-input wake are implemented. All 414 tests pass (312 unit, 102 integration), formatting and strict Clippy pass. Coverage remains 500/500 encodings for the declared scope. #44 retains physical oscillator/edge/glitch limits. No external ROM ran; M2's ROM gate remains open. Earlier no-wake statements describe historical checkpoints.

@@ -15,6 +15,30 @@ use gameboy_emu::{
 };
 use runner::{FAIL_SIGNATURE, Limits, Outcome, PASS_SIGNATURE, Timeout};
 
+#[test]
+#[ignore = "Requires the pinned external ROM; run tests/scripts/run-mooneye-reg-f.ps1 to verify its SHA-256 first"]
+fn mooneye_reg_f_external() {
+    let path = std::env::var_os("MOONEYE_REG_F")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("target/test-roms/mooneye/acceptance/bits/reg_f.gb")
+        });
+    let started = std::time::Instant::now();
+    let report = runner::run_file(&path, runner::REG_F_LIMITS)
+        .unwrap_or_else(|error| panic!("external fixture setup failed: {error}"));
+    eprintln!(
+        "Mooneye reg_f: {:?}, {} M-cycles, {} ticks, host {:?}, packet {:?}, CPU {:?}",
+        report.outcome,
+        report.mcycles,
+        report.ticks,
+        started.elapsed(),
+        report.packet,
+        report.snapshot
+    );
+    assert!(matches!(report.outcome, Outcome::Passed), "{report:#?}");
+}
+
 // Original synthetic programs only. No external suite's ROM or code is embedded.
 fn rom(program: &[u8]) -> Vec<u8> {
     let mut bytes = vec![0; 32768];

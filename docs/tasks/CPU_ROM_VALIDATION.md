@@ -1,6 +1,10 @@
 # First external CPU ROM validation
 
-Design task: [#45](https://github.com/Lorithan/gameboy-emu/issues/45), M2. The runner contract is selected and its synthetic acceptance is implemented. Actual fixture preparation/execution is the next small task, [#49](https://github.com/Lorithan/gameboy-emu/issues/49). No external ROM has been imported or run. The original proposal baseline was 6df35c5 with 379 passing tests; current evidence below supersedes it.
+Design task: [#45](https://github.com/Lorithan/gameboy-emu/issues/45), M2. Runner and first fixture task [#49](https://github.com/Lorithan/gameboy-emu/issues/49) are complete. The pinned Mooneye reg_f ROM passed through the public System path; [artifact/result evidence](MOONEYE_REG_F.md) records provenance, hashes, notices and exact reproduction. Next is [#50](https://github.com/Lorithan/gameboy-emu/issues/50), a source/prerequisite audit and small next CPU subset. M2 remains open. Earlier no-external-ROM statements below describe historical checkpoints.
+
+## First external result verified - 2026-11-18
+
+Mooneye reg_f passed in 3,946 M-cycles / 15,784 ticks with matching output/register signature 3,5,8,13,21,34. The local ROM/symbols/license match the pinned official archive. A committed manifest and test-only PowerShell invocation check ROM SHA-256 before the explicit external test. The optional default-ignore is not counted as validation; the external test was actually run, then the full suite explicitly included it. All 426 tests pass (312 unit, 114 integration), formatting, strict Clippy and whitespace checks pass. No production changes or binary redistribution. This narrow F-mask/stack path result does not close M2's wider CPU validation gate; see [MOONEYE_REG_F.md](MOONEYE_REG_F.md) for actual scope and limits.
 
 ## Synthetic runner checkpoint - 2026-11-18
 
