@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## Private execution checkpoint verified - 2026-11-19
+
+User completed #61: private cpu/execution.rs contains complete_cycle_inner, store_immediate, store_fetched and finish_imm16 in another impl CPU. complete_cycle_inner uses pub(super) for its existing wrapper and defensive STOP test; the three helpers remain private. Comparison of all four bodies found only necessary visibility, ExecutionState/Flag qualification and formatting/trailing-comma changes. Existing sibling dispatch and ALU visibility suffices. CPU retains ownership, construction/snapshot, request_cycle, public completion validation/transition/fault/EI handling and interrupt/wake methods. Parent imports were adjusted without changing these bodies.
+
+All 442 unchanged tests pass (317 unit, 125 integration), explicitly including five external fixtures with pinned hashes checked. Formatting, strict Clippy and whitespace checks pass. No assistant application edits, test migration/new tests, dependencies or public API changes. The proposed ALU/dispatch/execution file split is complete. Review remaining accepted cleanup priorities with the user before another implementation slice; stack push consolidation still requires a separate contract, and M3 timer design #53 remains queued. M2 stays complete.
+
 ## Private dispatch checkpoint verified - 2026-11-19
 
 User completed #60 by moving read_opcode into private cpu/dispatch.rs as another impl CPU with pub(super). Its parent caller and signature are unchanged. Full method comparison found only visibility, ExecutionState/Flag qualification, whitespace and an equivalent expression-to-block change for the CB-prefix arm. Fetch PC/suppression effects, original fault address, illegal-byte transition, condition/operand capture, inline DAA, signed-SP setup and initial instruction transitions retain their behavior. ALU helpers remain accessible within CPU privacy. complete_cycle, complete_cycle_inner and finish_imm16 remain in cpu.rs.
