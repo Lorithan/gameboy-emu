@@ -47,6 +47,9 @@ impl Bus {
             0xE000..=0xFDFF => self.ram[(addr - 0xE000) as usize],
             0xFF00 => self.joypad.read(),
             0xFF04 => self.timer.read_div(),
+            0xFF05 => self.timer.read_tima(),
+            0xFF06 => self.timer.read_tma(),
+            0xFF07 => self.timer.read_tac(),
             0xFF0F => self.interrupt_controller.read_flag(),
             0xFFFF => self.interrupt_controller.read_enable(),
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
@@ -64,6 +67,9 @@ impl Bus {
                 }
             }
             0xFF04 => self.timer.write_div(value),
+            0xFF05 => self.timer.write_tima(value),
+            0xFF06 => self.timer.write_tma(value),
+            0xFF07 => self.timer.write_tac(value),
             0xFF0F => self.interrupt_controller.write_flag(value),
             0xFFFF => self.interrupt_controller.write_enable(value),
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = value,

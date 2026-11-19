@@ -4,9 +4,9 @@ Updated 2026-11-19. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory foundation and M2 functional CPU execution are complete. CPU structure/readability cleanup is complete: standard errors, decoder validity, register ownership, typed continuations, HALT suppression state, module separation and naming. Last executable verification: `dcedd79`, **442 passing tests** (317 unit, 125 integration), explicitly including five external ROM fixtures; formatting and strict Clippy passed. Later issue-audit/documentation changes add no executable evidence. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
+M1 cartridge/memory foundation and M2 functional CPU execution are complete, including the selected CPU cleanup. M3 register foundation #65 is implemented: TIMA/TMA storage and masked TAC readback are routed through Bus, with five new acceptance tests. Latest executable verification, 2026-11-19: **447 passing tests** (322 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting and strict Clippy pass. No timer counting/reload/IRQ correctness is claimed yet. See [testing](TESTING.md) and [M2 decision](M2_COMPLETION_REVIEW.md).
 
-**Next user slice: [#65, timer register storage and mapping](https://github.com/Lorithan/gameboy-emu/issues/65)** under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53). The [active contract](tasks/TIMER.md#first-implementation-slice-register-storage-and-mapping) specifies TIMA/TMA/TAC startup, read/write masks and Bus routing only. Registers/counting/reload are not yet implemented. Edge effects, reload/write phases and event ordering still need a reviewed contract before their dependent code; #53 remains open. No application changes or new tests for this planning step.
+**Next: settle divider-edge counting and overflow-boundary behavior under [timer design #53](https://github.com/Lorithan/gameboy-emu/issues/53).** [Register storage/mapping #65](tasks/TIMER.md#first-implementation-slice-register-storage-and-mapping) is complete. Edge effects, reload/write phases and event ordering need a reviewed contract before dependent implementation; #53 remains open.
 
 Separate nonblocking follow-ups:
 

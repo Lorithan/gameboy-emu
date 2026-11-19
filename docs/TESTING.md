@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Last executable verification: dcedd79, 2026-11-19, **442 passes** (317 unit, 125 integration), explicitly including five external fixtures; formatting and strict Clippy passed. Documentation-only changes add no executable evidence.
+Latest executable verification: timer-register foundation #65, 2026-11-19, **447 passes** (322 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting and strict Clippy pass. Five new tests cover register startup/masks/isolation/read purity, Bus mapping/phase/full-memory preservation and CPU LDH trace/time round trips. Existing FF05-07 fallback/LDH oracles were explicitly migrated. This does not establish timer counting/reload/IRQ behavior or add an external timer ROM result.
 
 ## Commands
 

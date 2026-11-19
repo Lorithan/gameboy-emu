@@ -10,6 +10,7 @@ mod halt;
 mod joypad;
 mod reti;
 mod stop;
+mod timer_registers;
 
 use divider_oracle::clocked_byte;
 

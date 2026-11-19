@@ -1,6 +1,7 @@
 use super::{Bus, Cartridge};
 
 mod joypad;
+mod timer_registers;
 
 #[test]
 fn interrupt_registers_exhaustive_readback_and_eligibility() {
@@ -166,7 +167,7 @@ fn every_unimplemented_address_ignores_writes_without_corrupting_storage() {
     bus.write(0xC000, 0x35);
     bus.write(0xDFFF, 0x76);
     for address in 0u16..=u16::MAX {
-        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFF | 0xFF00 | 0xFF04 | 0xFF0F)
+        if matches!(address, 0x0000..=0x7FFF | 0xC000..=0xFDFF | 0xFF80..=0xFFFF | 0xFF00 | 0xFF04..=0xFF07 | 0xFF0F)
         {
             continue;
         }
@@ -198,6 +199,8 @@ fn full_address_space_routes_to_expected_storage() {
             0xFF80..=0xFFFE => expected_hram[usize::from(address - 0xFF80)],
             0xFF00 => 0xCF,
             0xFF04 => 0xAB,
+            0xFF05 | 0xFF06 => 0,
+            0xFF07 => 0xF8,
             0xFF0F => 0xE1,
             0xFFFF => 0,
             _ => 0xFF,

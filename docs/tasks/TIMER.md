@@ -1,10 +1,10 @@
 # M3 programmable timer design brief
 
-Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). The register-only foundation below is specified and ready for user implementation; counting/reload sections remain proposals/questions. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) already support real ticks, HALT/STOP and IRQ service.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). The register-only foundation below is implemented and verified; counting/reload sections remain proposals/questions. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) already support real ticks, HALT/STOP and IRQ service.
 
 ## First implementation slice: register storage and mapping
 
-[#65](https://github.com/Lorithan/gameboy-emu/issues/65), M3. Add private TIMA/TMA/TAC storage to the existing Timer; preserve the counter and ABC8 seed. Provide parent-visible register read/write methods and route FF05-FF07 in Bus. No new CPU/System interface or second divider clock.
+[#65](https://github.com/Lorithan/gameboy-emu/issues/65), M3, complete 2026-11-19. User added private TIMA/TMA/TAC storage, parent-visible register methods and FF05-FF07 Bus routing while preserving the counter and ABC8 seed. No new CPU/System interface or second divider clock.
 
 | Register | Startup storage | Read | Write |
 | --- | --- | --- | --- |
@@ -16,11 +16,11 @@ TAC bit2 is enable and bits1-0 select the clock. Read operations are pure. This 
 
 Startup comes from the Pan Docs post-boot register table. TAC's unused-bit behavior is independently specified in pinned [Mooneye unused_hwio-GS.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/bits/unused_hwio-GS.s), which checks upper mask F8 after writing F8 and 00. This is source review, not an executed new fixture.
 
-Assistant acceptance: exhaust all written bytes, TAC mask/aliases, register isolation, startup/read purity and Bus routing. Writes must preserve existing counter phase/IF/IE/elapsed time and unrelated registers/memory. Migrate old FF05-07 fallback/full-memory test oracles explicitly, leaving all independent result/flag/trace/budget expectations intact. Verify DIV/STOP/joypad/interrupt regressions and the full five-fixture suite, formatting, strict Clippy and whitespace before publication. No new allowances/dependencies.
+Assistant added five tests: exhaustive byte/mask/isolation and startup/read-purity checks, Bus phase/IF/IE/instance/full-memory preservation, and CPU LDH/trace/time round trips. Existing divider test setups gained explicit register fields; fallback/full-memory and LDH sweep oracles now independently describe FF05-07 storage/readback. The first full run exposed the stale LDH expectation; that test-only migration fixes it without weakening result/flag/trace/budget checks. All 447 tests pass (322 unit, 125 integration), explicitly including five hash-verified external fixtures; formatting, strict Clippy and whitespace checks pass. No assistant application edits, allowances, dependencies or new external fixture.
 
 ## Decisions before dependent code
 
-1. **Registers/startup:** FF05 TIMA, FF06 TMA, FF07 TAC alongside existing FF04 DIV. Specify masks/readback, writes and ordinary-DMG skipped-boot values; do not invent them.
+1. **Registers/startup:** specified and implemented above. Extend these methods with reviewed edge/reload behavior in later slices.
 2. **Timer input:** enabled selected-bit input from the existing divider, explicit base-tick bit indexing and falling edges. Settle DIV/TAC writes and enable transitions without an independent countdown.
 3. **Overflow/reload:** explicit delay/reload phases, TIMA zero window, TMA copy and Timer IF boundary, with precise per-tick ordering.
 4. **Write collisions:** phase table for TIMA/TMA/DIV/TAC writes, cancellation/ignored writes/reload values. Reconcile contradictory source wording against pinned tests.
@@ -29,7 +29,7 @@ Assistant acceptance: exhaust all written bytes, TAC mask/aliases, register isol
 
 ## Proposed checkpoints
 
-1. Register storage/mapping (#65), then a separately specified ordinary edge-counting slice.
+1. Register storage/mapping (#65) is complete; next specify ordinary edge counting and its overflow boundary before implementation.
 2. Delayed reload, event-to-IF delivery and write collisions.
 3. System regressions and explicitly audited external ROM validation.
 
