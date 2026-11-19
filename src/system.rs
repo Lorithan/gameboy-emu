@@ -1,6 +1,6 @@
 use crate::{
     cpu::{
-        CPU, CpuError, CpuSnapShot, CycleAction, CycleOutcome, CycleRequest, CycleResponse,
+        CPU, CpuError, CpuSnapshot, CycleAction, CycleOutcome, CycleRequest, CycleResponse,
         InterruptSample, Registers,
     },
     memory::{Bus, Button, Cartridge},
@@ -106,7 +106,7 @@ impl System {
         }
     }
 
-    pub fn cpu_snapshot(&self) -> CpuSnapShot {
+    pub fn cpu_snapshot(&self) -> CpuSnapshot {
         self.cpu.snapshot()
     }
 

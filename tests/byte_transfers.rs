@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuError, CpuSnapShot, CycleAction},
+    cpu::{CpuError, CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System, SystemError},
 };
@@ -63,7 +63,7 @@ fn machine(opcode: u8, read_back_store: bool) -> System {
     system
 }
 
-fn expected(mut snapshot: CpuSnapShot, destination: usize, source: usize) -> CpuSnapShot {
+fn expected(mut snapshot: CpuSnapshot, destination: usize, source: usize) -> CpuSnapshot {
     let value = u16::from(VALUES[source]);
     match destination {
         0 => snapshot.bc = value << 8 | (snapshot.bc & 0xFF),
@@ -227,7 +227,7 @@ fn mixed_transfers_can_change_hl_after_using_it_as_a_pointer() {
     }
     assert_eq!(
         system.cpu_snapshot(),
-        CpuSnapShot {
+        CpuSnapshot {
             af: 0x34B0,
             bc: 0x5634,
             de: 0x5634,

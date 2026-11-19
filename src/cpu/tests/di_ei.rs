@@ -13,7 +13,7 @@ fn di_ei_decode_and_cpu_startup() {
     );
     assert_eq!(
         DecodedOpcode::try_from(0xFB).unwrap(),
-        DecodedOpcode::EnabledInterrupts
+        DecodedOpcode::EnableInterrupts
     );
     for checksum in [0, 1, 0xE7] {
         let cpu = CPU::from_registers(Registers::dmg_post_boot(checksum));

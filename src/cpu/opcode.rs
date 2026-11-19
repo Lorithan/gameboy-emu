@@ -74,7 +74,7 @@ impl JumpCondition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PushOperand {
+pub(super) enum StackRegister {
     BC,
     DE,
     HL,
@@ -141,10 +141,10 @@ pub(super) enum DecodedOpcode {
     },
     JumpHL,
     Push {
-        operand: PushOperand,
+        operand: StackRegister,
     },
     Pop {
-        operand: PushOperand,
+        operand: StackRegister,
     },
     Call {
         condition: JumpCondition,
@@ -183,10 +183,9 @@ pub(super) enum DecodedOpcode {
     StoreStackPointer,
     DecodeCbOpcode,
     DisableInterrupts,
-    EnabledInterrupts,
+    EnableInterrupts,
     ReturnFromInterrupt,
     Halt,
-
     Stop,
 }
 
@@ -431,7 +430,7 @@ impl TryFrom<u8> for DecodedOpcode {
                 condition: JumpCondition::NZ,
             }),
             0xC1 => Ok(DecodedOpcode::Pop {
-                operand: PushOperand::BC,
+                operand: StackRegister::BC,
             }),
             0xC2 => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NZ,
@@ -443,7 +442,7 @@ impl TryFrom<u8> for DecodedOpcode {
                 condition: JumpCondition::NZ,
             }),
             0xC5 => Ok(DecodedOpcode::Push {
-                operand: PushOperand::BC,
+                operand: StackRegister::BC,
             }),
             0xC6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Add { carry: false },
@@ -475,7 +474,7 @@ impl TryFrom<u8> for DecodedOpcode {
                 condition: JumpCondition::NC,
             }),
             0xD1 => Ok(DecodedOpcode::Pop {
-                operand: PushOperand::DE,
+                operand: StackRegister::DE,
             }),
             0xD2 => Ok(DecodedOpcode::AbsoluteJump {
                 condition: JumpCondition::NC,
@@ -484,7 +483,7 @@ impl TryFrom<u8> for DecodedOpcode {
                 condition: JumpCondition::NC,
             }),
             0xD5 => Ok(DecodedOpcode::Push {
-                operand: PushOperand::DE,
+                operand: StackRegister::DE,
             }),
             0xD6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Sub { carry: false },
@@ -508,13 +507,13 @@ impl TryFrom<u8> for DecodedOpcode {
                 address_source: HighMemoryAddressSource::Immediate,
             }),
             0xE1 => Ok(DecodedOpcode::Pop {
-                operand: PushOperand::HL,
+                operand: StackRegister::HL,
             }),
             0xE2 => Ok(DecodedOpcode::StoreHighMemory {
                 address_source: HighMemoryAddressSource::C,
             }),
             0xE5 => Ok(DecodedOpcode::Push {
-                operand: PushOperand::HL,
+                operand: StackRegister::HL,
             }),
             0xE6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::And,
@@ -531,14 +530,14 @@ impl TryFrom<u8> for DecodedOpcode {
                 address_source: HighMemoryAddressSource::Immediate,
             }),
             0xF1 => Ok(DecodedOpcode::Pop {
-                operand: PushOperand::AF,
+                operand: StackRegister::AF,
             }),
             0xF2 => Ok(DecodedOpcode::LoadHighMemory {
                 address_source: HighMemoryAddressSource::C,
             }),
             0xF3 => Ok(DecodedOpcode::DisableInterrupts),
             0xF5 => Ok(DecodedOpcode::Push {
-                operand: PushOperand::AF,
+                operand: StackRegister::AF,
             }),
             0xF6 => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Or,
@@ -547,7 +546,7 @@ impl TryFrom<u8> for DecodedOpcode {
             0xF8 => Ok(DecodedOpcode::LoadHlFromSpOffset),
             0xF9 => Ok(DecodedOpcode::TransferHLtoSP),
             0xFA => Ok(DecodedOpcode::LoadAFromAbsolute),
-            0xFB => Ok(DecodedOpcode::EnabledInterrupts),
+            0xFB => Ok(DecodedOpcode::EnableInterrupts),
             0xFE => Ok(DecodedOpcode::Arithmetic {
                 kind: ArithmeticKind::Compare,
                 operand: Operand::Immediate,

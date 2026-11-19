@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuSnapShot, CycleAction},
+    cpu::{CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System},
 };
@@ -136,7 +136,7 @@ fn mixed_binary_arithmetic_and_inc_dec_preserve_flags_across_loads_and_stores() 
     }
     assert_eq!(
         system.cpu_snapshot(),
-        CpuSnapShot {
+        CpuSnapshot {
             af: 0x1070,
             bc: 0xEF0F,
             de: 0x00D8,

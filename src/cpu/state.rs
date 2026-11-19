@@ -1,6 +1,6 @@
 use crate::{
     cpu::{
-        ArithmeticKind, CbType, CpuFault, Destination, PushOperand, Register, Register16,
+        ArithmeticKind, CbType, CpuFault, Destination, Register, Register16, StackRegister,
         UnaryOperation,
     },
     memory::Interrupt,
@@ -106,12 +106,12 @@ pub(super) enum ExecutionState {
     },
     PopLow {
         addr: u16,
-        target: PushOperand,
+        target: StackRegister,
     },
     PopHigh {
         addr: u16,
         low: u8,
-        target: PushOperand,
+        target: StackRegister,
     },
     ReadReturnLow {
         addr: u16,

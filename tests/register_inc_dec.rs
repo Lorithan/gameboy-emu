@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuSnapShot, CycleAction},
+    cpu::{CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System},
 };
@@ -21,7 +21,7 @@ fn program(bytes: &[u8]) -> System {
     System::new(Cartridge::from_bytes(&rom).expect("synthetic ROM"))
 }
 
-fn with_byte(mut snapshot: CpuSnapShot, index: usize, value: u8) -> CpuSnapShot {
+fn with_byte(mut snapshot: CpuSnapshot, index: usize, value: u8) -> CpuSnapshot {
     let value = u16::from(value);
     match index {
         0 => snapshot.bc = value << 8 | (snapshot.bc & 0xFF),
@@ -141,7 +141,7 @@ fn mixed_arithmetic_and_transfers_preserve_the_latest_flags() {
     }
     assert_eq!(
         system.cpu_snapshot(),
-        CpuSnapShot {
+        CpuSnapshot {
             af: 0x1070,
             bc: 0x1013,
             de: 0x00D8,

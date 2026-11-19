@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuError, CpuSnapShot, CycleAction},
+    cpu::{CpuError, CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System, SystemError},
 };
@@ -43,7 +43,7 @@ fn machine(opcode: u8, value: u8) -> System {
     System::new(Cartridge::from_bytes(&rom).expect("valid synthetic program"))
 }
 
-fn expected_load(mut snapshot: CpuSnapShot, destination: Destination, byte: u8) -> CpuSnapShot {
+fn expected_load(mut snapshot: CpuSnapshot, destination: Destination, byte: u8) -> CpuSnapshot {
     let value = u16::from(byte);
     match destination {
         Destination::B => snapshot.bc = (value << 8) | (snapshot.bc & 0xFF),

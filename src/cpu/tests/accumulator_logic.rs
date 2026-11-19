@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    CPU, CpuError, CpuSnapshot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
     registers::Register,
 };
@@ -44,7 +44,7 @@ fn machine(a: u8, right: u8, source: usize, flags: u8, pc: u16) -> CPU {
     CPU::from_registers(r)
 }
 
-fn reference(mut snapshot: CpuSnapShot, a: u8, right: u8, group: usize, bytes: u16) -> CpuSnapShot {
+fn reference(mut snapshot: CpuSnapshot, a: u8, right: u8, group: usize, bytes: u16) -> CpuSnapshot {
     // Independent boolean truth tables, rather than production bytewise operations.
     let mut result = 0u16;
     for bit in 0..8 {

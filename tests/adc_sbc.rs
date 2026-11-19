@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuSnapShot, CycleAction},
+    cpu::{CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System},
 };
@@ -65,12 +65,12 @@ fn machine(opcode: u8, source: Source, left: u8, right: u8, carry: bool) -> Syst
 }
 
 fn reference(
-    mut snapshot: CpuSnapShot,
+    mut snapshot: CpuSnapshot,
     left: u8,
     right: u8,
     carry: bool,
     add: bool,
-) -> CpuSnapShot {
+) -> CpuSnapshot {
     let sign = if add { 1i16 } else { -1 };
     let full = i16::from(left) + sign * (i16::from(right) + i16::from(carry));
     let low = i16::from(left % 16) + sign * (i16::from(right % 16) + i16::from(carry));
@@ -231,7 +231,7 @@ fn carry_and_borrow_chain_through_flag_preserving_transfers() {
     }
     assert_eq!(
         system.cpu_snapshot(),
-        CpuSnapShot {
+        CpuSnapshot {
             af: 0x4740,
             bc: 0x00FF,
             de: 0x00D8,

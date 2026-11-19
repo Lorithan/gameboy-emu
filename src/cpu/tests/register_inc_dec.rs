@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    CPU, CpuError, CpuSnapshot, CycleAction, Registers,
     opcode::{DecodedOpcode, Target, UnaryOperation},
     registers::Register,
 };
@@ -38,7 +38,7 @@ fn machine(target: Register, value: u8, flags: u8, pc: u16) -> CPU {
     CPU::from_registers(registers)
 }
 
-fn expected(mut snapshot: CpuSnapShot, target: Register, old: u8, increment: bool) -> CpuSnapShot {
+fn expected(mut snapshot: CpuSnapshot, target: Register, old: u8, increment: bool) -> CpuSnapshot {
     // Widened arithmetic is an independent reference; production uses u8.
     let delta = if increment { 1i16 } else { -1 };
     let result = (i16::from(old) + delta).rem_euclid(256) as u16;

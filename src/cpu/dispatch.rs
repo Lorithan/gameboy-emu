@@ -1,7 +1,7 @@
 use crate::cpu::{
     ArithmeticKind, CPU, CpuError, CpuFault, CycleTransition, DecodedOpcode, Destination,
     ExecutionState, HaltBehavior, HighMemoryAddressSource, IllegalOpcode, Imm16Use, IndirectPair,
-    InterruptState, OpcodeEncoding, Operand, PushOperand, PushThen, Register, ReturnKind,
+    InterruptState, OpcodeEncoding, Operand, PushThen, Register, ReturnKind, StackRegister,
     StopBehavior, Target, UnaryOperation, registers::Flag,
 };
 
@@ -206,10 +206,10 @@ impl CPU {
             DecodedOpcode::Push { operand } => {
                 let addr = self.registers.sp.wrapping_sub(1);
                 let value = match operand {
-                    PushOperand::BC => self.registers.bc(),
-                    PushOperand::DE => self.registers.de(),
-                    PushOperand::HL => self.registers.hl(),
-                    PushOperand::AF => self.registers.af(),
+                    StackRegister::BC => self.registers.bc(),
+                    StackRegister::DE => self.registers.de(),
+                    StackRegister::HL => self.registers.hl(),
+                    StackRegister::AF => self.registers.af(),
                 };
 
                 let next_state = ExecutionState::Push {
@@ -406,7 +406,7 @@ impl CPU {
                 self.interrupt_state = InterruptState::Disabled;
                 Ok(CycleTransition::InstructionFinished)
             }
-            DecodedOpcode::EnabledInterrupts => {
+            DecodedOpcode::EnableInterrupts => {
                 if self.interrupt_state == InterruptState::Disabled {
                     self.interrupt_state = InterruptState::Delayed;
                 }

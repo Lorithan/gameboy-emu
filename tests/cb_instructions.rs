@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::{
-    cpu::{CpuSnapShot, CycleAction},
+    cpu::{CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{InstructionStep, System},
 };
@@ -47,7 +47,7 @@ fn setup(opcode: u8, value: u8, flags: u8) -> System {
     assert_eq!(system.cpu_snapshot().pc, 0x010A);
     system
 }
-fn expected(mut snapshot: CpuSnapShot, opcode: u8, value: u8, flags: u8) -> CpuSnapShot {
+fn expected(mut snapshot: CpuSnapshot, opcode: u8, value: u8, flags: u8) -> CpuSnapshot {
     let (result, f) = oracle::result(opcode, value, flags);
     snapshot.pc += 2;
     snapshot.af = (snapshot.af & 0xFF00) | u16::from(f);

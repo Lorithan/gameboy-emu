@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    CPU, CpuError, CpuSnapshot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
     registers::Register,
 };
@@ -38,7 +38,7 @@ fn machine(left: u8, right: u8, source: Register, flags: u8, pc: u16) -> CPU {
     CPU::from_registers(registers)
 }
 
-fn reference(mut snapshot: CpuSnapShot, left: u8, right: u8, add: bool) -> CpuSnapShot {
+fn reference(mut snapshot: CpuSnapshot, left: u8, right: u8, add: bool) -> CpuSnapshot {
     // Widened signed arithmetic and nibble arithmetic provide a reference
     // independent of the production overflowing/XOR calculations.
     let sign = if add { 1i16 } else { -1 };

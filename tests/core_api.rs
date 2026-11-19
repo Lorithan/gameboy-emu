@@ -9,7 +9,7 @@ use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
 use gameboy_emu::memory::{Bus, Cartridge};
-use gameboy_emu::{cpu::CpuSnapShot, system::System};
+use gameboy_emu::{cpu::CpuSnapshot, system::System};
 
 #[test]
 fn metadata_is_public_and_mutating_the_snapshot_does_not_change_the_cartridge() {
@@ -63,7 +63,7 @@ fn public_system_snapshot_reports_both_dmg_startup_profiles() {
         rom[0x0134] = title_byte;
         rom[0x014D] = checksum;
         let system = System::new(Cartridge::from_bytes(&rom).expect("valid synthetic ROM"));
-        let expected = CpuSnapShot {
+        let expected = CpuSnapshot {
             af,
             bc: 0x0013,
             de: 0x00D8,

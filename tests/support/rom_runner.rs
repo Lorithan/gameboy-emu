@@ -7,7 +7,7 @@ use std::{
 };
 
 use gameboy_emu::{
-    cpu::{CpuSnapShot, CycleAction},
+    cpu::{CpuSnapshot, CycleAction},
     memory::Cartridge,
     system::{CycleTrace, MachineStep, System, SystemError},
 };
@@ -50,7 +50,7 @@ pub struct Report {
     pub packet: Vec<u8>,
     pub mcycles: u64,
     pub ticks: u64,
-    pub snapshot: CpuSnapShot,
+    pub snapshot: CpuSnapshot,
     pub recent: VecDeque<CycleTrace>,
 }
 

@@ -22,10 +22,8 @@ enum Destination {
     Memory(u16),
 }
 
-use state::ExecutionState::*;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CpuSnapShot {
+pub struct CpuSnapshot {
     pub af: u16,
     pub bc: u16,
     pub de: u16,
@@ -52,15 +50,15 @@ impl CPU {
     pub fn from_registers(registers: Registers) -> Self {
         CPU {
             registers,
-            state: FetchOpcode {
+            state: ExecutionState::FetchOpcode {
                 skip_increment: false,
             },
             interrupt_state: InterruptState::Disabled,
         }
     }
 
-    pub fn snapshot(&self) -> CpuSnapShot {
-        CpuSnapShot {
+    pub fn snapshot(&self) -> CpuSnapshot {
+        CpuSnapshot {
             af: self.registers.af(),
             bc: self.registers.bc(),
             de: self.registers.de(),
@@ -72,68 +70,79 @@ impl CPU {
 
     pub fn request_cycle(&self) -> Result<CycleRequest, CpuError> {
         match self.state {
-            FetchOpcode { .. }
-            | DecodeCbOpcode
-            | ReadDisplacement { .. }
-            | ReadImmediate8 { .. }
-            | ReadImm16Low { .. }
-            | ReadImm16High { .. }
-            | ReadSpOffset { .. }
-            | ReadHighMemoryImmediate { .. }
-            | ReadImmediateAccumulator { .. } => Ok(CycleRequest::Execute(CycleAction::Read {
-                addr: self.registers.pc,
-            })),
-            ReadMemory { addr, .. }
-            | ReadMemoryAndUpdateHL { addr, .. }
-            | PopLow { addr, .. }
-            | PopHigh { addr, .. }
-            | ReadReturnLow { addr, .. }
-            | ReadReturnHigh { addr, .. }
-            | ReadOperation { addr, .. }
-            | ReadHLForCbOpcode { addr, .. }
-            | ReadMemoryAccumulator { addr, .. } => {
+            ExecutionState::FetchOpcode { .. }
+            | ExecutionState::DecodeCbOpcode
+            | ExecutionState::ReadDisplacement { .. }
+            | ExecutionState::ReadImmediate8 { .. }
+            | ExecutionState::ReadImm16Low { .. }
+            | ExecutionState::ReadImm16High { .. }
+            | ExecutionState::ReadSpOffset { .. }
+            | ExecutionState::ReadHighMemoryImmediate { .. }
+            | ExecutionState::ReadImmediateAccumulator { .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Read {
+                    addr: self.registers.pc,
+                }))
+            }
+            ExecutionState::ReadMemory { addr, .. }
+            | ExecutionState::ReadMemoryAndUpdateHL { addr, .. }
+            | ExecutionState::PopLow { addr, .. }
+            | ExecutionState::PopHigh { addr, .. }
+            | ExecutionState::ReadReturnLow { addr, .. }
+            | ExecutionState::ReadReturnHigh { addr, .. }
+            | ExecutionState::ReadOperation { addr, .. }
+            | ExecutionState::ReadHLForCbOpcode { addr, .. }
+            | ExecutionState::ReadMemoryAccumulator { addr, .. } => {
                 Ok(CycleRequest::Execute(CycleAction::Read { addr }))
             }
-            WriteMemory { addr, value } | WriteMemoryAndUpdateHL { addr, value, .. } => {
+            ExecutionState::WriteMemory { addr, value }
+            | ExecutionState::WriteMemoryAndUpdateHL { addr, value, .. } => {
                 Ok(CycleRequest::Execute(CycleAction::Write { addr, value }))
             }
-            WriteSpLow { sp_low, addr, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr,
-                value: sp_low,
-            })),
-            PushHigh { addr, high, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr,
-                value: high,
-            })),
-            PushLow { addr, low, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr,
-                value: low,
-            })),
-            InterruptPushHigh { pc_high, sp, .. } => {
+            ExecutionState::WriteSpLow { sp_low, addr, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write {
+                    addr,
+                    value: sp_low,
+                }))
+            }
+            ExecutionState::PushHigh { addr, high, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write {
+                    addr,
+                    value: high,
+                }))
+            }
+            ExecutionState::PushLow { addr, low, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write {
+                    addr,
+                    value: low,
+                }))
+            }
+            ExecutionState::InterruptPushHigh { pc_high, sp, .. } => {
                 Ok(CycleRequest::Execute(CycleAction::Write {
                     addr: sp,
                     value: pc_high,
                 }))
             }
-            InterruptPushLow { pc_low, sp, .. } => Ok(CycleRequest::Execute(CycleAction::Write {
-                addr: sp,
-                value: pc_low,
-            })),
-            Push { .. }
-            | ApplyJump { .. }
-            | ReturnConditional { .. }
-            | FinishReturn { .. }
-            | Addition16 { .. }
-            | DelaySpOffset { .. }
-            | ApplySpOffset { .. }
-            | TransferHLtoSP { .. }
-            | InterruptEntry { .. }
-            | InterruptWait { .. }
-            | InterruptJump { .. }
-            | Halted
-            | Unary16 { .. } => Ok(CycleRequest::Execute(CycleAction::Idle)),
-            Stopped => Ok(CycleRequest::Stopped),
-            Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
+            ExecutionState::InterruptPushLow { pc_low, sp, .. } => {
+                Ok(CycleRequest::Execute(CycleAction::Write {
+                    addr: sp,
+                    value: pc_low,
+                }))
+            }
+            ExecutionState::Push { .. }
+            | ExecutionState::ApplyJump { .. }
+            | ExecutionState::ReturnConditional { .. }
+            | ExecutionState::FinishReturn { .. }
+            | ExecutionState::Addition16 { .. }
+            | ExecutionState::DelaySpOffset { .. }
+            | ExecutionState::ApplySpOffset { .. }
+            | ExecutionState::TransferHLtoSP { .. }
+            | ExecutionState::InterruptEntry { .. }
+            | ExecutionState::InterruptWait { .. }
+            | ExecutionState::InterruptJump { .. }
+            | ExecutionState::Halted
+            | ExecutionState::Unary16 { .. } => Ok(CycleRequest::Execute(CycleAction::Idle)),
+            ExecutionState::Stopped => Ok(CycleRequest::Stopped),
+            ExecutionState::Faulted(err) => Err(CpuError::UnsupportedOpcode(err)),
         }
     }
 
@@ -161,13 +170,13 @@ impl CPU {
                 Ok(CycleOutcome::InProgress)
             }
             CycleTransition::InstructionFinished => {
-                self.state = FetchOpcode {
+                self.state = ExecutionState::FetchOpcode {
                     skip_increment: false,
                 };
                 Ok(CycleOutcome::InstructionComplete)
             }
             CycleTransition::InterruptEntryFinished { interrupt } => {
-                self.state = FetchOpcode {
+                self.state = ExecutionState::FetchOpcode {
                     skip_increment: false,
                 };
                 Ok(CycleOutcome::InterruptEntryComplete {
@@ -175,7 +184,7 @@ impl CPU {
                 })
             }
             CycleTransition::InterruptSelectionResolved { interrupt } => {
-                self.state = InterruptJump { interrupt };
+                self.state = ExecutionState::InterruptJump { interrupt };
                 match interrupt {
                     InterruptSelection::Selected(interrupt) => {
                         Ok(CycleOutcome::InterruptSelected { interrupt })
@@ -184,7 +193,7 @@ impl CPU {
                 }
             }
             CycleTransition::InterruptEntryCancelled => {
-                self.state = FetchOpcode {
+                self.state = ExecutionState::FetchOpcode {
                     skip_increment: false,
                 };
                 Ok(CycleOutcome::InterruptEntryCancelled)
@@ -192,10 +201,10 @@ impl CPU {
             CycleTransition::HaltFinished(behavior) => {
                 match behavior {
                     HaltBehavior::Sleep => {
-                        self.state = Halted;
+                        self.state = ExecutionState::Halted;
                     }
                     HaltBehavior::SuppressNextIncrement => {
-                        self.state = FetchOpcode {
+                        self.state = ExecutionState::FetchOpcode {
                             skip_increment: true,
                         };
                     }
@@ -207,23 +216,23 @@ impl CPU {
                     if skip_padding {
                         self.registers.increment_pc();
                     }
-                    self.state = Stopped;
+                    self.state = ExecutionState::Stopped;
                     Ok(CycleOutcome::StopEntered)
                 }
                 StopBehavior::Halt => {
                     self.registers.increment_pc();
-                    self.state = Halted;
+                    self.state = ExecutionState::Halted;
                     Ok(CycleOutcome::InstructionComplete)
                 }
                 StopBehavior::Continue => {
-                    self.state = FetchOpcode {
+                    self.state = ExecutionState::FetchOpcode {
                         skip_increment: false,
                     };
                     Ok(CycleOutcome::InstructionComplete)
                 }
             },
             CycleTransition::Faulted(err) => {
-                self.state = Faulted(err);
+                self.state = ExecutionState::Faulted(err);
                 Err(CpuError::UnsupportedOpcode(err))
             }
         }?;
@@ -241,7 +250,7 @@ impl CPU {
     }
 
     pub(crate) fn try_accept_interrupt(&mut self, pending: u8) -> bool {
-        if let FetchOpcode { skip_increment } = self.state
+        if let ExecutionState::FetchOpcode { skip_increment } = self.state
             && self.interrupt_state == InterruptState::Enabled
         {
             let pending = pending & 0x1F; // Only the lower 5 bits are relevant
@@ -251,7 +260,7 @@ impl CPU {
                     self.registers.pc = self.registers.pc.wrapping_sub(1);
                 }
 
-                self.state = InterruptEntry {
+                self.state = ExecutionState::InterruptEntry {
                     pc: self.registers.pc,
                     sp: self.registers.sp,
                 };
@@ -266,16 +275,16 @@ impl CPU {
     pub(crate) fn wake_if_pending(&mut self, pending: u8) {
         let pending = pending & 0x1F;
 
-        if matches!(self.state, Halted) && pending != 0 {
-            self.state = FetchOpcode {
+        if matches!(self.state, ExecutionState::Halted) && pending != 0 {
+            self.state = ExecutionState::FetchOpcode {
                 skip_increment: false,
             };
         }
     }
 
     pub(crate) fn wake_from_stop_if(&mut self, wake: bool) {
-        if matches!(self.state, Stopped) && wake {
-            self.state = FetchOpcode {
+        if matches!(self.state, ExecutionState::Stopped) && wake {
+            self.state = ExecutionState::FetchOpcode {
                 skip_increment: false,
             };
         }

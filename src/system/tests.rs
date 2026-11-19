@@ -14,7 +14,7 @@ mod stop;
 use divider_oracle::clocked_byte;
 
 use super::System;
-use crate::{cpu::CpuSnapShot, memory::Cartridge};
+use crate::{cpu::CpuSnapshot, memory::Cartridge};
 
 #[test]
 fn restarts_write_only_the_return_word_across_bus_boundaries_and_pauses() {
@@ -759,7 +759,7 @@ fn cpu_memory_accesses_respect_wram_echo_rom_and_unimplemented_boundaries() {
 fn assert_post_boot_registers(system: &System, expected_af: u16) {
     assert_eq!(
         system.cpu_snapshot(),
-        CpuSnapShot {
+        CpuSnapshot {
             af: expected_af,
             bc: 0x0013,
             de: 0x00D8,

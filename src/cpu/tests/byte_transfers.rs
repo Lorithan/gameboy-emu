@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    CPU, CpuError, CpuSnapshot, CycleAction, Registers,
     opcode::{DecodedOpcode, Target},
     registers::Register,
 };
@@ -21,8 +21,8 @@ const OPCODES: [[u8; 8]; 8] = [
     [0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F],
 ];
 
-fn initial() -> CpuSnapShot {
-    CpuSnapShot {
+fn initial() -> CpuSnapshot {
+    CpuSnapshot {
         af: 0xA7B0,
         bc: 0x1234,
         de: 0x5678,
@@ -32,7 +32,7 @@ fn initial() -> CpuSnapShot {
     }
 }
 
-fn machine(snapshot: CpuSnapShot) -> CPU {
+fn machine(snapshot: CpuSnapshot) -> CPU {
     let mut registers = Registers::dmg_post_boot(1);
     registers.set_af(snapshot.af);
     registers.set_bc(snapshot.bc);
@@ -43,7 +43,7 @@ fn machine(snapshot: CpuSnapShot) -> CPU {
     CPU::from_registers(registers)
 }
 
-fn byte(snapshot: CpuSnapShot, index: usize) -> u8 {
+fn byte(snapshot: CpuSnapshot, index: usize) -> u8 {
     match index {
         0 => (snapshot.bc >> 8) as u8,
         1 => snapshot.bc as u8,
@@ -56,7 +56,7 @@ fn byte(snapshot: CpuSnapShot, index: usize) -> u8 {
     }
 }
 
-fn with_byte(mut snapshot: CpuSnapShot, index: usize, value: u8) -> CpuSnapShot {
+fn with_byte(mut snapshot: CpuSnapshot, index: usize, value: u8) -> CpuSnapshot {
     let value = u16::from(value);
     match index {
         0 => snapshot.bc = value << 8 | (snapshot.bc & 0xFF),

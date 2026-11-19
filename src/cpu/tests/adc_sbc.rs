@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use crate::cpu::{
-    CPU, CpuError, CpuSnapShot, CycleAction, Registers,
+    CPU, CpuError, CpuSnapshot, CycleAction, Registers,
     opcode::{ArithmeticKind, DecodedOpcode, Operand, Target},
     registers::{Flag, Register},
 };
@@ -49,12 +49,12 @@ fn machine(left: u8, right: u8, source: Source, flags: u8, pc: u16) -> CPU {
 }
 
 fn reference(
-    mut snapshot: CpuSnapShot,
+    mut snapshot: CpuSnapshot,
     left: u8,
     right: u8,
     carry: bool,
     add: bool,
-) -> CpuSnapShot {
+) -> CpuSnapshot {
     let sign = if add { 1i16 } else { -1 };
     let full = i16::from(left) + sign * (i16::from(right) + i16::from(carry));
     let low = i16::from(left % 16) + sign * (i16::from(right % 16) + i16::from(carry));

@@ -4,7 +4,7 @@ use crate::response_support::response;
 
 use crate::cpu::{
     CPU, CpuError, CycleAction, ExecutionState, Registers,
-    opcode::{DecodedOpcode, PushOperand},
+    opcode::{DecodedOpcode, StackRegister},
 };
 
 #[test]
@@ -12,7 +12,7 @@ fn push_bc_decodes_to_the_stack_pair() {
     assert!(matches!(
         DecodedOpcode::try_from(0xC5).unwrap(),
         DecodedOpcode::Push {
-            operand: PushOperand::BC
+            operand: StackRegister::BC
         }
     ));
 }
@@ -20,10 +20,10 @@ fn push_bc_decodes_to_the_stack_pair() {
 #[test]
 fn all_stack_opcodes_select_the_independent_expected_pair() {
     for (push, pop, expected) in [
-        (0xC5, 0xC1, PushOperand::BC),
-        (0xD5, 0xD1, PushOperand::DE),
-        (0xE5, 0xE1, PushOperand::HL),
-        (0xF5, 0xF1, PushOperand::AF),
+        (0xC5, 0xC1, StackRegister::BC),
+        (0xD5, 0xD1, StackRegister::DE),
+        (0xE5, 0xE1, StackRegister::HL),
+        (0xF5, 0xF1, StackRegister::AF),
     ] {
         match DecodedOpcode::try_from(push).unwrap() {
             DecodedOpcode::Push { operand } => assert_eq!(operand, expected),
@@ -39,20 +39,20 @@ fn all_stack_opcodes_select_the_independent_expected_pair() {
 #[test]
 fn stack_opcodes_select_every_word_and_capture_push_sources_for_each_pair() {
     for (push, pop, pair) in [
-        (0xC5, 0xC1, PushOperand::BC),
-        (0xD5, 0xD1, PushOperand::DE),
-        (0xE5, 0xE1, PushOperand::HL),
-        (0xF5, 0xF1, PushOperand::AF),
+        (0xC5, 0xC1, StackRegister::BC),
+        (0xD5, 0xD1, StackRegister::DE),
+        (0xE5, 0xE1, StackRegister::HL),
+        (0xF5, 0xF1, StackRegister::AF),
     ] {
         for word in 0u16..=u16::MAX {
             let mut registers = Registers::dmg_post_boot(1);
             match pair {
-                PushOperand::BC => registers.set_bc(word),
-                PushOperand::DE => registers.set_de(word),
-                PushOperand::HL => registers.set_hl(word),
-                PushOperand::AF => registers.set_af(word),
+                StackRegister::BC => registers.set_bc(word),
+                StackRegister::DE => registers.set_de(word),
+                StackRegister::HL => registers.set_hl(word),
+                StackRegister::AF => registers.set_af(word),
             }
-            let source = if pair == PushOperand::AF {
+            let source = if pair == StackRegister::AF {
                 word & 0xFFF0
             } else {
                 word
@@ -123,10 +123,10 @@ fn stack_opcodes_select_every_word_and_capture_push_sources_for_each_pair() {
             );
             expected.sp = 0xFFFE;
             match pair {
-                PushOperand::BC => expected.bc = word,
-                PushOperand::DE => expected.de = word,
-                PushOperand::HL => expected.hl = word,
-                PushOperand::AF => expected.af = word & 0xFFF0,
+                StackRegister::BC => expected.bc = word,
+                StackRegister::DE => expected.de = word,
+                StackRegister::HL => expected.hl = word,
+                StackRegister::AF => expected.af = word & 0xFFF0,
             }
             assert_eq!(cpu.snapshot(), expected);
         }
@@ -138,7 +138,7 @@ fn pop_bc_decodes_to_the_stack_pair() {
     assert!(matches!(
         DecodedOpcode::try_from(0xC1).unwrap(),
         DecodedOpcode::Pop {
-            operand: PushOperand::BC
+            operand: StackRegister::BC
         }
     ));
 }
@@ -203,10 +203,10 @@ fn pop_bc_consumes_every_word_with_all_initial_flags_via_the_decoder() {
 #[test]
 fn pop_low_requests_the_next_address_without_assigning_the_pair() {
     for target in [
-        PushOperand::BC,
-        PushOperand::DE,
-        PushOperand::HL,
-        PushOperand::AF,
+        StackRegister::BC,
+        StackRegister::DE,
+        StackRegister::HL,
+        StackRegister::AF,
     ] {
         for start in [0u16, 1, 0xC000, 0xFFFC, 0xFFFF] {
             for flags in 0u16..16 {
@@ -260,10 +260,10 @@ fn pop_low_requests_the_next_address_without_assigning_the_pair() {
                 );
                 expected.sp = start.wrapping_add(2);
                 match target {
-                    PushOperand::BC => expected.bc = 0x123F,
-                    PushOperand::DE => expected.de = 0x123F,
-                    PushOperand::HL => expected.hl = 0x123F,
-                    PushOperand::AF => expected.af = 0x1230,
+                    StackRegister::BC => expected.bc = 0x123F,
+                    StackRegister::DE => expected.de = 0x123F,
+                    StackRegister::HL => expected.hl = 0x123F,
+                    StackRegister::AF => expected.af = 0x1230,
                 }
                 assert_eq!(cpu.snapshot(), expected);
             }
@@ -274,10 +274,10 @@ fn pop_low_requests_the_next_address_without_assigning_the_pair() {
 #[test]
 fn pop_high_assigns_every_word_and_masks_af_without_other_side_effects() {
     for target in [
-        PushOperand::BC,
-        PushOperand::DE,
-        PushOperand::HL,
-        PushOperand::AF,
+        StackRegister::BC,
+        StackRegister::DE,
+        StackRegister::HL,
+        StackRegister::AF,
     ] {
         for value in 0u16..=u16::MAX {
             let mut registers = Registers::dmg_post_boot(1);
@@ -304,10 +304,10 @@ fn pop_high_assigns_every_word_and_masks_af_without_other_side_effects() {
             );
             expected.sp = 0;
             match target {
-                PushOperand::BC => expected.bc = value,
-                PushOperand::DE => expected.de = value,
-                PushOperand::HL => expected.hl = value,
-                PushOperand::AF => expected.af = value & 0xFFF0,
+                StackRegister::BC => expected.bc = value,
+                StackRegister::DE => expected.de = value,
+                StackRegister::HL => expected.hl = value,
+                StackRegister::AF => expected.af = value & 0xFFF0,
             }
             assert_eq!(cpu.snapshot(), expected);
             assert!(matches!(

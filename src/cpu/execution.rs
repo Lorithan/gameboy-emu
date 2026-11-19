@@ -1,8 +1,8 @@
 use crate::{
     cpu::{
         CPU, CbType, CpuError, CycleResponse, CycleTransition, DecodedCbOpcode, Destination,
-        Imm16Use, InterruptSelection, InterruptState, PushOperand, PushThen, Register, ReturnKind,
-        Target, UnaryOperation, registers::Flag, state::ExecutionState,
+        Imm16Use, InterruptSelection, InterruptState, PushThen, Register, ReturnKind,
+        StackRegister, Target, UnaryOperation, registers::Flag, state::ExecutionState,
     },
     memory::Interrupt,
 };
@@ -242,10 +242,10 @@ impl CPU {
                 let value = (high as u16) << 8 | low as u16;
 
                 match target {
-                    PushOperand::BC => self.registers.set_bc(value),
-                    PushOperand::DE => self.registers.set_de(value),
-                    PushOperand::HL => self.registers.set_hl(value),
-                    PushOperand::AF => self.registers.set_af(value),
+                    StackRegister::BC => self.registers.set_bc(value),
+                    StackRegister::DE => self.registers.set_de(value),
+                    StackRegister::HL => self.registers.set_hl(value),
+                    StackRegister::AF => self.registers.set_af(value),
                 }
 
                 self.registers.sp = addr.wrapping_add(1);

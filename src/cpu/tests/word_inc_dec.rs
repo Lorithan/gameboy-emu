@@ -3,7 +3,7 @@ use crate::response_support::expect_execute;
 use crate::response_support::response;
 
 use super::{CPU, CpuError, CycleAction, Registers};
-use crate::cpu::CpuSnapShot;
+use crate::cpu::CpuSnapshot;
 use crate::cpu::{
     opcode::{DecodedOpcode, UnaryOperation},
     registers::Register16,
@@ -29,7 +29,7 @@ fn set(r: &mut Registers, target: Register16, value: u16) {
     }
 }
 
-fn expected(mut snapshot: CpuSnapShot, target: Register16, value: u16) -> CpuSnapShot {
+fn expected(mut snapshot: CpuSnapshot, target: Register16, value: u16) -> CpuSnapshot {
     match target {
         Register16::BC => snapshot.bc = value,
         Register16::DE => snapshot.de = value,

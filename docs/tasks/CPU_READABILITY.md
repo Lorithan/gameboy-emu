@@ -1,5 +1,11 @@
 # CPU structure and readability cleanup
 
+## CPU naming checkpoint verified - 2026-11-19
+
+User completed #63: PushOperand becomes StackRegister throughout PUSH/POP decode, execution and tests; EnabledInterrupts becomes EnableInterrupts; CpuSnapShot becomes CpuSnapshot across its public CPU/System signatures and repository callers/tests. This intentionally corrects the public type spelling without an alias. cpu.rs removes the ExecutionState variant glob and qualifies state patterns/constructors. Review normalizes agreed names/qualifications and formatting, verifies unchanged test contents beyond renames, and inspects remaining import-order/expression-block formatting changes. No instruction/flag/capture/timing behavior changed.
+
+All 442 tests pass (317 unit, 125 integration), explicitly including five external fixtures with pinned hashes rechecked. Formatting, strict Clippy and whitespace checks pass. User already migrated all affected test references; no assistant application edits, additional test migration/new tests or dependencies. Selected CPU structure/readability cleanup is complete: standard errors, decoder validity, infallible helpers, register ownership/privacy, fetch-state suppression, word/push continuations, module separation and naming are verified. Optional bounded CB selector tables/endian polish remain nonblocking; positional set_flags remains rejected. Next is existing M3 timer contract #53 before new application implementation. M2 remains complete; optional DAA ROM #52 is separate.
+
 ## Shared stack push checkpoint verified - 2026-11-19
 
 User completed #62: PushThen::{Finish, Jump(u16)} flows through Push/PushHigh/PushLow. PUSH uses its opcode-captured word and Finish; taken CALL uses post-high-read return PC, opcode-captured stack address and Jump(target); RST uses post-fetch PC, captured SP-minus-one and Jump(vector). Untaken CALL still finishes after both operand reads. Push completion splits to_le_bytes, preserves the idle/high/low sequence and wrapping SP updates, and sets PC for Jump on the low-write completion before returning InstructionFinished. No extra ApplyJump cycle is introduced. ExecutionState::Call/PushCallerHigh/PushCallerLow and their request/completion arms are removed; Imm16Use::Call and dedicated interrupt-entry sampling/selection states remain.
