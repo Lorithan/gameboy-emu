@@ -1,0 +1,443 @@
+{
+    "suite":  "Gekkio/mooneye-test-suite",
+    "source_revision":  "31510e12eea6286d36eea060a6adde755e1067aa",
+    "shared_provenance_manifest":  "mooneye-reg-f.json",
+    "archive_sha256":  "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+    "verification":  "All thirteen local ROMs/symbols and LICENSE match pinned official ZIP entries; all ROM font regions 4000-47ef match the pinned 2032-byte font asset",
+    "target":  "DMG current skipped-boot model; tests initialize DIV/TIMA/TMA/TAC and relevant IF/IE",
+    "rom_format":  "Unmodified 32768-byte ROM-only images; cartridge/ROM-size/RAM-size codes 00; header checksum 2d",
+    "components":  "Inherit official prebuilt WLA-DX workflow, MIT notice and separate Darkrose font provenance/limits from shared manifest; no independently reproduced build or binary redistribution",
+    "reporting":  "Audited bodies emit no earlier SB report; use unchanged common fast quit reporter with fallback LY/SC reads FF. Require first packet and B/C/D/E/H/L signature.",
+    "expected":  {
+                     "outcome":  "Passed",
+                     "ff01_packet_and_b_c_d_e_h_l":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                     "mcycle_limit_per_fixture":  1000000,
+                     "host_time_limit_seconds_per_fixture":  10
+                 },
+    "limits_review":  "div_write has 65535 iterations of an eleven-M-cycle loop, approximately 720884 M-cycles plus setup/reporting; other bodies are short bounded instruction sequences or rapid-toggle loop. Retain existing caps; timeouts/errors/malformed reports remain failures.",
+    "fixtures":  [
+                     {
+                         "id":  "div_write",
+                         "source_path":  "acceptance/timer/div_write.s",
+                         "rom_path":  "acceptance/timer/div_write.gb",
+                         "sha256":  "2be1e4da6fa24b9123d2a8bae47dd0d6f5e97e1855186c0c0f49e6d213eebfff",
+                         "symbols_sha256":  "c20f42aee12aed4ad09a5a9a91b8a49a09ba7f66245ab4391847d6ca4865c200",
+                         "source_git_blob_sha":  "df638cc696170e0bdd11f1384dc4ffeb32f1c0e5",
+                         "checks":  "Repeated DIV resets suppress the slow timer interrupt",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  721229,
+                                          "ticks":  2884916,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4878",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "189.0011ms"
+                                      }
+                     },
+                     {
+                         "id":  "rapid_toggle",
+                         "source_path":  "acceptance/timer/rapid_toggle.s",
+                         "rom_path":  "acceptance/timer/rapid_toggle.gb",
+                         "sha256":  "59fe311058895c39475f74bcffb7d4f29272edb74e75d2cfe860c1a9d033b68a",
+                         "symbols_sha256":  "63be05e3a33ba14882218fb1f86142a0da1f7475615e787737b255d1be628ffa",
+                         "source_git_blob_sha":  "8241b65721d232f21bab6073af6ee788f03fe1fc",
+                         "checks":  "TAC toggling preserves counter phase and generates expected interrupt timing",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "ReportedFailure",
+                                          "mcycles":  4852,
+                                          "ticks":  19408,
+                                          "packet":  [
+                                                         66,
+                                                         66,
+                                                         66,
+                                                         66,
+                                                         66,
+                                                         66
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "4210",
+                                                          "bc":  "4242",
+                                                          "de":  "4242",
+                                                          "hl":  "4242",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "2.8525ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim00",
+                         "source_path":  "acceptance/timer/tim00.s",
+                         "rom_path":  "acceptance/timer/tim00.gb",
+                         "sha256":  "2193036c1628efd9ba86e5729292ef716d6ff3178cfa2abb9797709cd40252e8",
+                         "symbols_sha256":  "2bb639e2d4d924f16c155b9392bdf00e4c23a0d52d8cdfc41f33a7545fa30e2a",
+                         "source_git_blob_sha":  "8ce686b94862f72074dbca1977c34251cb5dfbe9",
+                         "checks":  "Ordinary selected-frequency read timing",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4476,
+                                          "ticks":  17904,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.5038ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim00_div_trigger",
+                         "source_path":  "acceptance/timer/tim00_div_trigger.s",
+                         "rom_path":  "acceptance/timer/tim00_div_trigger.gb",
+                         "sha256":  "5cafdf474dfa7507b0db596118ad7bc65a6d5d652ee4232263dd028e7f2462b7",
+                         "symbols_sha256":  "97e6e61d21d4667622e4a7e61b1b01affc7f581044c52e5809744b787f656377",
+                         "source_git_blob_sha":  "46f6f6825a49a57916cf7ab9207f99b24acbe250",
+                         "checks":  "Selected divider high-to-low reset triggers TIMA",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4210,
+                                          "ticks":  16840,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.4417ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim01",
+                         "source_path":  "acceptance/timer/tim01.s",
+                         "rom_path":  "acceptance/timer/tim01.gb",
+                         "sha256":  "b6f5043eae7fd2b2c3dc098ff16f664c8eb5699523616d84274669cf90c17fe7",
+                         "symbols_sha256":  "dd56ccbb4a582d4a01151f243f11a74988a635ac9bf73966e31b2df289274533",
+                         "source_git_blob_sha":  "6543cadaf925e5289e590ea60cd66f1968f43418",
+                         "checks":  "Ordinary selected-frequency read timing",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  3996,
+                                          "ticks":  15984,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.3388ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim01_div_trigger",
+                         "source_path":  "acceptance/timer/tim01_div_trigger.s",
+                         "rom_path":  "acceptance/timer/tim01_div_trigger.gb",
+                         "sha256":  "73c1e2677a2a122a285aa052e232153b133873c68cbcbf1cf41aa3d0a1b80a96",
+                         "symbols_sha256":  "572044aa5290d0bbd7edade526a979113c394b650daa07e8bc0d89d407967219",
+                         "source_git_blob_sha":  "1d2ecabe9a69bc40c5eba04eb13ff8994b3603aa",
+                         "checks":  "Selected divider high-to-low reset triggers TIMA",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  3994,
+                                          "ticks":  15976,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.2727ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim10",
+                         "source_path":  "acceptance/timer/tim10.s",
+                         "rom_path":  "acceptance/timer/tim10.gb",
+                         "sha256":  "fe3b0b292341d5ff26c9db3f6c9f3ba8a3d6e8b63977c61767a457962bd1faed",
+                         "symbols_sha256":  "b33456ca5f214cecd487c9b1af8c08e47b4c1957a991c95cd6a6c786a9f3cd60",
+                         "source_git_blob_sha":  "55aad89398c1e3148eac40311bd849ed00e0d6b2",
+                         "checks":  "Ordinary selected-frequency read timing",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  3991,
+                                          "ticks":  15964,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.2338ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim10_div_trigger",
+                         "source_path":  "acceptance/timer/tim10_div_trigger.s",
+                         "rom_path":  "acceptance/timer/tim10_div_trigger.gb",
+                         "sha256":  "d83c7acf20a0315486ed77db4f873db40fff6099564f8e250df66274a304b1b9",
+                         "symbols_sha256":  "34415e097b71422a2e385c469a70add2fd200e9fabda39ef030dbaa831d3e7b7",
+                         "source_git_blob_sha":  "3aa0e1d83e2d24779cbea171df0cfbc7459369f0",
+                         "checks":  "Selected divider high-to-low reset triggers TIMA",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  3995,
+                                          "ticks":  15980,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.2483ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim11",
+                         "source_path":  "acceptance/timer/tim11.s",
+                         "rom_path":  "acceptance/timer/tim11.gb",
+                         "sha256":  "624fd3ad3ede2790095162cfa212e488825072a0ecc287ff0e88da6c5d7040f1",
+                         "symbols_sha256":  "3805af53a1aa7eaa192b4b16e63242cf30b2280344e183767cd41e13a4846944",
+                         "source_git_blob_sha":  "e0abf57cf2901a7339ba5e33b05ccb924833268e",
+                         "checks":  "Ordinary selected-frequency read timing",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4092,
+                                          "ticks":  16368,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.3507ms"
+                                      }
+                     },
+                     {
+                         "id":  "tim11_div_trigger",
+                         "source_path":  "acceptance/timer/tim11_div_trigger.s",
+                         "rom_path":  "acceptance/timer/tim11_div_trigger.gb",
+                         "sha256":  "3f60bc3d2ba63bd9209706332dd6d0ef59ad09ada8dede0caa9e2e5132ed102e",
+                         "symbols_sha256":  "a271fdef3c44cfbba480da0759c5cd836cf300c9cd95b352c4618aca0d52c7d4",
+                         "source_git_blob_sha":  "1c38bd3623d4cf289fecb3b8555a6eb6915bbf69",
+                         "checks":  "Selected divider high-to-low reset triggers TIMA",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4017,
+                                          "ticks":  16068,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.2967ms"
+                                      }
+                     },
+                     {
+                         "id":  "tima_reload",
+                         "source_path":  "acceptance/timer/tima_reload.s",
+                         "rom_path":  "acceptance/timer/tima_reload.gb",
+                         "sha256":  "1ca70c725bd1e027b07d3058839bd140eccddd9f4ca41305c4f8ab3acaff8a98",
+                         "symbols_sha256":  "c2558b67e8fdb5a50f79c32bcc2bbbb92725a906be0b2ac2eedf9fdead20a010",
+                         "source_git_blob_sha":  "850c52701f4ac46ccb0425b08e34409187209ccd",
+                         "checks":  "Zero window and reload do not shift the underlying increment period",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4677,
+                                          "ticks":  18708,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.4499ms"
+                                      }
+                     },
+                     {
+                         "id":  "tima_write_reloading",
+                         "source_path":  "acceptance/timer/tima_write_reloading.s",
+                         "rom_path":  "acceptance/timer/tima_write_reloading.gb",
+                         "sha256":  "7d9a6d5ada792596621f8bfdf257112887b2dd01d98e0f91a253afd6e05d0540",
+                         "symbols_sha256":  "292966359eb36dd76573aaf1f25ebadb2928dc649e36289e43592b87f38188c3",
+                         "source_git_blob_sha":  "a74ab499fce718707a6ce9015643ce3d98b2d1dc",
+                         "checks":  "TIMA write cancellation/ignored reload-cycle write",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4321,
+                                          "ticks":  17284,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.4688ms"
+                                      }
+                     },
+                     {
+                         "id":  "tma_write_reloading",
+                         "source_path":  "acceptance/timer/tma_write_reloading.s",
+                         "rom_path":  "acceptance/timer/tma_write_reloading.gb",
+                         "sha256":  "e48ff98d4f363b92e92bdabe86253fcf63f648964e3a61e73d52aedcba3e5ab2",
+                         "symbols_sha256":  "4dc8fcac0a2cd2e6665caf4fe1b4b818132cf042e21a58db7dae420ff05b0c04",
+                         "source_git_blob_sha":  "b04c4673758e2a037a01a924023fe6ef36b1592e",
+                         "checks":  "TMA write values observed at reload boundaries",
+                         "observed":  {
+                                          "emulator_base_commit":  "2b28f5010012f078314d7f9328f1163273859384",
+                                          "outcome":  "Passed",
+                                          "mcycles":  4337,
+                                          "ticks":  17348,
+                                          "packet":  [
+                                                         3,
+                                                         5,
+                                                         8,
+                                                         13,
+                                                         21,
+                                                         34
+                                                     ],
+                                          "cpu_hex":  {
+                                                          "af":  "2210",
+                                                          "bc":  "0305",
+                                                          "de":  "080D",
+                                                          "hl":  "1522",
+                                                          "pc":  "4AB3",
+                                                          "sp":  "E000"
+                                                      },
+                                          "host_duration":  "1.4734ms"
+                                      }
+                     }
+                 ]
+}

@@ -51,6 +51,84 @@ fn mooneye_cpu_div_timing() {
     run_cpu_fixture("acceptance/div_timing.gb");
 }
 
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_div_write() {
+    run_cpu_fixture("acceptance/timer/div_write.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_rapid_toggle() {
+    run_cpu_fixture("acceptance/timer/rapid_toggle.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim00() {
+    run_cpu_fixture("acceptance/timer/tim00.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim00_div_trigger() {
+    run_cpu_fixture("acceptance/timer/tim00_div_trigger.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim01() {
+    run_cpu_fixture("acceptance/timer/tim01.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim01_div_trigger() {
+    run_cpu_fixture("acceptance/timer/tim01_div_trigger.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim10() {
+    run_cpu_fixture("acceptance/timer/tim10.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim10_div_trigger() {
+    run_cpu_fixture("acceptance/timer/tim10_div_trigger.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim11() {
+    run_cpu_fixture("acceptance/timer/tim11.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tim11_div_trigger() {
+    run_cpu_fixture("acceptance/timer/tim11_div_trigger.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tima_reload() {
+    run_cpu_fixture("acceptance/timer/tima_reload.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tima_write_reloading() {
+    run_cpu_fixture("acceptance/timer/tima_write_reloading.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
+fn mooneye_timer_tma_write_reloading() {
+    run_cpu_fixture("acceptance/timer/tma_write_reloading.gb");
+}
+
 fn run_cpu_fixture(relative: &str) {
     let root = std::env::var_os("MOONEYE_CPU_ROM_ROOT")
         .map(PathBuf::from)
@@ -74,7 +152,59 @@ fn assert_external_pass(path: &std::path::Path) {
         report.packet,
         report.snapshot
     );
+    if !matches!(report.outcome, Outcome::Passed)
+        && path
+            .file_name()
+            .is_some_and(|name| name == "rapid_toggle.gb")
+    {
+        diagnose_rapid_toggle_handler(path);
+    }
     assert!(matches!(report.outcome, Outcome::Passed), "{report:#?}");
+}
+
+fn diagnose_rapid_toggle_handler(path: &std::path::Path) {
+    // Pinned symbol test_finish=0190: observe before assertion/report macros
+    // replace the body registers. Diagnostics never alter emulated state.
+    let mut system = System::new(Cartridge::from_filepath(path).unwrap());
+    let started = std::time::Instant::now();
+    let mut recent = std::collections::VecDeque::with_capacity(32);
+    for _ in 0..runner::MOONEYE_LIMITS.mcycles {
+        if started.elapsed() >= runner::MOONEYE_LIMITS.wall_time {
+            break;
+        }
+        let before = system.cpu_snapshot();
+        let Ok(gameboy_emu::system::MachineStep::Cycle(trace)) = system.step_machine_cycle() else {
+            break;
+        };
+        if recent.len() == 32 {
+            recent.pop_front();
+        }
+        recent.push_back((before, trace, system.cpu_snapshot()));
+        if matches!(
+            trace.outcome,
+            CycleOutcome::InterruptEntryComplete { vector: 0x50 }
+        ) {
+            eprintln!(
+                "rapid_toggle handler entry: {:?}, ticks {}",
+                system.cpu_snapshot(),
+                system.elapsed_ticks()
+            );
+        }
+        if system.cpu_snapshot().pc == 0x190 && trace.outcome == CycleOutcome::InstructionComplete {
+            eprintln!(
+                "rapid_toggle body assertions: BC={:04X}, expected FFD9, ticks {}",
+                system.cpu_snapshot().bc,
+                system.elapsed_ticks()
+            );
+            for (before, trace, after) in recent {
+                eprintln!(
+                    "rapid_toggle boundary: PC={:04X} BC={:04X}, {:?}, after PC={:04X} BC={:04X}",
+                    before.pc, before.bc, trace, after.pc, after.bc
+                );
+            }
+            break;
+        }
+    }
 }
 
 // Original synthetic programs only. No external suite's ROM or code is embedded.

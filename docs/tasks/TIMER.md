@@ -1,6 +1,6 @@
 # M3 programmable timer design brief
 
-Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Register foundation #65, tick/reload/write-phase #66, DIV/TAC write edges #67 and the user-approved coarse STOP policy #68 are locally verified. External hardware timer audit/execution/calibration remains incomplete. User writes application code; assistant owns source audit, design, tests and review. [DIV foundation](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define the existing boundaries.
+Active design [#53](https://github.com/Lorithan/gameboy-emu/issues/53). Local slices #65-#68 are verified for their declared coarse scope. [Thirteen pinned timer fixtures](../testing/MOONEYE_TIMER.md) were audited and executed under #69: twelve pass, rapid_toggle reports failure. [#70](https://github.com/Lorithan/gameboy-emu/issues/70) investigates BCFFD8 versus expected FFD9 before a user-owned implementation fix. Latest full fixture-inclusive run: 478 passed, one failed; M3/#53 remain open. User owns application code; assistant owns design/tests/review. [DIV](../DEVICES.md#divider-phase) and [schedule](../CORE_ARCHITECTURE.md#machine-cycle-schedule) define current boundaries.
 
 ## First implementation slice: register storage and mapping
 
@@ -55,7 +55,7 @@ Five new tests cover counter/control/phase reset preservation and exact remainin
 
 1. **Registers/startup:** specified and implemented above. Extend these methods with reviewed edge/reload behavior in later slices.
 2. **Write-induced edges:** #67 above is locally verified; hardware timer audit/calibration remains required.
-3. **Reload calibration:** ordinary tick/delay/write-window rules are implemented above; audit and execute pinned hardware timer tests against the current access phase before claiming conformance.
+3. **Calibration:** ordinary rate/DIV-trigger and TIMA/TMA reload-write fixtures pass; rapid_toggle fails at a timer/CPU boundary. Inspect source-backed request/fetch/DEC timing under #70 before changing the model.
 4. **STOP interactions:** coarse policy above is agreed/verified; physical reset-edge fidelity remains #64, not silently equated with DIV writes.
 5. **Effects/order:** Timer-to-Bus event delivery and normal CPU arbitration are implemented; preserve the declared ordering or explicitly revise it if evidence requires.
 6. **Evidence:** independent frequency/edge/register/reload/collision/IF/HALT/STOP tests, then a pinned bounded timer-ROM selection with startup/device/reporting/license audit. No unrelated PPU/audio/frontend work.
@@ -64,7 +64,7 @@ Five new tests cover counter/control/phase reset preservation and exact remainin
 
 1. Register storage/mapping #65 and ordinary tick/reload/write-phase #66 are complete for their scope.
 2. DIV/TAC write edges #67 and agreed STOP policy #68 are complete for their declared scope.
-3. Next audit/prepare/run pinned timer ROMs, investigate phase mismatches and preserve System regressions.
+3. Thirteen pinned timer fixtures have run; next investigate/fix rapid_toggle #70 and rerun while preserving the other results and System regressions.
 
 Finalize interfaces/invariants before each slice. An overflow placeholder must not be presented as timer correctness. [M3 gate](../PROJECT_PLAN.md#milestones) requires timing/interrupt tests and relevant real ROM evidence, not just compilation.
 
@@ -75,4 +75,4 @@ Finalize interfaces/invariants before each slice. An overflow placeholder must n
 - [Post-boot profile](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md).
 - Pinned Mooneye [TIMA write/reload](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/tima_write_reloading.s) and [TMA write/reload](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/timer/tma_write_reloading.s).
 
-Initial review found conflicting same-reload-cycle TMA wording between the Pan Docs sections. The implemented coarse model follows the detailed obscure-behavior section: a reload-window TMA write updates TIMA too. Local CPU-boundary tests verify this chosen rule; pinned timer-ROM phase calibration remains required, not claimed. Physical STOP #64 and optional DAA #52 remain separate.
+Initial review found conflicting same-reload-cycle TMA wording between Pan Docs sections. The model follows the detailed section: reload-window TMA writes update TIMA too. Local CPU-boundary checks and the actual pinned tma_write_reloading pass now support that chosen behavior; this does not establish arbitrary pin-phase fidelity. rapid_toggle demonstrates a remaining defect and prevents a full timer-conformance claim. Physical STOP #64 and DAA #52 remain separate.

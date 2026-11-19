@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest executable verification: agreed coarse STOP timer policy #68, 2026-11-19, **466 passes** (341 unit, 125 integration), including five hash-verified existing fixtures; formatting and strict Clippy pass. Five new tests cover counter-only reset/all phases, remaining reload ticks, no-cycle polling/input, IF retention/normal post-wake service and conditional branch clocking. Focused runs pass 27 STOP and 25 timer tests (overlapping sets). Application source is unchanged for this slice. The no-entry-TIMA-edge policy is an explicit approximation; no physical STOP or new timer ROM validation is claimed. Next audit and execute pinned hardware timer fixtures, retaining all prior edge/phase/write oracles.
+Latest fixture-inclusive regression, timer audit #69 on 2026-11-19: **478 passed, 1 failed**, with no-fail-fast so all targets ran. All 461 local tests and 17 external fixtures pass; pinned rapid_toggle explicitly reports failure, tracked by [#70](https://github.com/Lorithan/gameboy-emu/issues/70). Formatting and strict Clippy pass. Last all-green checkpoint is 2b28f50 with 466 tests, before the thirteen new timer fixtures. Application source is unchanged by this audit. [Timer evidence](testing/MOONEYE_TIMER.md) records twelve passes and the reproducible failing boundary; no complete M3/hardware timing claim.
 
 ## Commands
 
@@ -10,24 +10,25 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-An ordinary fixture-free checkout explicitly ignores five external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
+An ordinary fixture-free checkout explicitly ignores eighteen external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-reg-f.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-subset.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-timer.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:
 
 ```powershell
-cargo test --all-features --quiet -- --include-ignored
+cargo test --all-features --no-fail-fast --quiet -- --include-ignored
 ```
 
-`cargo test --test cpu_rom_runner` runs synthetic runner acceptance and leaves external fixtures ignored. Unit/ignored/empty runs are not external passes.
+The timer script and fixture-inclusive suite currently fail rapid_toggle; keep that failure visible. A negative invalid-byte probe verified that the timer script rejects a hash mismatch before Cargo starts. `cargo test --test cpu_rom_runner` runs synthetic runner acceptance and leaves external fixtures ignored. Unit/ignored/empty runs are not external passes.
 
 ## Actual external results
 
-All five artifacts are unchanged official prebuilt images from source revision 31510e12eea6286d36eea060a6adde755e1067aa, using ordinary Cartridge/System and current skipped-boot DMG startup. No binaries are tracked.
+All eighteen artifacts are unchanged official prebuilt images from source revision 31510e12eea6286d36eea060a6adde755e1067aa, using ordinary Cartridge/System and current skipped-boot DMG startup. No binaries are tracked.
 
 | Fixture | Result | M-cycles | Base ticks | Record |
 | --- | --- | ---: | ---: | --- |
@@ -36,8 +37,9 @@ All five artifacts are unchanged official prebuilt images from source revision 3
 | interrupts/ie_push | Passed | 852,459 | 3,409,836 | Same subset; bounded PPU-helper timeout documented |
 | ei_sequence | Passed | 3,943 | 15,772 | Same subset |
 | div_timing | Passed | 4,235 | 16,940 | Same subset; resets DIV explicitly |
+| Thirteen timer fixtures | Twelve passed; rapid_toggle reported failure | Per-fixture counts | Per-fixture counts | [Timer audit/results](testing/MOONEYE_TIMER.md), [manifest](../tests/fixtures/mooneye-timer.json) |
 
-Each matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. Caps remain 1,000,000 M-cycles and 10 host seconds per fixture. Results support narrow F-mask, IRQ/EI and DIV behavior, not complete instruction timing or serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) is unrun; timer ROMs require [M3 design](tasks/TIMER.md) and prerequisite audits.
+Every passing fixture matched the first FF01 packet and B/C/D/E/H/L decimal signature 3,5,8,13,21,34. rapid_toggle instead reports six42 hex; bounded body diagnostics observe BCFFD8 versus source-expected FFD9. Caps remain 1,000,000 M-cycles and 10 host seconds per run, including a separately bounded diagnostic rerun on rapid_toggle failure. These results are finite checks, not complete timing/serial/PPU accuracy. External DAA [#52](https://github.com/Lorithan/gameboy-emu/issues/52) is unrun; the [M3 design](tasks/TIMER.md) stays open for the demonstrated timer/CPU boundary defect.
 
 ## Runner contract
 
