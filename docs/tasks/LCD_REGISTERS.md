@@ -131,11 +131,63 @@ The pinned helpers below were re-audited for slice A:
 - **Expected counts:** before slice A, 16 fixtures took 3,943-4,677 M-cycles, div_write 721,229 and ie_push 852,459, the last because its LY wait timed out. After slice A, each fixture should add roughly three frames of waits (about 53,000 M-cycles) plus screen setup. ie_push should drop sharply because its wait now completes.
 - **Timeout bound:** any fixture other than div_write that reaches 851,968 M-cycles signals a timeout. div_write with a timeout would exceed the existing 1,000,000 cap. Caps are unchanged.
 
-## STAT interrupts (slice B, #76)
+## Slice B: STAT and VBlank interrupts (#76)
 
-Use the four PpuMode values HBlank=0, VBlank=1, OamScan=2 and Drawing=3. Later store only writable STAT interrupt-enable bits, masked with 0x78. Readback combines 0x80, those enables, the clocked coincidence latch at bit2 and the reported mode. CPU writes cannot set mode/coincidence or bit7. LY is generated from timing, with physical line and visible LY distinguished. [STAT layout](https://raw.githubusercontent.com/gbdev/pandocs/master/src/STAT.md); [unused bit7 hardware test](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/bits/unused_hwio-GS.s).
+Proposed contract, drafted 2026-11-20 and awaiting agreement. It adds interrupt requests on top of the slice A registers; register readback does not change. All timing remains the provisional model; #73 calibrates it.
 
-**Correction to the earlier proposal:** coincidence is real retained state, not always a pure expression of current LY/LYC. Pinned [stat_lyc_onoff.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/stat_lyc_onoff.s), blob 6d8a34fd0978bd6a79370a07dc830c870bfcf152, holds that latch while LCD is off, even across LYC writes. Enable resumes comparison with visible LY0. Its four cases require:
+### Sources
+
+| Source | What it establishes |
+| --- | --- |
+| [Pan Docs interrupt sources](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Interrupt_Sources.md) | VBlank is requested on entering mode 1 at LY 144. STAT sources (modes 0-2, LY=LYC) are ORed into one line, gated by their select bits. A request happens only on the line's rising edge, so overlapping sources block each other (e.g. modes 0 and 1 both selected: no separate mode-1 interrupt). LYC 0 matches early in line 153. |
+| [Pan Docs STAT](https://raw.githubusercontent.com/gbdev/pandocs/master/src/STAT.md) | The comparison runs constantly. On DMG, writing STAT during OAM scan, HBlank, VBlank or LY=LYC can request an interrupt: it "behaves as if $FF were written for one M-cycle, and then the written value were written the next M-cycle." |
+| [stat_lyc_onoff.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/stat_lyc_onoff.s) | Table below. Every LYC write in it happens with the LCD off, so it does **not** settle LYC writes while the LCD is on. |
+| [stat_irq_blocking.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/stat_irq_blocking.s) | Round 1: already in VBlank, writing STAT `$10` must request an interrupt. Round 2: with STAT `$78`, sweeping LYC over 0-143 must never request one, because only mode 3 lowers the line. |
+| [vblank_stat_intr-GS.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/vblank_stat_intr-GS.s) | On DMG, the **mode-2** select (bit 5) also triggers at line 144, at the same time as VBlank. It does not test the mode-1 select. |
+
+### Proposed types and ownership
+
+| Item | Proposed shape | Responsibility |
+| --- | --- | --- |
+| `PpuEffects` | `#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]` struct with `vblank: bool` and `lcd_stat: bool` | What the PPU asks Bus to request. Independent flags, both possible at once; not an enum. |
+| `Ppu::tick(&mut self) -> PpuEffects` | changed return type | Advances timing, updates the flag, evaluates the line |
+| `Ppu::write_stat` / `write_lyc` `-> PpuEffects` | changed return type | Writes that can raise an edge immediately |
+| STAT line history | one stored `bool`, owned with LcdStatus or Ppu (your choice) | Previous combined line level, used for edge detection |
+| Bus | applies effects in `advance_mcycle` and in its FF41/FF45 write arms | `request_interrupt(VBlank)` / `request_interrupt(LCDStat)`. Never inspects IE/IME; CPU dispatch is unchanged. |
+
+`PpuTiming` stays free of register knowledge, as in slice A. The line is a function of the selects, the flag and the timing state, so put it on whichever side owns those inputs. One natural shape is an `LcdStatus` method that takes a small timing view (mode, plus whether this is the line-144 mode-2 pulse).
+
+### Behaviour
+
+**1. STAT line (provisional, needs calibration).** It is the OR of four sources:
+
+- **HBlank:** HBlank select and mode HBlank.
+- **VBlank:** VBlank select and mode VBlank.
+- **OAM:** OAM select and (mode OamScan, or the line-144 pulse).
+- **LY=LYC:** LYC select and the flag.
+
+The **line-144 pulse** is dot 0 of physical line 144 (provisional, after vblank_stat_intr-GS). The first line after enable reports HBlank, not OamScan, so it has no mode-2 source.
+
+**2. Evaluation points.** The line is re-evaluated after every enabled tick, after the flag update. LCDStat is requested when the new level is high and the stored level is low; the new level is then stored.
+
+**3. VBlank request.** Requested on the enabled tick that enters physical line 144 / dot 0. It ignores the STAT selects and the line, and happens once per frame.
+
+**4. LYC writes while the LCD is on (provisional).** The flag and line are re-evaluated immediately, and the write may return `lcd_stat`. Pan Docs says the comparison runs constantly, and no source contradicts an immediate update. **This changes slice A, which compared only on ticks.** CPU reads cannot tell the difference, so slice A's tests still hold.
+
+**5. STAT writes while the LCD is on (DMG quirk).** The line is first evaluated with all four selects as if `$FF` were written, which may request; then the real selects are stored and the line is evaluated again, without requesting a second time on the same write. In the provisional model this collapses the quirk's "one M-cycle" into the write. That satisfies stat_irq_blocking round 1 with or without the quirk. Its exact duration is a #73 target.
+
+**6. LCD off.**
+
+- There are no ticks, so there are no effects and no evaluations.
+- STAT/LYC writes while off store their values, but do not evaluate or request; the quirk does not apply while off.
+- The stored line level and the flag are both held. This is what gives stat_lyc_onoff its results:
+  - Round 2: true to true after enable, so no request.
+  - Round 4: false to true at the first enabled tick, so a request.
+- Neither LCDC edge requests anything at the moment of the write.
+
+**7. Startup.** The stored line level starts at the level the seed would produce, which is low with STAT selects 0. Nothing is requested at construction, and the seed is mid-VBlank, so the first VBlank request is at the next line 144.
+
+### stat_lyc_onoff cases (also pinned by the slice A flag behaviour)
 
 | Retained comparison | Comparison after enable | Expected comparison interrupt in that source |
 | --- | --- | --- |
@@ -144,11 +196,55 @@ Use the four PpuMode values HBlank=0, VBlank=1, OamScan=2 and Drawing=3. Later s
 | False | False | None |
 | False | True | Requested |
 
-Thus disabling must not recompute coincidence just because visible LY becomes0, and resetting edge history indiscriminately would create a spurious true-to-true interrupt. Slice B (#76) settles interrupt sample order and combined-source history against these cases before implementation; slice A adds the held flag only.
+Disabling must not recompute the flag just because visible LY becomes 0, and resetting the line history on enable would create a spurious true-to-true interrupt.
 
-STAT sources share one logical line: enabled HBlank, VBlank, OamScan and coincidence conditions are ORed. Request LCDStat on that combined line's low-to-high transition, not on every tick or separately for overlapping sources. Both its edge history and the clocked comparison latch are meaningful state. VBlank is a separate request. Proposed later PpuEffects has independently named vblank and lcd_stat flags, allowing both together; Bus applies them independently of IE/IME. This is not a mutually exclusive event enum. [Interrupt sources and STAT blocking](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Interrupt_Sources.md).
+### Interrupt sampling in our model
 
-Active changes to mode/LY, LYC and STAT enables can change the line; control writes can also have effects. Later affected writes and ticks return effects to Bus. #76 must settle precise interrupt sample order, LCD-off gating, startup/no-synthetic-event initialization and DMG's spurious STAT-write behavior. CPU memory-access restrictions are #77; first blank-frame policy belongs to rendering. These are required, not silently omitted accuracy claims.
+- Effects from ticks set IF during `advance_mcycle`, before that cycle's bus access, so the CPU's post-advance interrupt check sees them in the same step.
+- Effects from a write set IF after the access, so they are seen at the next step's first check.
+- Whether the write-time choice in points 4-5 is observably different from waiting for the next tick will be checked by tests. Hardware phase is #73.
+
+### Out of scope
+
+- VRAM/OAM access restrictions (#77).
+- Calibrating any constant (#73).
+- Running stat_irq_blocking, vblank_stat_intr or stat_lyc_onoff as fixtures; they need the #73 audit first. Their conditions are reproduced as local tests instead.
+- DMA, rendering.
+
+### Slice B acceptance (proposed)
+
+**Line and effects model**
+- For all 16 select combinations × LYC values {0, 1, 143, 144, 153, FF}, over two frames from the seed and from enable, `Ppu::tick` effects match an independent line/edge model at every tick.
+- Spot counts per frame:
+  - HBlank select only: 144.
+  - OAM only: 145, including the line-144 pulse.
+  - VBlank only: 1.
+  - LYC only: 1 (0 for LYC FF).
+  - HBlank and VBlank: 144, because the VBlank source is blocked behind HBlank.
+- VBlank effect exactly once per frame at line 144 / dot 0, with any selects.
+
+**Writes**
+- LYC writes while on update the flag immediately and request only on a rising edge.
+- STAT-write quirk: `$00` written in HBlank / VBlank / OAM scan or with the flag set, while the line is low, requests once. Written in Drawing with the flag clear, it does not.
+- stat_irq_blocking round 1 and round 2 conditions reproduced through Bus.
+
+**LCD off/on**
+- No effects while off, for any writes.
+- The four stat_lyc_onoff rounds reproduced through Bus IF bit 1.
+- No request at construction or in the first M-cycles.
+
+**CPU and System level**
+- With IE set, the VBlank and STAT interrupts wake HALT and dispatch to 0040 / 0048 at the expected M-cycle.
+- With IME off, only IF changes.
+- Interrupt requests from writes are seen one step later than those from ticks, as described above.
+
+**Gate**
+- All 18 existing fixtures pass, with per-fixture M-cycle counts recorded. PPU interrupts now set IF bits 0-1 during fixtures, so if_ie_registers and similar tests are the ones to watch.
+- Full suite, fmt and strict Clippy pass.
+
+### History
+
+**Correction to the earlier proposal:** coincidence is real retained state, not always a pure expression of current LY/LYC. Pinned [stat_lyc_onoff.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/stat_lyc_onoff.s), blob 6d8a34fd0978bd6a79370a07dc830c870bfcf152, holds that latch while LCD is off, even across LYC writes. Enable resumes comparison with visible LY0. Its four cases are tabulated in the slice B contract above. CPU memory-access restrictions are #77; first blank-frame policy belongs to rendering.
 
 ## Timing and ROM integration gate
 
