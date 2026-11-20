@@ -6,7 +6,16 @@ Updated 2026-11-20. [Documentation index](README.md).
 
 M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) retains its f0d38ef evidence. M4 now has [video-memory storage #71](DEVICES.md#video-memory-foundation), [eight passive LCD data registers #72](DEVICES.md#passive-lcd-data-registers) and [LCDC with an internal dot clock #74](DEVICES.md#lcdc-and-internal-dot-clock). Latest no-fail-fast fixture-inclusive regression, 2026-11-20: **508 passed, zero failed** (370 unit, 138 integration), including all eighteen external fixtures; formatting and strict Clippy pass. The dot clock follows the agreed provisional schedule; it is not hardware-calibrated, and LY/STAT, PPU interrupts, access restrictions and rendering do not exist yet. See [testing](TESTING.md).
 
-**Next: [#73, timing/status calibration gate](https://github.com/Lorithan/gameboy-emu/issues/73), before any live LY/STAT mapping.** It must settle hidden startup/enable phase, final-line visible LY, coincidence-latch and combined STAT-edge order (the latch holds while LCD is off), CPU access projection and the Mooneye reporter path, revisiting the provisional #74 constants per the [active contract](tasks/LCD_REGISTERS.md). The assistant drafts that contract and its acceptance criteria before further user implementation. Rendering, frame publication and DMA remain separate. Agree demo/frontend scope before SDL2 work. #64 physical STOP and #52 DAA remain separate.
+**Next: user implementation of [#75, live LY and STAT readback](https://github.com/Lorithan/gameboy-emu/issues/75)** per the [slice A contract](tasks/LCD_REGISTERS.md#slice-a-live-ly-and-stat-readback): visible LY with a provisional line-153 rule, a stored LY=LYC flag held while the LCD is off, and STAT select bits. It adds no interrupts and no access restrictions.
+
+The 2026-11-20 gate change splits the former #73 gate into four slices:
+
+- #75 slice A: live LY/STAT readback.
+- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts.
+- [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): VRAM/OAM access restrictions.
+- [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration against audited Mooneye PPU ROMs, required before any hardware-accuracy claim and the M4 gate.
+
+Live LY switches existing fixtures to Mooneye's on-screen reporter. Its LY-wait timeouts are silent, so the slice A gate requires per-fixture M-cycle counts that rule out a timeout. Rendering, frame publication and DMA remain separate. Agree demo/frontend scope before SDL2 work. #64 physical STOP and #52 DAA remain separate.
 
 Separate nonblocking follow-ups:
 
