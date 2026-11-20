@@ -33,7 +33,8 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
         (0xF0, false, true),
     ] {
         for offset in [
-            0u8, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x7F, 0x80, 0xFE, 0xFF,
+            0u8, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x7F,
+            0x80, 0xFE, 0xFF,
         ] {
             let mut bytes = vec![0x0E, offset, 0x3E, 0x5A, opcode];
             if immediate {
@@ -43,6 +44,7 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
             let cycles = if immediate { 3u64 } else { 2 };
             let read = match offset {
                 0 => 0xCF,
+                0x40 => 0x91,
                 0x42..=0x43 | 0x45 | 0x4A..=0x4B | 0x80..=0xFF => 0,
                 0x47 => 0xFC,
                 _ => 0xFF,
@@ -168,7 +170,7 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 complete(&mut system, if immediate { 3 } else { 2 });
                 complete(&mut system, 4);
                 let mapped =
-                    matches!(offset, 5 | 6 | 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF);
+                    matches!(offset, 5 | 6 | 0x40 | 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF);
                 assert_eq!(
                     system.cpu_snapshot().af,
                     u16::from(if offset == 0 {

@@ -1,6 +1,14 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #72 on 2026-11-19: **493 passed, zero failed**, with no-fail-fast so all targets ran (355 unit, 138 integration). All 475 local tests and eighteen hash-verified external fixtures pass after the user's eight passive LCD data registers and exact Bus mapping. Formatting and strict Clippy pass. Four new tests verify the [passive LCD contract](DEVICES.md#passive-lcd-data-registers); expanded LDH traces/budgets and explicit fallback/high-I/O oracle updates account for exactly those eight addresses while preserving unmapped LCDC/STAT/LY/DMA. The five earlier [video-memory foundation](DEVICES.md#video-memory-foundation) tests remain. No PPU timing/rendering hardware result is claimed. The [M3 review](M3_COMPLETION_REVIEW.md) retains its earlier f0d38ef evidence, including the corrected rapid_toggle result in [timer evidence](testing/MOONEYE_TIMER.md).
+Latest fixture-inclusive regression, #74 on 2026-11-20: **508 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (370 unit, 138 integration), after the user's LCDC mapping and internal PPU dot clock. All eighteen hash-verified external fixtures still pass with FF40 mapped. Formatting and strict Clippy pass.
+
+Fifteen new tests verify the [#74 contract](DEVICES.md#lcdc-and-internal-dot-clock):
+
+- `memory::ppu::timing::tests` (5): constructor states; every dot for three frames after enable against an independent range-table model, which is itself spot-checked at each boundary; exact 70,224-dot frame period; the 452-dot post-boot tail.
+- `memory::ppu::tests` (6): FF40 all-byte readback and read purity; 6 starting values × 256 writes for enable-edge effects; disabled freeze across all disabled bytes with an identical Timer/IF to an enabled bus, then restart from the enable write; four dots per Bus M-cycle and frame return to the seed; full-memory/Timer/instance isolation; STOP-entry phase preservation.
+- `system::tests::ppu_timing` (4): per-M-cycle comparison with a reference Bus (LCDC stores applied after the cycle's four ticks), including zero elapsed dots after an enabling LDH store; budget-pause equivalence; HALT idles and interrupt entries (asserted counts); stopped polls add no dots and phase resumes after wake. They use a `#[cfg(test)]` timing probe because System tests cannot name private PPU types.
+
+Four existing tests migrated FF40 from fallback to LCDC (startup 91); FF41/FF44/FF46 stay fallback. Tests verify the agreed provisional schedule, not hardware timing. A mutation check reintroducing the two review-found defects (VBlank only on line 144; enable-edge test never true) was not run, so their detection rests on reasoning about the every-dot and all-byte tests. The [passive LCD](DEVICES.md#passive-lcd-data-registers) and [video-memory](DEVICES.md#video-memory-foundation) tests remain. No PPU rendering or hardware timing result is claimed. The [M3 review](M3_COMPLETION_REVIEW.md) retains its earlier f0d38ef evidence, including the corrected rapid_toggle result in [timer evidence](testing/MOONEYE_TIMER.md).
 
 ## Commands
 

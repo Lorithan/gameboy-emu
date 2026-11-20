@@ -57,6 +57,7 @@ impl Bus {
             0xFF06 => self.timer.read_tma(),
             0xFF07 => self.timer.read_tac(),
             0xFF0F => self.interrupt_controller.read_flag(),
+            0xFF40 => self.ppu.read_lcdc(),
             0xFF42 => self.ppu.read_scy(),
             0xFF43 => self.ppu.read_scx(),
             0xFF45 => self.ppu.read_lyc(),
@@ -87,6 +88,7 @@ impl Bus {
             0xFF06 => self.timer.write_tma(value),
             0xFF07 => self.timer.write_tac(value),
             0xFF0F => self.interrupt_controller.write_flag(value),
+            0xFF40 => self.ppu.write_lcdc(value),
             0xFF42 => self.ppu.write_scy(value),
             0xFF43 => self.ppu.write_scx(value),
             0xFF45 => self.ppu.write_lyc(value),
@@ -120,6 +122,8 @@ impl Bus {
             if let timer::TimerEvent::InterruptRequested = self.timer.tick() {
                 self.request_interrupt(Interrupt::Timer);
             }
+
+            self.ppu.tick();
         }
     }
 
@@ -135,5 +139,12 @@ impl Bus {
 
     pub(crate) fn stop_wake_active(&self) -> bool {
         self.joypad.stop_wake_active()
+    }
+
+    /// Test-only opaque view of private PPU timing, compared for equality by
+    /// System-level tests that cannot name the private PpuTiming type.
+    #[cfg(test)]
+    pub(crate) fn ppu_timing_probe(&self) -> String {
+        self.ppu.timing_probe()
     }
 }

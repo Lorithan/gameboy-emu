@@ -47,6 +47,17 @@ The [handoff table](https://raw.githubusercontent.com/gbdev/pandocs/master/src/P
 
 Four new tests verify startup/read purity, every byte with per-register/full-memory/Timer-phase/IF/IE/instance isolation, unmapped address gaps, and CPU round trips with exact actions/ticks/snapshots. Expanded LDH tests cover both addressing forms, every pause budget, current register readback and all high-I/O offsets; full-memory expectations are changed only for the eight mapped registers. No PPU timing/rendering hardware result is implied.
 
+## LCDC and internal dot clock
+
+[#74](https://github.com/Lorithan/gameboy-emu/issues/74) maps FF40 to an `LcdControl` byte wrapper in LcdRegisters (startup 91, every bit read/written). Ppu owns private `PpuTiming` (`ppu/timing.rs`): physical line 0-153, dot 0-455, `PpuMode` and a first-line-after-enable flag. Bus calls `Ppu::tick` once per base tick after the Timer event, so each M-cycle is four dots; Ppu advances timing only while LCDC bit 7 is set.
+
+- Startup seed: line 153, dot 4, VBlank, no first-line state; line 0 / dot 0 / OamScan follows after 452 dots.
+- Ordinary lines 0-143: OamScan 0-79, Drawing 80-251, HBlank 252-455; lines 144-153 VBlank. A frame is 70,224 dots.
+- `write_lcdc` acts only on bit-7 edges: on→off sets `PpuTiming::lcd_off()` (line 0/dot 0/HBlank) and timing freezes; off→on sets `lcd_on()`, whose first line is HBlank 0-79 / Drawing 80-251 / HBlank 252-455 before an ordinary OamScan line. Same-state writes preserve timing.
+- Neither edge touches VRAM/OAM, passive registers, Timer, IF/IE or elapsed time. STOP entry preserves the PPU phase; HALT and interrupt entry advance it.
+
+`mode` updates at boundary dots, so constructors must produce consistent states; `lcd_off()` is valid only because timing never ticks while disabled. The schedule is the provisional fixed-transfer scaffold from the [contract](tasks/LCD_REGISTERS.md), not a hardware match. STAT, LY and DMA remain FF fallback; there are no PPU interrupts, access restrictions or rendering. #73 calibration gates live status.
+
 ## Interrupt registers
 
 Bus owns the controller. Internal IF starts 01 (reads E1); IE starts 00. IF upper bits read one; IE upper bits retain writes but eligibility is `IF & IE & 0x1F`. Requests set one bit; acknowledgments clear one bit; reads/pending queries are pure. Priority is VBlank, LCD STAT, Timer, Serial, Joypad, with vectors 0040/0048/0050/0058/0060. [CPU entry/IME](CPU.md#ime-and-interrupt-entry) remains separate.

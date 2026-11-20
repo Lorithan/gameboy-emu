@@ -10,6 +10,7 @@ mod halt;
 mod joypad;
 mod lcd_registers;
 mod ppu_memory;
+mod ppu_timing;
 mod reti;
 mod stop;
 mod timer_registers;

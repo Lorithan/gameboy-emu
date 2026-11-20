@@ -1,6 +1,6 @@
 # LCD register proposal
 
-Active M4 control/status contract, 2026-11-19. Video-memory foundation #71 and the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) are verified. **Next implement [#74, LCDC and an internal dot clock](https://github.com/Lorithan/gameboy-emu/issues/74)** under the explicitly provisional model below. [#73](https://github.com/Lorithan/gameboy-emu/issues/73) is a required calibration/status/reporter gate before publishing live LY/STAT. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
+Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #71, the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) and [#74, LCDC and an internal dot clock](https://github.com/Lorithan/gameboy-emu/issues/74), are implemented and verified against the provisional model below ([devices](../DEVICES.md#lcdc-and-internal-dot-clock), [testing](../TESTING.md)). **Next: [#73](https://github.com/Lorithan/gameboy-emu/issues/73) calibration before live LY/STAT.** [#73](https://github.com/Lorithan/gameboy-emu/issues/73) is a required calibration/status/reporter gate before publishing live LY/STAT. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
 
 ## Ownership and representation
 

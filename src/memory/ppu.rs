@@ -1,11 +1,16 @@
-use crate::memory::ppu::lcd::LcdRegisters;
+use crate::memory::ppu::{lcd::LcdRegisters, timing::PpuTiming};
 
 mod lcd;
+mod timing;
+
+#[cfg(test)]
+mod tests;
 
 pub(super) struct Ppu {
     vram: [u8; 0x2000],
     oam: [u8; 0xA0],
     lcd_registers: LcdRegisters,
+    timing: PpuTiming,
 }
 
 impl Ppu {
@@ -14,6 +19,7 @@ impl Ppu {
             vram: [0; 0x2000],
             oam: [0; 0xA0],
             lcd_registers: LcdRegisters::dmg_post_boot(),
+            timing: PpuTiming::dmg_post_boot(),
         }
     }
 
@@ -95,5 +101,32 @@ impl Ppu {
 
     pub(super) fn write_wx(&mut self, value: u8) {
         self.lcd_registers.wx = value;
+    }
+
+    pub(super) fn read_lcdc(&self) -> u8 {
+        self.lcd_registers.lcd_control.bits()
+    }
+
+    pub(super) fn write_lcdc(&mut self, value: u8) {
+        let old_enable = self.lcd_registers.lcd_control.is_enabled();
+        self.lcd_registers.lcd_control.write(value);
+        let new_enabled = self.lcd_registers.lcd_control.is_enabled();
+
+        if old_enable && !new_enabled {
+            self.timing = PpuTiming::lcd_off();
+        } else if !old_enable && new_enabled {
+            self.timing = PpuTiming::lcd_on();
+        }
+    }
+
+    pub(super) fn tick(&mut self) {
+        if self.lcd_registers.lcd_control.is_enabled() {
+            self.timing.tick();
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn timing_probe(&self) -> String {
+        format!("{:?}", self.timing)
     }
 }
