@@ -8,6 +8,7 @@ mod divider;
 mod divider_oracle;
 mod halt;
 mod joypad;
+mod lcd_registers;
 mod ppu_memory;
 mod reti;
 mod stop;
@@ -1400,14 +1401,16 @@ fn absolute_a_transfers_only_change_permitted_store_bytes_and_aliases() {
 }
 
 #[test]
-fn ldh_stores_follow_joyp_ie_and_hram_mapping_at_final_completion() {
+fn ldh_stores_follow_joyp_lcd_ie_and_hram_mapping_at_final_completion() {
     for (opcode, store, immediate) in [
         (0xE2, true, false),
         (0xF2, false, false),
         (0xE0, true, true),
         (0xF0, false, true),
     ] {
-        for offset in [0u8, 0x7F, 0x80, 0xFE, 0xFF] {
+        for offset in [
+            0u8, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x7F, 0x80, 0xFE, 0xFF,
+        ] {
             let cycles = if immediate { 3 } else { 2 };
             for budget in 0..=cycles {
                 let mut rom = vec![0; 32768];
@@ -1435,7 +1438,10 @@ fn ldh_stores_follow_joyp_ie_and_hram_mapping_at_final_completion() {
                     if store && phase == cycles && offset == 0 {
                         expected[0xFF00] = 0xDF;
                     }
-                    if store && phase == cycles && (0x80..=0xFF).contains(&offset) {
+                    if store
+                        && phase == cycles
+                        && matches!(offset, 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF)
+                    {
                         expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
                     }
                     for addr in 0u16..=65535 {

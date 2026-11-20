@@ -1,6 +1,6 @@
 # LCD register proposal
 
-M4 proposal, 2026-11-19, following completed video-memory foundation #71. **Implement the eight passive data registers in [#72](https://github.com/Lorithan/gameboy-emu/issues/72) first.** The control/status design below sets the direction for subsequent work; live LCDC/STAT/LY mapping waits for its timing and interrupt contract. User owns application implementation; assistant owns acceptance tests, source review and oracle updates. No application changes are made by this proposal.
+Active M4 control/status proposal, 2026-11-19. Video-memory foundation #71 and the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) are implemented and verified. The control/status design below sets the direction for subsequent work; live LCDC/STAT/LY mapping still waits for its timing and interrupt contract. User owns application implementation; assistant owns acceptance tests, source review and oracle updates. The implemented passive contract is also recorded in [devices](../DEVICES.md#passive-lcd-data-registers).
 
 ## Ownership and representation
 
@@ -18,24 +18,24 @@ This table specifies the DMG skipped-boot profile and implementation order. Valu
 | --- | --- | --- | --- | --- |
 | FF40 | LCDC | 91 | Read all bits; writes replace configuration and apply enable/disable transitions | Later control/timing |
 | FF41 | STAT | 85 as the documented DMG readable profile | Bit 7 reads 1; bits 3-6 writable; mode/comparison computed | Later live status |
-| FF42 | SCY | 00 | Full-byte read/write | Implement now |
-| FF43 | SCX | 00 | Full-byte read/write | Implement now |
+| FF42 | SCY | 00 | Full-byte read/write | Implemented #72 |
+| FF43 | SCX | 00 | Full-byte read/write | Implemented #72 |
 | FF44 | LY | 00 as the documented DMG readable profile | PPU-generated; CPU writes ignored | Later live status |
 | FF45 | LYC | 00 | Full-byte comparison configuration; later writes reevaluate STAT | Implement storage now |
 | FF46 | DMA | Existing FF fallback for now | Separate Bus DMA contract; not a passive PPU byte | Later DMA |
-| FF47 | BGP | FC | Full-byte read/write | Implement now |
-| FF48 | OBP0 | FF by project policy | Full-byte read/write | Implement now |
-| FF49 | OBP1 | FF by project policy | Full-byte read/write | Implement now |
-| FF4A | WY | 00 | Full-byte read/write | Implement now |
-| FF4B | WX | 00 | Full-byte read/write | Implement now |
+| FF47 | BGP | FC | Full-byte read/write | Implemented #72 |
+| FF48 | OBP0 | FF by project policy | Full-byte read/write | Implemented #72 |
+| FF49 | OBP1 | FF by project policy | Full-byte read/write | Implemented #72 |
+| FF4A | WY | 00 | Full-byte read/write | Implemented #72 |
+| FF4B | WX | 00 | Full-byte read/write | Implemented #72 |
 
 The [Pan Docs handoff table](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md) provides the documented DMG values, while identifying OBP0/OBP1 as uninitialized. Choosing FF for those two is a deterministic project policy, not a hardware guarantee. Keep the existing zeroed VRAM/OAM policy; no boot-ROM logo data is added.
 
 LY00 and STAT85 describe a readable profile, not a complete hidden timing state. STAT85 reports mode1 and coincidence, so initializing OamScan solely because LY is zero would disagree. Before live status mapping, settle the internal line/dot phase and visible-LY derivation, including the final VBlank line, with an explicitly sourced or labeled model seed. This first slice does not choose or freeze that phase.
 
-## First implementation checklist
+## Implemented passive register storage
 
-Add the eight private fields to Ppu and initialize them in dmg_post_boot using the table. Add parent-visible read_NAME(&self) -> u8 and write_NAME(&mut self, value:u8) methods. Each current writer stores its byte and returns unit; each reader returns it without effects. Map exactly FF42, FF43, FF45 and FF47-FF4B in both Bus access methods. The gaps FF44 and FF46 must not be caught by a broad range arm.
+The eight private fields are grouped in LcdRegisters under Ppu and initialized in dmg_post_boot using the table. Parent-visible Ppu read_NAME(&self) -> u8 and write_NAME(&mut self, value:u8) methods expose them to Bus. Each current writer stores its byte and returns unit; each reader returns it without effects. Bus maps exactly FF42, FF43, FF45 and FF47-FF4B. The gaps FF44 and FF46 retain fallback.
 
 Keep every bit of all eight bytes. SCX/SCY, WX/WY and LYC accept all values without clamping. WX's display offset belongs to rendering, not register storage. Object color index0 is transparent during rendering; its unused shade selection does not justify erasing low bits from the stored OBP byte. These byte/readback rules are the proposed storage contract. [Scrolling](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Scrolling.md), [window coordinates](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Window.md), [palettes](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Palettes.md).
 
@@ -74,6 +74,6 @@ Pinned Mooneye [is_ppu_broken.s](https://github.com/Gekkio/mooneye-test-suite/bl
 
 ## Acceptance and checkpoints
 
-For #72 the assistant will test all-byte read/write round trips and startup, read purity, exact address/gap decoding, per-register/per-instance/video-memory/Timer/IF/IE isolation, and real CPU LDH actions/ticks/budget resumes. Existing fallback/high-I/O expectations will change explicitly for only these eight addresses. Preserve every unrelated memory/flag/trace/fault/budget oracle and all eighteen hash-verified external ROM passes. Formatting and strict Clippy must pass. Last verified baseline 4fdf5fa passed 489 tests; this proposal adds no tests or application code.
+For #72 four new tests cover all-byte read/write round trips and startup, read purity, exact address/gap decoding, per-register/per-instance/video-memory/Timer/IF/IE isolation, and CPU LDH actions/ticks/snapshots. Expanded existing LDH checks cover both addressing forms and every pause budget; fallback/high-I/O expectations change explicitly for only these eight addresses, preserving unrelated memory/flag/trace/fault/budget oracles. Full regression and fixture evidence are recorded in [testing](../TESTING.md).
 
-Subsequent issues will settle control/timing/startup and live status, then edge-based interrupts/access restrictions with a fresh reporter audit. Rendering, frame publication and DMA stay separate. The user can begin #72 now; the remaining design sections are a blueprint for review before dependent implementation.
+Next settle control/timing/startup and live status, then edge-based interrupts/access restrictions with a fresh reporter audit. Rendering, frame publication and DMA stay separate. The remaining design sections are a blueprint for review before dependent implementation; completing passive storage does not authorize mapping frozen LY/STAT.

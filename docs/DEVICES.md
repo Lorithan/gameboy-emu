@@ -18,6 +18,7 @@ Cartridge accepts validated unchanged 32 KiB ROM-only images with no cartridge R
 | FF04 | DIV |
 | FF05-FF07 | TIMA/TMA/TAC with tick counting, reload/write phases and DIV/TAC write-edge integration |
 | FF0F / FFFF | IF / IE |
+| FF42-FF43 / FF45 / FF47-FF4B | Passive LCD data registers in Ppu |
 | Other | Read FF, ignore writes; unimplemented hardware |
 
 WRAM/HRAM start zero as deterministic project policy, not physical RAM behavior. CPU starts PC=0100, SP=FFFE, A=01, BC=0013, DE=00D8, HL=014D. F=80 for zero header checksum, otherwise B0. Source: [Pan Docs post-boot profile](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md). Authentic boot and other console profiles are deferred.
@@ -26,9 +27,25 @@ WRAM/HRAM start zero as deterministic project policy, not physical RAM behavior.
 
 [#71](https://github.com/Lorithan/gameboy-emu/issues/71) adds Bus-owned Ppu with private VRAM/OAM arrays. Both start zero as deterministic project policy, intentionally omitting boot-ROM logo/tile initialization. Bus subtracts the mapped range base and converts to usize offsets; Ppu indexes directly without masking/modulo aliases. Every byte retains all eight bits independently; reads are pure and instances/regions are isolated. FEA0-FEFF retains existing FF/ignored-write fallback and is not additional OAM; that fallback is not a physical accuracy claim.
 
-This is storage/mapping only: no PPU clocking, LCD registers, modes/access locks, rendering, interrupt requests, frame output or DMA yet. FF40-FF4B remain fallback, including LY and DMA; existing audited ROM reporter behavior is unchanged. Agreed later architecture advances PPU once per base tick alongside Timer and exposes read-only completed frames through System, under contracts still to be specified.
+Video memory and the passive LCD registers below are storage/mapping only: no PPU clocking, LCD control/status transitions, modes/access locks, rendering, interrupt requests, frame output or DMA yet. FF40, FF41, FF44 and FF46 remain fallback, including LY and DMA; existing audited ROM reporter behavior is unchanged. Agreed later architecture advances PPU once per base tick alongside Timer and exposes read-only completed frames through System, under contracts still to be specified.
 
 Five assistant acceptance tests cover zero/read purity, all-offset independent address patterns, all-byte endpoint/interior writes, full-memory/Timer-phase/instance isolation, unusable-tail nonaliases and CPU word stores across video-region boundaries with exact traces and every pause budget. Existing load/store/stack/interrupt/RETI/CB oracles now explicitly include the newly mapped ranges. This establishes the foundation contract, not functional PPU accuracy. [Mapping reference](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Memory_Map.md); [future mode restrictions](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Accessing_VRAM_and_OAM.md).
+
+## Passive LCD data registers
+
+[#72](https://github.com/Lorithan/gameboy-emu/issues/72) adds private LcdRegisters under Ppu, with parent-visible Ppu accessors and exact Bus routing. All eight bytes retain/read every bit; reads are pure. Scrolling/window coordinates and LYC are not clamped; WX's display offset and object color-index transparency belong to future rendering, not byte storage.
+
+| Address | Register | Startup byte |
+| --- | --- | --- |
+| FF42 / FF43 | SCY / SCX | 00 / 00 |
+| FF45 | LYC | 00 |
+| FF47 | BGP | FC |
+| FF48 / FF49 | OBP0 / OBP1 | FF / FF, deterministic project policy |
+| FF4A / FF4B | WY / WX | 00 / 00 |
+
+The [handoff table](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Power_Up_Sequence.md) gives the documented DMG values but identifies OBP0/OBP1 as uninitialized; their FF startup is a project choice. LYC currently has no comparison/interrupt effects. Live status, LCD enable transitions and shared STAT-line signaling need the [remaining register/timing contract](tasks/LCD_REGISTERS.md) before implementation. LY remains fallback so a frozen scanline cannot select Mooneye's functional-PPU reporter path prematurely.
+
+Four new tests verify startup/read purity, every byte with per-register/full-memory/Timer-phase/IF/IE/instance isolation, unmapped address gaps, and CPU round trips with exact actions/ticks/snapshots. Expanded LDH tests cover both addressing forms, every pause budget, current register readback and all high-I/O offsets; full-memory expectations are changed only for the eight mapped registers. No PPU timing/rendering hardware result is implied.
 
 ## Interrupt registers
 
