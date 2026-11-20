@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); M4 has verified [video-memory storage](DEVICES.md#video-memory-foundation) and [passive LCD registers](DEVICES.md#passive-lcd-data-registers). Next settle live control/status timing and startup under the [LCD proposal](tasks/LCD_REGISTERS.md).
+Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); M4 has verified [video-memory storage](DEVICES.md#video-memory-foundation) and [passive LCD registers](DEVICES.md#passive-lcd-data-registers). Next is [LCDC and an internal dot-clock foundation](tasks/LCD_REGISTERS.md), followed by required calibration before live LY/STAT mapping.
 
 | Guide | Contents |
 | --- | --- |
