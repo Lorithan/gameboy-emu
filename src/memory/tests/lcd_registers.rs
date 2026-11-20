@@ -95,8 +95,8 @@ fn passive_lcd_mapping_keeps_status_ly_dma_and_neighbors_unmapped() {
     bus.write(0xFE00, 0x76);
     let original: Vec<_> = (0u16..=u16::MAX).map(|addr| bus.read(addr)).collect();
     let timer = bus.timer;
-    // FF40 (LCDC) is mapped by #74; see memory::ppu::tests.
-    for address in [0xFF3F, 0xFF41, 0xFF44, 0xFF46, 0xFF4C] {
+    // FF40 (#74) and FF41/FF44 (#75) are mapped; see memory::ppu::tests.
+    for address in [0xFF3F, 0xFF46, 0xFF4C] {
         assert_eq!(bus.read(address), 0xFF);
         for value in [0, 0x5A, 0xFF] {
             bus.write(address, value);

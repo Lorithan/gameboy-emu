@@ -56,7 +56,17 @@ Four new tests verify startup/read purity, every byte with per-register/full-mem
 - `write_lcdc` acts only on bit-7 edges: on→off sets `PpuTiming::lcd_off()` (line 0/dot 0/HBlank) and timing freezes; off→on sets `lcd_on()`, whose first line is HBlank 0-79 / Drawing 80-251 / HBlank 252-455 before an ordinary OamScan line. Same-state writes preserve timing.
 - Neither edge touches VRAM/OAM, passive registers, Timer, IF/IE or elapsed time. STOP entry preserves the PPU phase; HALT and interrupt entry advance it.
 
-`mode` updates at boundary dots, so constructors must produce consistent states; `lcd_off()` is valid only because timing never ticks while disabled. The schedule is the provisional fixed-transfer scaffold from the [contract](tasks/LCD_REGISTERS.md), not a hardware match. STAT, LY and DMA remain FF fallback; there are no PPU interrupts, access restrictions or rendering. #73 calibration gates live status.
+`mode` updates at boundary dots, so constructors must produce consistent states; `lcd_off()` is valid only because timing never ticks while disabled. The schedule is the provisional fixed-transfer scaffold from the [contract](tasks/LCD_REGISTERS.md), not a hardware match. #74 itself left STAT, LY and DMA as fallback; #75 below maps LY and STAT.
+
+## Live LY and STAT readback
+
+[#75](https://github.com/Lorithan/gameboy-emu/issues/75) makes FF44 and FF41 readable from the dot clock. It requests no interrupts and adds no access restrictions; DMA (FF46) remains fallback.
+
+- **LY (FF44):** `PpuTiming::visible_ly()` returns the physical line, except on line 153, which shows 153 at dots 0-3 and 0 from dot 4 (provisional, after Pan Docs and GBEDG). With the LCD off, timing sits at line 0, so LY reads 0. Writes are ignored.
+- **STAT (FF41):** `LcdStatus`, held in LcdRegisters, owns the byte layout. Reads give `0x80 | select | LY=LYC flag << 2 | mode`. Bit 7 is unused and always reads 1, independent of LCDC. Writes store only the select bits (`& 0x78`). With the LCD off, mode reads 0.
+- **LY=LYC flag:** stored, not computed on read. `Ppu::tick` updates it after each enabled tick from `visible_ly()` and LYC. It holds while the LCD is off, across LYC writes and disabling, and after enable until the first enabled tick. It starts true, so the existing seed reads LY 00 / STAT 85 without hard-coded bytes.
+
+Live LY switches Mooneye fixtures to the on-screen reporter; measured costs are in [testing](TESTING.md#live-lystat-75). STAT/VBlank interrupts are #76; VRAM/OAM access restrictions are #77; calibration of these provisional constants is #73.
 
 ## Interrupt registers
 

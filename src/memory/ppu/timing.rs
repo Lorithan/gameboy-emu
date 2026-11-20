@@ -12,6 +12,17 @@ pub(super) enum PpuMode {
     Drawing,
 }
 
+impl PpuMode {
+    pub(super) fn stat_bits(&self) -> u8 {
+        match self {
+            PpuMode::HBlank => 0,
+            PpuMode::VBlank => 1,
+            PpuMode::OamScan => 2,
+            PpuMode::Drawing => 3,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PpuTiming {
     line: u8,
@@ -45,6 +56,18 @@ impl PpuTiming {
             dot: 0,
             mode: PpuMode::HBlank,
             first_enabled_line: false,
+        }
+    }
+
+    pub(super) fn mode(&self) -> PpuMode {
+        self.mode
+    }
+
+    pub(super) fn visible_ly(&self) -> u8 {
+        if self.line == LINE_MAX {
+            if self.dot > 3 { 0 } else { self.line }
+        } else {
+            self.line
         }
     }
 

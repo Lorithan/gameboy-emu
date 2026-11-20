@@ -45,6 +45,8 @@ fn ldh_exact_traces_and_all_budget_resumes_match_each_form() {
             let read = match offset {
                 0 => 0xCF,
                 0x40 => 0x91,
+                0x41 => 0x85, // Read cycle is still in line 153 after the seed.
+                0x44 => 0,
                 0x42..=0x43 | 0x45 | 0x4A..=0x4B | 0x80..=0xFF => 0,
                 0x47 => 0xFC,
                 _ => 0xFF,
@@ -181,6 +183,11 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                         248 + value % 8
                     } else if offset == 0x0F {
                         value | 0xE0
+                    } else if offset == 0x41 {
+                        // Still line 153 after the seed: LY 0 == LYC 0, VBlank.
+                        0x85 | (value & 0x78)
+                    } else if offset == 0x44 {
+                        0 // LY writes are ignored; visible LY is 0 late in line 153.
                     } else if mapped {
                         value
                     } else {
@@ -202,6 +209,10 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                         248 + (255 - value) % 8
                     } else if offset == 0x0F {
                         (255 - value) | 0xE0
+                    } else if offset == 0x41 {
+                        0x85 | ((255 - value) & 0x78)
+                    } else if offset == 0x44 {
+                        0
                     } else if mapped {
                         255 - value
                     } else {

@@ -128,3 +128,70 @@ fn post_boot_seed_reaches_ordinary_line_zero_after_exactly_452_ticks() {
         assert_eq!(timing, model(elapsed, false), "after seed {elapsed}");
     }
 }
+
+/// #75 visible LY: physical line, except line 153 shows 153 only at dots 0-3.
+fn model_visible_ly(elapsed: u32) -> u8 {
+    let frame_dot = elapsed % DOTS_PER_FRAME;
+    let (line, dot) = (frame_dot / DOTS_PER_LINE, frame_dot % DOTS_PER_LINE);
+    if line == 153 && dot >= 4 {
+        0
+    } else {
+        line as u8
+    }
+}
+
+#[test]
+fn stat_bits_match_the_documented_mode_numbers() {
+    for (mode, bits) in [
+        (PpuMode::HBlank, 0),
+        (PpuMode::VBlank, 1),
+        (PpuMode::OamScan, 2),
+        (PpuMode::Drawing, 3),
+    ] {
+        assert_eq!(mode.stat_bits(), bits, "{mode:?}");
+    }
+}
+
+#[test]
+fn visible_ly_and_mode_match_the_model_at_every_dot() {
+    // From enable (first-line state) and from the post-boot seed.
+    let seed_elapsed = 153 * DOTS_PER_LINE + 4;
+    for (mut timing, start, first) in [
+        (PpuTiming::lcd_on(), 0, true),
+        (PpuTiming::dmg_post_boot(), seed_elapsed, false),
+    ] {
+        for step in 0..=2 * DOTS_PER_FRAME {
+            let elapsed = start + step;
+            let expected = model(elapsed, first);
+            assert_eq!(timing.mode(), expected.mode, "elapsed {elapsed}");
+            assert_eq!(
+                timing.visible_ly(),
+                model_visible_ly(elapsed),
+                "elapsed {elapsed}"
+            );
+            timing.tick();
+        }
+    }
+}
+
+#[test]
+fn line_153_shows_153_for_exactly_four_dots_then_zero() {
+    let mut timing = PpuTiming::lcd_on();
+    for _ in 0..153 * DOTS_PER_LINE {
+        timing.tick();
+    }
+    assert_eq!((timing.line, timing.dot), (153, 0));
+    for dot in 0..DOTS_PER_LINE {
+        let expected = if dot < 4 { 153 } else { 0 };
+        assert_eq!(timing.visible_ly(), expected, "dot {dot}");
+        assert_eq!(timing.line, 153, "physical line stays 153");
+        timing.tick();
+    }
+    assert_eq!((timing.line, timing.visible_ly()), (0, 0));
+}
+
+#[test]
+fn lcd_off_state_reads_ly_0_and_hblank() {
+    let off = PpuTiming::lcd_off();
+    assert_eq!((off.visible_ly(), off.mode()), (0, PpuMode::HBlank));
+}

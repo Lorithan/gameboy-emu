@@ -2,7 +2,7 @@
 
 Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #71, the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) and [#74, LCDC and an internal dot clock](https://github.com/Lorithan/gameboy-emu/issues/74), are implemented and verified against the provisional model below ([devices](../DEVICES.md#lcdc-and-internal-dot-clock), [testing](../TESTING.md)). **Gate change, agreed 2026-11-20:** live LY and STAT are now mapped on the provisional model and then calibrated against audited ROMs, because the calibration ROMs cannot run without readable LY and STAT. The split is:
 
-- [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. **Next, specified below.**
+- [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75). **Next: #76.**
 - [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts.
 - [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions.
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
@@ -89,6 +89,8 @@ The fixed172-dot Drawing interval is a minimum-transfer scaffold without SCX/win
 Bus calls Ppu::tick once inside each existing base-tick iteration, after handling that tick's Timer event. Keep the four device ticks before the CPU bus access: an LCDC write takes effect after its M-cycle's four ticks, without an extra tick. HALT and interrupt entry advance this clock; Stopped polls and input consume no ticks. Current StopEntered resets Timer's counter only, preserving/freeze-resuming PPU phase under our existing coarse STOP policy. No PPU IRQ, access lock, rendering, DMA or public debug API is part of #74. Child test modules can inspect private state; add only production-used interfaces.
 
 ## Slice A: live LY and STAT readback
+
+**Status:** implemented and verified 2026-11-20 (520 tests, all 18 fixtures). One clarification found in review: STAT bit 7 is an unused bit that always reads 1, independent of LCDC bit 7. Measured reporter costs exceeded the estimate below (about 179,000 added M-cycles per fixture, not 53,000), with every LY wait completing.
 
 [#75](https://github.com/Lorithan/gameboy-emu/issues/75) makes FF44 and FF41 readable from the #74 dot clock. It requests no interrupts and adds no access restrictions; reads and writes change no CPU timing. All constants remain the provisional #74 model.
 

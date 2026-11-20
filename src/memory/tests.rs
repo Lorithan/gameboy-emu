@@ -169,7 +169,7 @@ fn every_unimplemented_address_ignores_writes_without_corrupting_storage() {
     bus.write(0xC000, 0x35);
     bus.write(0xDFFF, 0x76);
     for address in 0u16..=u16::MAX {
-        if matches!(address, 0x0000..=0x7FFF | 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF | 0xFF00 | 0xFF04..=0xFF07 | 0xFF0F | 0xFF40 | 0xFF42..=0xFF43 | 0xFF45 | 0xFF47..=0xFF4B)
+        if matches!(address, 0x0000..=0x7FFF | 0x8000..=0x9FFF | 0xC000..=0xFDFF | 0xFE00..=0xFE9F | 0xFF80..=0xFFFF | 0xFF00 | 0xFF04..=0xFF07 | 0xFF0F | 0xFF40..=0xFF45 | 0xFF47..=0xFF4B)
         {
             continue;
         }
@@ -206,6 +206,8 @@ fn full_address_space_routes_to_expected_storage() {
             0xFF07 => 0xF8,
             0xFF0F => 0xE1,
             0xFF40 => 0x91,
+            0xFF41 => 0x85, // No ticks: post-boot LY 0 == LYC 0, VBlank.
+            0xFF44 => 0,
             0xFF42 | 0xFF43 | 0xFF45 | 0xFF4A | 0xFF4B => 0,
             0xFF47 => 0xFC,
             0xFF48 | 0xFF49 => 0xFF, // Deterministic object-palette policy.
@@ -279,6 +281,10 @@ fn divider_bus_resets_phase_and_preserves_every_other_address() {
         assert_eq!(bus.read(0xFF04), 1);
     }
     for addr in 0u16..=65535 {
+        // Live LY/STAT advance with time; memory::ppu::tests::status covers them.
+        if matches!(addr, 0xFF41 | 0xFF44) {
+            continue;
+        }
         let expected = if addr == 0xFF04 {
             1
         } else {

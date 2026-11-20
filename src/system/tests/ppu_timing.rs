@@ -30,12 +30,23 @@ fn reference_bus() -> Bus {
 fn step_mirrored(system: &mut System, reference: &mut Bus) -> CycleAction {
     let trace = expect_cycle(system.step_machine_cycle().unwrap());
     reference.advance_mcycle();
-    if let CycleAction::Write {
-        addr: 0xFF40,
-        value,
-    } = trace.record.action
-    {
-        reference.write(0xFF40, value);
+    match trace.record.action {
+        // LCD register stores apply after the cycle's four ticks.
+        CycleAction::Write { addr, value } if (0xFF40..=0xFF4B).contains(&addr) => {
+            reference.write(addr, value);
+        }
+        // Live LY/STAT reads must return the reference's value at this cycle.
+        CycleAction::Read {
+            addr: addr @ (0xFF41 | 0xFF44),
+        } => {
+            assert_eq!(
+                trace.record.read_value,
+                Some(reference.read(addr)),
+                "read {addr:04X} at tick {}",
+                system.elapsed_ticks()
+            );
+        }
+        _ => {}
     }
     assert_eq!(
         system.memory.ppu_timing_probe(),
@@ -163,5 +174,70 @@ fn stop_preserves_ppu_phase_and_stopped_polls_add_no_dots() {
     // Resumes from the preserved phase, not a reset one.
     for _ in 0..3 {
         let _ = step_mirrored(&mut system, &mut reference);
+    }
+}
+
+#[test]
+fn cpu_ldh_reads_of_ly_and_stat_return_the_value_at_their_exact_mcycle() {
+    // LD A,78; LDH (41),A (all selects); LD A,02; LDH (45),A (LYC 2);
+    // loop: LDH A,(44); LDH A,(41); JR -6.
+    let mut system = machine(&[
+        0x3E, 0x78, 0xE0, 0x41, 0x3E, 0x02, 0xE0, 0x45, 0xF0, 0x44, 0xF0, 0x41, 0x18, 0xFA,
+    ]);
+    system.memory.write(0xFF0F, 0);
+    let mut reference = reference_bus();
+    let mut seen_ly = [false; 154];
+    let (mut flag_reads, mut stat_reads) = (0, 0);
+    for _ in 0..3 * 17_556 {
+        let trace = expect_cycle(system.step_machine_cycle().unwrap());
+        // Re-run the cycle's mirror bookkeeping on the reference by hand,
+        // since the trace is consumed here for value coverage.
+        reference.advance_mcycle();
+        match trace.record.action {
+            CycleAction::Write { addr, value } => reference.write(addr, value),
+            CycleAction::Read { addr: 0xFF44 } => {
+                let ly = trace.record.read_value.unwrap();
+                assert_eq!(ly, reference.read(0xFF44));
+                seen_ly[usize::from(ly)] = true;
+            }
+            CycleAction::Read { addr: 0xFF41 } => {
+                let stat = trace.record.read_value.unwrap();
+                assert_eq!(stat, reference.read(0xFF41));
+                assert_eq!(stat & 0xF8, 0xF8, "bit 7 and selects");
+                stat_reads += 1;
+                flag_reads += usize::from(stat & 0x04 != 0);
+            }
+            _ => {}
+        }
+        assert_eq!(system.memory.read(0xFF0F), 0xE0, "no PPU interrupts");
+    }
+    // LY 153 is visible at one 4-dot sample per frame; this 9-M-cycle poll
+    // loop reaches only 3 of 9 phases, so the Bus-level status tests own that
+    // case. Every other LY must be read.
+    assert!(
+        seen_ly[..153].iter().all(|&seen| seen),
+        "every LY 0-152 observed"
+    );
+    assert!(flag_reads > 0 && flag_reads < stat_reads);
+}
+
+#[test]
+fn budget_pauses_do_not_change_ly_or_stat_reads() {
+    let program = [0xF0, 0x44, 0x47, 0xF0, 0x41, 0x4F, 0x18, 0xF8]; // B=LY, C=STAT
+    for budget in [1, 2, 3, 7] {
+        let mut paused = machine(&program);
+        let mut stepped = machine(&program);
+        for _ in 0..3_000 {
+            let _ = paused.step_instruction(budget).unwrap();
+            while stepped.elapsed_ticks() < paused.elapsed_ticks() {
+                let _ = expect_cycle(stepped.step_machine_cycle().unwrap());
+            }
+            assert_eq!(
+                paused.cpu_snapshot(),
+                stepped.cpu_snapshot(),
+                "budget {budget}"
+            );
+            assert_eq!(paused.memory.read(0xFF41), stepped.memory.read(0xFF41));
+        }
     }
 }

@@ -119,9 +119,24 @@ impl Ppu {
         }
     }
 
+    pub(super) fn read_ly(&self) -> u8 {
+        self.timing.visible_ly()
+    }
+
+    pub(super) fn read_stat(&self) -> u8 {
+        self.lcd_registers.read_stat(self.timing.mode())
+    }
+
+    pub(super) fn write_stat(&mut self, value: u8) {
+        self.lcd_registers.write_stat(value);
+    }
+
     pub(super) fn tick(&mut self) {
         if self.lcd_registers.lcd_control.is_enabled() {
             self.timing.tick();
+
+            self.lcd_registers
+                .set_lyc_equal(self.timing.visible_ly() == self.lcd_registers.lyc);
         }
     }
 

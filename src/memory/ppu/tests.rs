@@ -2,6 +2,8 @@
 //! descendant of both `memory` and `ppu`, so it may inspect private Bus/Ppu
 //! state directly; PpuTiming fields stay private and are compared whole.
 
+mod status;
+
 use super::timing::PpuTiming;
 use crate::memory::{Bus, Cartridge};
 
@@ -160,9 +162,17 @@ fn lcdc_writes_preserve_memory_devices_interrupts_and_other_instances() {
     let untouched = memory(&other);
     let other_timing = other.ppu.timing;
     // Cover every edge class: on->on, on->off, off->off, off->on.
+    let mut enabled = true;
     for value in [0x93u8, 0x13, 0x00, 0x7F, 0x80, 0xFF, 0x01, 0x91] {
         bus.write(0xFF40, value);
         expected[0xFF40] = value;
+        if enabled != (value & 0x80 != 0) {
+            // Either edge restarts timing at line 0 / HBlank: LY 0, mode 0.
+            // STAT's select bits and the held LY=LYC flag are unchanged.
+            expected[0xFF44] = 0;
+            expected[0xFF41] &= !0x03;
+            enabled = !enabled;
+        }
         assert_eq!(memory(&bus), expected, "after LCDC {value:02X}");
         assert_eq!(bus.timer, timer);
         assert_eq!(memory(&other), untouched);

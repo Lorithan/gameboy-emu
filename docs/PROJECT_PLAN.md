@@ -4,18 +4,18 @@ Updated 2026-11-20. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) retains its f0d38ef evidence. M4 now has [video-memory storage #71](DEVICES.md#video-memory-foundation), [eight passive LCD data registers #72](DEVICES.md#passive-lcd-data-registers) and [LCDC with an internal dot clock #74](DEVICES.md#lcdc-and-internal-dot-clock). Latest no-fail-fast fixture-inclusive regression, 2026-11-20: **508 passed, zero failed** (370 unit, 138 integration), including all eighteen external fixtures; formatting and strict Clippy pass. The dot clock follows the agreed provisional schedule; it is not hardware-calibrated, and LY/STAT, PPU interrupts, access restrictions and rendering do not exist yet. See [testing](TESTING.md).
+M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) retains its f0d38ef evidence. M4 now has [video-memory storage #71](DEVICES.md#video-memory-foundation), [eight passive LCD data registers #72](DEVICES.md#passive-lcd-data-registers), [LCDC with an internal dot clock #74](DEVICES.md#lcdc-and-internal-dot-clock) and [live LY/STAT readback #75](DEVICES.md#live-ly-and-stat-readback). Latest no-fail-fast fixture-inclusive regression, 2026-11-20: **520 passed, zero failed** (382 unit, 138 integration), including all eighteen external fixtures, which now take Mooneye's on-screen reporter path with every LY wait completing; formatting and strict Clippy pass. Timing and status follow the agreed provisional model and are not hardware-calibrated. PPU interrupts, access restrictions and rendering do not exist yet. See [testing](TESTING.md).
 
-**Next: user implementation of [#75, live LY and STAT readback](https://github.com/Lorithan/gameboy-emu/issues/75)** per the [slice A contract](tasks/LCD_REGISTERS.md#slice-a-live-ly-and-stat-readback): visible LY with a provisional line-153 rule, a stored LY=LYC flag held while the LCD is off, and STAT select bits. It adds no interrupts and no access restrictions.
+**Next: [#76, STAT and VBlank interrupts](https://github.com/Lorithan/gameboy-emu/issues/76).** The assistant first drafts its contract from sources (combined STAT-line edges, VBlank at line 144, stat_lyc_onoff edge history, LYC-write timing and the DMG STAT-write quirk); user implementation follows agreement.
 
 The 2026-11-20 gate change splits the former #73 gate into four slices:
 
-- #75 slice A: live LY/STAT readback.
+- [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback, complete.
 - [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts.
 - [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): VRAM/OAM access restrictions.
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration against audited Mooneye PPU ROMs, required before any hardware-accuracy claim and the M4 gate.
 
-Live LY switches existing fixtures to Mooneye's on-screen reporter. Its LY-wait timeouts are silent, so the slice A gate requires per-fixture M-cycle counts that rule out a timeout. Rendering, frame publication and DMA remain separate. Agree demo/frontend scope before SDL2 work. #64 physical STOP and #52 DAA remain separate.
+Mooneye's LY-wait timeouts are silent, so every later PPU checkpoint must keep recording per-fixture M-cycle counts. div_write now has about 100,000 M-cycles of margin under the 1,000,000 cap. Rendering, frame publication and DMA remain separate. Agree demo/frontend scope before SDL2 work. #64 physical STOP and #52 DAA remain separate.
 
 Separate nonblocking follow-ups:
 

@@ -15,7 +15,11 @@ const SEED: u32 = 153 * DOTS_PER_LINE + 4;
 fn model(frame_dot: u32) -> (u8, u8) {
     let line = frame_dot / DOTS_PER_LINE;
     let dot = frame_dot % DOTS_PER_LINE;
-    let visible_ly = if line == 153 && dot >= 4 { 0 } else { line as u8 };
+    let visible_ly = if line == 153 && dot >= 4 {
+        0
+    } else {
+        line as u8
+    };
     let mode = match (line, dot) {
         (144..=153, _) => 1,
         (_, 0..=79) => 2,
@@ -50,9 +54,32 @@ fn stat_writes_store_only_select_bits_for_every_byte() {
     for value in 0u8..=u8::MAX {
         bus.write(0xFF41, value);
         // Startup: flag set (LY 0 == LYC 0), VBlank.
-        assert_eq!(bus.read(0xFF41), expected_stat(value, true, 1), "{value:02X}");
+        assert_eq!(
+            bus.read(0xFF41),
+            expected_stat(value, true, 1),
+            "{value:02X}"
+        );
         assert_eq!(bus.read(0xFF44), 0);
     }
+}
+
+#[test]
+fn stat_bit_7_reads_set_and_select_bits_persist_while_lcd_is_off() {
+    let mut bus = fresh_bus();
+    bus.write(0xFF40, 0x11); // Off with the startup flag (true) held.
+    for value in 0u8..=u8::MAX {
+        bus.write(0xFF41, value);
+        advance(&mut bus, 3);
+        assert_eq!(
+            bus.read(0xFF41),
+            expected_stat(value, true, 0),
+            "off, {value:02X}"
+        );
+    }
+    // Select bits written while off survive re-enable.
+    bus.write(0xFF41, 0x28);
+    bus.write(0xFF40, 0x91);
+    assert_eq!(bus.read(0xFF41) & 0x78, 0x28);
 }
 
 #[test]
