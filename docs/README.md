@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); M4 has a verified [PPU storage/mapping foundation](DEVICES.md#video-memory-foundation). Next is the LCD register/startup contract.
+Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); M4 has a verified [PPU storage/mapping foundation](DEVICES.md#video-memory-foundation). Current work is the [LCD register proposal and first passive-register slice](tasks/LCD_REGISTERS.md).
 
 | Guide | Contents |
 | --- | --- |
