@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 is complete (2026-11-21): both lcdon ROMs pass and are regression fixtures. D4 gate review is next.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **#73 is complete (2026-11-21): D3 made both lcdon ROMs pass, and the D4 gate record and M4 limits were agreed. #73 is closed.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -64,7 +64,7 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 1. **D1, fixture wiring (assistant).** Audit all twelve, add a manifest, a checksum-gated script and gated pass tests for the three passing ROMs. Add a diagnostic probe for the other nine that reports outcome, M-cycles and measured vs expected registers without asserting a pass, so the remaining calibration work is measurable and no failing test sits in the suite.
 2. **D2, the shared `intr_*` offset.** The assistant works out what each candidate predicts per ROM, picks the one consistent with all seven in-scope ROMs plus the three passing ones, and proposes a contract change with local tests. The user implements; the target is the five `intr_*` passing with no regressions among the 18 + 3 fixtures. If the answer is CPU-side (candidate 2), the M3 evidence is rerun and recorded.
 3. **D3, enable timing.** Decode lcdon_timing-GS and lcdon_write_timing-GS sample by sample against our model. Calibrate the first-line timing (Mooneye: "late by 2 T-cycles"), the enable phase, and the earlier OAM write blocking near the mode 2 edge. This may need a dot-level offset that cannot be expressed at M-cycle granularity. Propose its representation before implementing.
-4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits. Detailed in [D4](#d4-gate-review-proposed-2026-11-21-results-recorded-limits-awaiting-agreement).
+4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits. Detailed in [D4](#d4-gate-review-complete-2026-11-21-limits-agreed).
 
 ## Agreed decisions
 
@@ -187,7 +187,7 @@ The user implemented the contract as `PpuTiming::lyc_compare_line() -> Option<u8
 - **Probe:** now covers only the two rendering ROMs, both ReportedFailure as before (deferred).
 - **Full suite:** 563 passed, 0 failed (405 unit, 158 integration), 37 gated fixtures plus the probe; fmt and strict Clippy pass.
 
-## D4: gate review (proposed 2026-11-21; results recorded, limits awaiting agreement)
+## D4: gate review (complete 2026-11-21; limits agreed)
 
 D4 closes #73 with an exact statement of what the pinned ROMs calibrate and what stays provisional. It needs no emulator code unless a check below finds a defect. All work is the assistant's; the user agrees the limits list and the next M4 slice.
 
@@ -233,7 +233,7 @@ D4 closes #73 with an exact statement of what the pinned ROMs calibrate and what
 
 **Gate run (after the cap change).** fmt and strict Clippy pass; full release suite with `--include-ignored` 563 passed, 0 failed (405 unit, 158 integration); all five checksum-gated scripts pass. All 37 fixture counts are identical to D3: PPU stat_irq_blocking 197,274, stat_lyc_onoff 245,527, vblank_stat_intr-GS 323,802, intr_1_2_timing-GS 235,870, the four other `intr_*` 218,316, lcdon_timing-GS 529,375, lcdon_write_timing-GS 977,240; the CPU interrupt, subset, reg_f and timer counts as recorded in [testing](../TESTING.md).
 
-### M4 limits carried forward (proposed; needs agreement)
+### M4 limits carried forward (agreed 2026-11-21)
 
 - **Deferred to rendering:** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites (variable mode-3 length from SCX and objects). Mode 3 stays a fixed 172 dots until rendering.
 - **Unsourced, provisional** (no pinned ROM observes them; local tests pin the chosen behaviour so changes are deliberate):
