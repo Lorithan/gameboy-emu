@@ -64,7 +64,7 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 1. **D1, fixture wiring (assistant).** Audit all twelve, add a manifest, a checksum-gated script and gated pass tests for the three passing ROMs. Add a diagnostic probe for the other nine that reports outcome, M-cycles and measured vs expected registers without asserting a pass, so the remaining calibration work is measurable and no failing test sits in the suite.
 2. **D2, the shared `intr_*` offset.** The assistant works out what each candidate predicts per ROM, picks the one consistent with all seven in-scope ROMs plus the three passing ones, and proposes a contract change with local tests. The user implements; the target is the five `intr_*` passing with no regressions among the 18 + 3 fixtures. If the answer is CPU-side (candidate 2), the M3 evidence is rerun and recorded.
 3. **D3, enable timing.** Decode lcdon_timing-GS and lcdon_write_timing-GS sample by sample against our model. Calibrate the first-line timing (Mooneye: "late by 2 T-cycles"), the enable phase, and the earlier OAM write blocking near the mode 2 edge. This may need a dot-level offset that cannot be expressed at M-cycle granularity. Propose its representation before implementing.
-4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits. Detailed in [D4](#d4-gate-review-proposed-2026-11-21).
+4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits. Detailed in [D4](#d4-gate-review-proposed-2026-11-21-results-recorded-limits-awaiting-agreement).
 
 ## Agreed decisions
 
@@ -187,7 +187,7 @@ The user implemented the contract as `PpuTiming::lyc_compare_line() -> Option<u8
 - **Probe:** now covers only the two rendering ROMs, both ReportedFailure as before (deferred).
 - **Full suite:** 563 passed, 0 failed (405 unit, 158 integration), 37 gated fixtures plus the probe; fmt and strict Clippy pass.
 
-## D4: gate review (proposed 2026-11-21)
+## D4: gate review (proposed 2026-11-21; results recorded, limits awaiting agreement)
 
 D4 closes #73 with an exact statement of what the pinned ROMs calibrate and what stays provisional. It needs no emulator code unless a check below finds a defect. All work is the assistant's; the user agrees the limits list and the next M4 slice.
 
@@ -203,10 +203,47 @@ D4 closes #73 with an exact statement of what the pinned ROMs calibrate and what
 3. **Gate run.** fmt, strict Clippy, full release suite with `--include-ignored`, and all five checksum-gated scripts, with every fixture count recorded.
 4. **Gate record.** Add the table, mutation results and counts to this file, list the M4 limits below, close #73, and update the project plan.
 
-### M4 limits carried forward (draft; final list after step 1)
+### Results (2026-11-21, at d8f8165)
+
+**Method.** 30 mutants of `timing.rs`, `ppu.rs` and `lcd.rs`, each applied alone in a scratch git worktree (removed afterwards; the main working tree was never modified). Each ran the full unit suite and every gated ROM fixture against the hash-verified ROMs, except reg_f, whose default path is relative to the crate and so was absent from the worktree (it is not a PPU fixture and passes in the gate run). The unmutated baseline passed everything else. "ROMs" below lists the pinned ROMs that fail under the mutant; "local" lists which local test groups catch it. Every mutant was caught by at least one local test except one equivalent mutant (below).
+
+| Decision | Mutants | ROMs that catch it | Local | Status |
+| --- | --- | --- | --- | --- |
+| Drawing starts at dot 80 | 76, 84 | intr_2_mode3_timing, lcdon_timing-GS | timing, status, lcdon | **calibrated** |
+| HBlank starts at dot 252 | 248, 256 | intr_2_0_timing, intr_2_mode0_timing, lcdon_timing-GS | timing, status, interrupts, System | **calibrated** |
+| First line after enable (HBlank 0-79, first-line locks) | treat as a normal line | lcdon_timing-GS, lcdon_write_timing-GS | lcdon, access, timing | **calibrated** |
+| Line-end window exists and is 4 dots | off, 8 dots | lcdon_timing-GS | status, timing, access, System | **calibrated** (lines 0-1) |
+| LY=LYC comparison sees no line in the window | compare against visible LY | lcdon_timing-GS | status, interrupts, lcdon | **calibrated** (lines 0-1) |
+| OAM read lock in the window, normal and first line | remove from either | lcdon_timing-GS | access, System, lcdon | **calibrated** |
+| Mode-2 tail: OAM write gap, VRAM read lock at 76-79 | remove either | lcdon_write_timing-GS, lcdon_timing-GS | access, lcdon | **calibrated** (lines 1-2) |
+| Locks apply only while the LCD is on | ignore LCDC | lcdon_write_timing-GS | access, LCDC, divider, System | **calibrated** |
+| Line-144 mode-2 pulse coincides with VBlank | pulse off | vblank_stat_intr-GS | interrupts, System | **calibrated** (relative to VBlank) |
+| STAT requests on rising edges only | request on level | stat_irq_blocking, stat_lyc_onoff | interrupts, System | **calibrated** |
+| STAT line level held across LCD off/on | reset on disable | stat_lyc_onoff | interrupts | **calibrated** |
+| LY=LYC flag held while off, recompared on the first tick | clear on enable | none | status | **CPU-equivalent**: differs only between the enable store and the first tick, which no CPU read can observe; stat_lyc_onoff passes either way |
+| Window applies to line ends 3-142 | lines 0-2 only | none | status, timing, access, System | **exercised**: generalised from lines 0-2 per Mooneye's "normal timings" note |
+| Window excluded at the end of line 143 | include 143 | none | status, timing, access, interrupts | **unsourced** |
+| VBlank and pulse position against LY (line 144 dot 0) | 1 M-cycle late | none | interrupts, System | **unsourced**: vblank_stat_intr-GS measures from the previous VBlank's poll phase, so a shift cancels (traced: same 64/63 DIV gaps, run 1 M-cycle longer) |
+| Line-153 LY window (dots 0-3 show 153) | earlier, later, never | none | status, timing, broad memory tests | **unsourced** |
+| Startup seed (line 153, dot 4) | dot 0, dot 8 | none | timing, status, interrupts, access, System | **unsourced** |
+| Immediate LYC compare and request on LYC writes | no compare, no request | none | interrupts, LCD registers, System | **unsourced** |
+| Collapsed STAT-write quirk and its second evaluation | real selects, skip re-evaluation | none | interrupts | **unsourced** |
+
+**Equivalent mutant (no test can catch it).** Making the first line after enable report OamScan in `set_mode` changed nothing: that branch is unreachable, because `tick` clears `first_enabled_line` in the same step that wraps to dot 0, and the first line's dot 0 comes from `PpuTiming::lcd_on()` instead. It is dead code, not a test gap; the user may remove it.
+
+**Gate run (after the cap change).** fmt and strict Clippy pass; full release suite with `--include-ignored` 563 passed, 0 failed (405 unit, 158 integration); all five checksum-gated scripts pass. All 37 fixture counts are identical to D3: PPU stat_irq_blocking 197,274, stat_lyc_onoff 245,527, vblank_stat_intr-GS 323,802, intr_1_2_timing-GS 235,870, the four other `intr_*` 218,316, lcdon_timing-GS 529,375, lcdon_write_timing-GS 977,240; the CPU interrupt, subset, reg_f and timer counts as recorded in [testing](../TESTING.md).
+
+### M4 limits carried forward (proposed; needs agreement)
 
 - **Deferred to rendering:** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites (variable mode-3 length from SCX and objects). Mode 3 stays a fixed 172 dots until rendering.
-- **Unsourced, provisional:** the line-153 LY window, the startup seed phase (line 153, dot 4), the line-end window at the ends of lines 143-153, and any decision step 1 marks unsourced.
+- **Unsourced, provisional** (no pinned ROM observes them; local tests pin the chosen behaviour so changes are deliberate):
+  - the line-153 LY window and LYC=153 matching;
+  - the startup seed phase (line 153, dot 4);
+  - VBlank and line-144 pulse position against LY;
+  - the end of line 143 and VBlank-line ends (144-153);
+  - immediate LYC compare and request on LYC writes;
+  - the collapsed STAT-write quirk.
+- **Generalised, not directly sampled:** the line-end window and mode-2 tail on lines 3-142.
 - **Separate issues:** [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption bug, FEA0-FEFF reads); OAM DMA (FF46) is not implemented and accesses during DMA are unrestricted.
 
 ### Acceptance
