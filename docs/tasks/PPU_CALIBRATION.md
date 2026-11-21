@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 contract drafted below, awaiting agreement.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 contract agreed 2026-11-20; user implementation next.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -103,9 +103,9 @@ Contract for #79 (corrected 2026-11-20): a request that becomes eligible during 
 
 Still in the probe: lcdon_timing-GS and lcdon_write_timing-GS (D3), plus the two rendering ROMs.
 
-## D3: LCD-enable timing (proposed contract)
+## D3: LCD-enable timing (agreed contract)
 
-Drafted 2026-11-20, awaiting agreement.
+Agreed 2026-11-20 as drafted, including the three scope decisions: windows apply to the ends of lines 0-142 and to normal lines; VBlank-line transitions and the line-153 window stay unchanged and provisional; and the STAT-line side effect of rule 1 is accepted.
 
 ### Decoding
 
