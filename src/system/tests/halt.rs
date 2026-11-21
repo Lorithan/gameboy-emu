@@ -240,3 +240,77 @@ fn repeated_halt_and_di_cancelled_ei_keep_budgets_bounded() {
     ));
     assert_eq!(s.cpu_snapshot().pc, 0x103);
 }
+
+/// Program prefix that arms a Timer request at a fixed M-cycle: IE=04,
+/// TIMA=FE, TAC=05 (16-tick increments), then EI.
+const TIMER_PREFIX: [u8; 13] = [
+    0x3E, 0x04, 0xE0, 0xFF, 0x3E, 0xFE, 0xE0, 0x05, 0x3E, 0x05, 0xE0, 0x07, 0xFB,
+];
+
+/// Steps (from 1) at which the first Timer interrupt is selected and its
+/// entry completes, after `TIMER_PREFIX` followed by `tail`.
+fn timer_entry_steps(tail: &[u8]) -> (u64, u64) {
+    let mut program = TIMER_PREFIX.to_vec();
+    program.extend_from_slice(tail);
+    let mut s = machine(&program);
+    let (mut selected, mut complete) = (None, None);
+    for step in 1..=200 {
+        match s.step_machine_cycle().map(expect_cycle).unwrap().outcome {
+            CycleOutcome::InterruptSelected { .. } if selected.is_none() => selected = Some(step),
+            CycleOutcome::InterruptEntryComplete { vector: 0x50 } if complete.is_none() => {
+                complete = Some(step);
+            }
+            _ => {}
+        }
+    }
+    (selected.expect("selected"), complete.expect("entered"))
+}
+
+#[test]
+fn halt_with_ime_services_a_device_raised_request_like_a_nop_wait() {
+    // Mooneye halt_ime1_timing2-GS (DMG-verified): with IME=1, HALT services
+    // the interrupt "with exactly same timing as if a long series of NOP
+    // instructions were used to wait for the interrupt". The request here is
+    // raised by the Timer during an M-cycle's device advance, not by an IF
+    // write between steps.
+    let nop_wait = timer_entry_steps(&[0; 60]);
+    let halt_wait = timer_entry_steps(&[0x76, 0x00, 0x00, 0x00]);
+    assert_eq!(halt_wait, nop_wait, "HALT adds no M-cycle before entry");
+}
+
+#[test]
+fn halt_without_ime_fetches_in_the_same_step_as_a_device_raised_request() {
+    // Mooneye halt_ime0_nointr_timing (all models): HALT with IME=0 continues
+    // "with exactly same timing as if a long series of NOP instructions were
+    // used", and its six NOPs equal entry (5) + JP HL (1) in the IME=1 case.
+    // So, like IME=1 entry (#79), the next opcode fetch is the bus access of
+    // the very M-cycle whose device advance raised the request.
+    // DI; IE=04, TIMA=FE, TAC=05; HALT; INC B.
+    let mut program = vec![0xF3];
+    program.extend_from_slice(&TIMER_PREFIX[..12]);
+    program.extend_from_slice(&[0x76, 0x04]);
+    let mut s = machine(&program);
+    s.memory.write(0xFF0F, 0);
+    let after_halt = 0x100 + program.len() as u16 - 1;
+    let mut halted_idles = 0;
+    for _ in 0..200 {
+        let trace = s.step_machine_cycle().map(expect_cycle).unwrap();
+        if s.memory.read(0xFF0F) & 0x04 == 0 {
+            if s.cpu_snapshot().pc == after_halt && trace.record.action == CycleAction::Idle {
+                halted_idles += 1;
+            }
+            continue;
+        }
+        assert!(halted_idles > 0, "the request arrived while halted");
+        assert_eq!(
+            trace.record.action,
+            CycleAction::Read { addr: after_halt },
+            "INC B fetched in the request's own M-cycle"
+        );
+        let _ = s.step_machine_cycle().map(expect_cycle).unwrap();
+        assert_eq!(s.cpu_snapshot().bc >> 8, 0x01, "INC B executed once");
+        assert_eq!(s.memory.read(0xFF0F), 0xE4, "IME=0: request stays pending");
+        return;
+    }
+    panic!("Timer request never observed");
+}

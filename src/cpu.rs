@@ -272,13 +272,16 @@ impl CPU {
         false
     }
 
-    pub(crate) fn wake_if_pending(&mut self, pending: u8) {
+    pub(crate) fn wake_if_pending(&mut self, pending: u8) -> bool {
         let pending = pending & 0x1F;
 
         if matches!(self.state, ExecutionState::Halted) && pending != 0 {
             self.state = ExecutionState::FetchOpcode {
                 skip_increment: false,
             };
+            true
+        } else {
+            false
         }
     }
 

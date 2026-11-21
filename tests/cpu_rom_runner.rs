@@ -130,7 +130,7 @@ fn mooneye_timer_tma_write_reloading() {
 }
 
 // #73 D1: pinned Mooneye PPU ROMs (tests/fixtures/mooneye-ppu.json). The
-// three regression ROMs must pass; the other nine are calibration targets
+// eight regression ROMs must pass; the other four are calibration targets
 // measured by the non-asserting probe below.
 
 #[test]
@@ -149,6 +149,93 @@ fn mooneye_ppu_regression_stat_lyc_onoff() {
 #[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
 fn mooneye_ppu_regression_vblank_stat_intr_gs() {
     run_cpu_fixture("acceptance/ppu/vblank_stat_intr-GS.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_intr_1_2_timing_gs() {
+    run_cpu_fixture("acceptance/ppu/intr_1_2_timing-GS.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_intr_2_0_timing() {
+    run_cpu_fixture("acceptance/ppu/intr_2_0_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_intr_2_mode0_timing() {
+    run_cpu_fixture("acceptance/ppu/intr_2_mode0_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_intr_2_mode3_timing() {
+    run_cpu_fixture("acceptance/ppu/intr_2_mode3_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_intr_2_oam_ok_timing() {
+    run_cpu_fixture("acceptance/ppu/intr_2_oam_ok_timing.gb");
+}
+
+// #79: pinned Mooneye HALT/EI/DI/interrupt-entry ROMs
+// (tests/fixtures/mooneye-cpu-interrupts.json).
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_halt_ime1_timing2_gs() {
+    run_cpu_fixture("acceptance/halt_ime1_timing2-GS.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_halt_ime0_nointr_timing() {
+    run_cpu_fixture("acceptance/halt_ime0_nointr_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_di_timing_gs() {
+    run_cpu_fixture("acceptance/di_timing-GS.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_halt_ime1_timing() {
+    run_cpu_fixture("acceptance/halt_ime1_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_halt_ime0_ei() {
+    run_cpu_fixture("acceptance/halt_ime0_ei.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_intr_timing() {
+    run_cpu_fixture("acceptance/intr_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_ei_timing() {
+    run_cpu_fixture("acceptance/ei_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_rapid_di_ei() {
+    run_cpu_fixture("acceptance/rapid_di_ei.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-cpu-interrupts.ps1"]
+fn mooneye_interrupt_reti_intr_timing() {
+    run_cpu_fixture("acceptance/reti_intr_timing.gb");
 }
 
 /// Mooneye's `setup_assertions` saves F,A,C,B,E,D,L,H at FF80-FF87, the
@@ -179,11 +266,6 @@ fn mooneye_ppu_calibration_probe() {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/test-roms/mooneye")
         });
     for name in [
-        "intr_1_2_timing-GS",
-        "intr_2_0_timing",
-        "intr_2_mode0_timing",
-        "intr_2_mode3_timing",
-        "intr_2_oam_ok_timing",
         "lcdon_timing-GS",
         "lcdon_write_timing-GS",
         "hblank_ly_scx_timing-GS",

@@ -129,7 +129,11 @@ impl System {
         self.memory.advance_mcycle();
 
         let pending_interrupts = self.memory.pending_interrupts();
-        if self.cpu.try_accept_interrupt(pending_interrupts) {
+        // Make sure both functions are called so all side effect take place before the check,
+        // otherwise shortcircuiting could omit the `try_accept_interrupt` call
+        let wake = self.cpu.wake_if_pending(pending_interrupts);
+        let accept = self.cpu.try_accept_interrupt(pending_interrupts);
+        if wake || accept {
             action = match self.cpu.request_cycle() {
                 Ok(CycleRequest::Execute(action)) => action,
                 Ok(CycleRequest::Stopped) => return Ok(MachineStep::Stopped),

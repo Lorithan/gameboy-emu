@@ -1,0 +1,23 @@
+{
+    "suite": "Gekkio/mooneye-test-suite",
+    "source_revision": "31510e12eea6286d36eea060a6adde755e1067aa",
+    "shared_provenance_manifest": "mooneye-reg-f.json",
+    "archive_sha256": "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+    "verification": "All nine ROMs match their pinned official ZIP entries (checked 2026-11-20)",
+    "target": "DMG current skipped-boot model; HALT, EI/DI and interrupt-entry timing, some synchronised on VBlank through the provisional PPU",
+    "components": "Inherit official prebuilt WLA-DX workflow, MIT notice and separate Darkrose font provenance/limits from the shared manifest; no independently reproduced build or binary redistribution",
+    "reporting": "Audited bodies write no SB/SC and use no DMA; all report through common quit. Require the first packet and B/C/D/E/H/L signature. All nine are DMG-verified in their source headers.",
+    "limits_review": "Bounded delay loops, HALT waits and VBlank waits; all below one silent LY-wait timeout (851968 M-cycles). Existing 1000000 M-cycle and 10 host-second caps are kept.",
+    "added_by": "#79: halt_ime1_timing2-GS and di_timing-GS failed before the fix; halt_ime0_nointr_timing passed only through cancelling errors. The other six are controls.",
+    "fixtures": [
+        {"id": "halt_ime1_timing2-GS", "source_git_blob_sha": "54fa838d054f46bf7218e7a6e9f774e613247141", "sha256": "10f0f35025d9d648831eaa7b1bfc42251fe26cf130ee483e6baac88d20c01581", "symbols_sha256": "65e16e101c934f4446b2cc6aba494983fd3693c9000e0aa599b081140eaae7b3", "checks": "HALT with IME=1 services an interrupt with NOP-wait timing"},
+        {"id": "halt_ime0_nointr_timing", "source_git_blob_sha": "f9344ff11f6f3398f72bc0d27a1fe3932d4eff0a", "sha256": "40a1e614d77a881672b7c20420aed6b121ad9d3977d71a08fd9bb92ee8f010cf", "symbols_sha256": "b43162b90a3e942a11e45d917a9322623718a7611149b73cd8256a319cea7785", "checks": "HALT with IME=0 continues with NOP-wait timing"},
+        {"id": "di_timing-GS", "source_git_blob_sha": "f0dbb8ab81697dab00add36686c35b19fafefd3a", "sha256": "618dd8f765c71c0f299cd124d8596d12da9ef987e800a45ac5c4b98fd240c54d", "symbols_sha256": "540f27236799ef311c285b9c48d3cd3751b026788ef6e45c14c90c29c995478c", "checks": "DMG DI takes effect immediately, timed from a HALT VBlank wake"},
+        {"id": "halt_ime1_timing", "source_git_blob_sha": "dfed0c5b1aba90951a2ea265f9f0454ebd4c3f31", "sha256": "09d9be4ebdd7645a6b208f18b1354f4b75420ae567dcf27ac404ed6f934d2efa", "symbols_sha256": "c9f5f82e6102d7b84b6bb180d8d8f437974740d866663078b6ea3a038ad20696", "checks": "HALT with IME=1 never executes the next instruction before service"},
+        {"id": "halt_ime0_ei", "source_git_blob_sha": "f0ddb85780977a17bd217e034cdf25d06e21f43e", "sha256": "0768fd3e698047f5ec2631b5a830558f0ac14bd9cb0ef0ebcc409b00d69adb4d", "symbols_sha256": "990ad3d12fdd7555395b37bf1d891f066e633088a9adb73ce21f794f3a3caeed", "checks": "EI after HALT with IME=0"},
+        {"id": "intr_timing", "source_git_blob_sha": "4aec239764668791b110e3ba5d81c08b1a48cd89", "sha256": "a795a190830104a4a231935d3bd16e64a1088bb79084f80bf7d9946ca93d873d", "symbols_sha256": "66a3eb38e394d65bcd46c30e16b1a753c7fac2c11aa927ee15f1699062b2c9ce", "checks": "Interrupt service takes 5 M-cycles"},
+        {"id": "ei_timing", "source_git_blob_sha": "52aae02e52ec38ac8eea30bc31293050625ba308", "sha256": "e5fa88f83727e79912f2c69b91b8e3c1351c0b50ac26203a60c7a6c21e825dbc", "symbols_sha256": "91724dabec2b75741f05328c109365600612ddb8543f446aafb1af33e4615589", "checks": "EI enables interrupts after the next instruction"},
+        {"id": "rapid_di_ei", "source_git_blob_sha": "e77baf26d1471df0665ee4188b8619c454f4a107", "sha256": "4bcfbee2dcdca7895afff7947742ec942166aeb4899f07995863149ef360f7f0", "symbols_sha256": "20cce47914027b0cf9ab659a9fc5b6a492b23009e6ad061fc8bb9fafeac692d5", "checks": "Rapid DI/EI sequences"},
+        {"id": "reti_intr_timing", "source_git_blob_sha": "cf1851ef7cd683c1ba60d84b268c24a232f087f2", "sha256": "a98440bfb0e4f29ef762515e4b842e2777bc35445a30903ed86799cf18dc5c55", "symbols_sha256": "45dee9f2f38d63e79be6cfd641d10aa03e5e08d13d06ad63101687b80fd40403", "checks": "RETI enables interrupts immediately"}
+    ]
+}

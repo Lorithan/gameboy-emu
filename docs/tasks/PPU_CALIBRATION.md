@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 is complete; D2 found a CPU-side cause, [#79](https://github.com/Lorithan/gameboy-emu/issues/79). Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **Next: D3.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -54,8 +54,8 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 
 ## Grouping
 
-- **Regression fixtures now (3):** stat_irq_blocking, stat_lyc_onoff, vblank_stat_intr-GS, after the audit. They protect slice B.
-- **In-scope calibration (7):** the five `intr_*` tests, lcdon_timing-GS and lcdon_write_timing-GS. All seven must pass for the #73 gate.
+- **Regression fixtures (8):** stat_irq_blocking, stat_lyc_onoff, vblank_stat_intr-GS (slice B), plus the five `intr_*` since #79.
+- **In-scope calibration (2 remaining):** lcdon_timing-GS and lcdon_write_timing-GS (D3). Both must pass for the #73 gate.
 - **Deferred to rendering (2):** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites need variable mode-3 length. They are listed in the M4 rendering gate, not #73.
 - **No source among these ROMs:** the line-153 visible-LY window and the startup seed phase. They stay documented as provisional unless an audited source is found, and are named as limits in the #73 gate.
 
@@ -92,4 +92,13 @@ Exploratory runs of pinned Mooneye CPU ROMs (hash-checked against the archive, n
 
 The frame period and ordinary dispatch are right; only HALT with IME=1 plus dispatch is late. Cause: `System::step_machine_cycle` wakes a halted CPU only before the device advance, so a request raised during the advance waits for the next step, whereas a running CPU accepts it after the advance in the same step. A public-API probe with one Timer request measured entry at steps (27, 28) after HALT vs (26, 27) after NOPs. A one-cycle shift maps every observed `intr_*` value onto its expected value, so the prediction is that all five pass after the fix, with no PPU constant changed.
 
-Contract for #79: with IME=1, a request that becomes eligible during a halted M-cycle's advance is accepted in that same step, as for a running CPU; IME=0 HALT exit timing is unchanged. Acceptance test (assistant): `system::tests::halt::halt_with_ime_services_a_device_raised_request_like_a_nop_wait`. After the fix, propose adding the HALT/EI/DI ROMs above to the CPU fixture manifest.
+Contract for #79 (corrected 2026-11-20): a request that becomes eligible during a halted M-cycle's advance wakes the CPU in that same step regardless of IME. With IME=1 that step starts interrupt entry, as for a running CPU; with IME=0 its bus access is the next opcode fetch. The first draft said IME=0 was unchanged. That was wrong: halt_ime0_nointr_timing passed only because its IME=1 sync wake and IME=0 exit were each one M-cycle late and cancelled out. Fixing IME=1 alone made it measure D 12 (expected 11). Acceptance tests (assistant): `halt_with_ime_services_a_device_raised_request_like_a_nop_wait` and `halt_without_ime_fetches_in_the_same_step_as_a_device_raised_request` in `system::tests::halt`. After the fix, propose adding the HALT/EI/DI ROMs above to the CPU fixture manifest.
+
+**D2 result, 2026-11-20.** The user's fix wakes the CPU after the device advance as well and refreshes the action when the wake or acceptance changes state. Results:
+
+- All five `intr_*` ROMs pass with no PPU constant changed: intr_1_2_timing-GS 235,870 M-cycles; intr_2_0, intr_2_mode0, intr_2_mode3 and intr_2_oam_ok 218,316 each.
+- All nine CPU interrupt ROMs pass.
+- The 18 earlier fixture counts are unchanged.
+- The full suite has 559 passing tests: 403 unit, 156 integration, 35 gated external fixtures and the probe.
+
+Still in the probe: lcdon_timing-GS and lcdon_write_timing-GS (D3), plus the two rendering ROMs.

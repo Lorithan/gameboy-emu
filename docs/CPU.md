@@ -26,7 +26,7 @@ Entry takes five M-cycles: idle, idle, high stack write, low stack write, vector
 
 HALT sleeps unless IME is not enabled and the opcode's sampled eligible mask is nonzero. That case returns FetchOpcode with skip_increment=true. The fetch state owns suppression: validated completion consumes it through its transition; retries preserve it; repeated HALT can rearm it. Ordinary fetch construction/wake/completion uses false.
 
-Halted idle cycles clock devices. Eligible pending requests wake HALT regardless of IME; IME controls service. Accepting at an armed suppressed-fetch boundary preserves the wrapping return-PC rewind before entry capture. Rejected arbitration preserves state/PC. [STOP](DEVICES.md#stop-entry-and-wake) has a separate no-cycle state and JOYP level wake.
+Halted idle cycles clock devices. Eligible pending requests wake HALT regardless of IME; IME controls service. Accepting at an armed suppressed-fetch boundary preserves the wrapping return-PC rewind before entry capture. Rejected arbitration preserves state/PC. [STOP](DEVICES.md#stop-entry-and-wake) has a separate no-cycle state and JOYP level wake. **Wake timing ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)):** System checks for a wake both before and after each M-cycle's device advance. A request raised during the advance wakes the CPU in that same step, regardless of IME. `wake_if_pending` returns whether it woke, and System re-requests the cycle action if the wake or `try_accept_interrupt` changed state. So with IME=1 the step becomes the first entry cycle, and with IME=0 it becomes the next opcode fetch, matching Mooneye halt_ime1_timing2-GS and halt_ime0_nointr_timing (NOP-wait timing).
 
 ## Evidence
 

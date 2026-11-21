@@ -1,6 +1,6 @@
 param(
-    # 'regression' runs the three gated pass tests; 'probe' runs the
-    # non-asserting calibration probe over the other nine ROMs.
+    # 'regression' runs the eight gated pass tests; 'probe' runs the
+    # non-asserting calibration probe over the other four ROMs.
     [ValidateSet('all', 'regression', 'probe')]
     [string]$Mode = 'all',
     [string]$RomRoot

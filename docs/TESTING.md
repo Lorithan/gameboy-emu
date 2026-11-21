@@ -1,6 +1,28 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #77 on 2026-11-20: **539 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (401 unit, 138 integration), after the user's VRAM/OAM access restrictions. Formatting and strict Clippy pass; the three checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #79 on 2026-11-20: **559 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (403 unit, 156 integration), including 35 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all five checksum-gated fixture scripts pass.
+
+## HALT wake timing (#79)
+
+Latest fixture-inclusive regression after the user's #79 fix: **559 passed, zero failed** (403 unit, 156 integration). That covers 35 hash-verified gated external fixtures plus the PPU calibration probe; fmt and strict Clippy pass.
+
+- **System tests (2), in `system::tests::halt`:** `halt_with_ime_services_a_device_raised_request_like_a_nop_wait` checks that, for a Timer request raised mid-advance, a HALT wait selects and completes entry at exactly the same steps as a NOP wait (it was 27/28 vs 26/27 before the fix). `halt_without_ime_fetches_in_the_same_step_as_a_device_raised_request` checks that with IME=0 the next opcode fetch is the bus access of the request's own M-cycle, `INC B` executes once and the request stays pending. The first draft of the second test encoded the wrong rule (IME=0 unchanged); the corrected version failed against the IME=1-only fix with an Idle action where a fetch was due.
+- **Interrupt fixtures (9),** [manifest](../tests/fixtures/mooneye-cpu-interrupts.json) and `run-mooneye-cpu-interrupts.ps1`:
+
+| Fixture | M-cycles | Before #79 |
+| --- | ---: | --- |
+| halt_ime1_timing2-GS | 323,804 | Failed (E 11, expected 12) |
+| di_timing-GS | 267,529 | Failed |
+| halt_ime0_nointr_timing | 253,424 | Passed only through cancelling errors |
+| halt_ime1_timing | 183,119 | Passed |
+| halt_ime0_ei | 179,757 | Passed |
+| intr_timing | 183,198 | Passed |
+| ei_timing | 183,197 | Passed |
+| rapid_di_ei | 183,362 | Passed |
+| reti_intr_timing | 183,273 | Passed |
+
+- **PPU fixtures:** eight gated regressions. stat_irq_blocking 197,274; stat_lyc_onoff 245,527; vblank_stat_intr-GS 323,802; intr_1_2_timing-GS 235,870; the four other `intr_*` 218,316 each. The probe now covers lcdon_timing-GS, lcdon_write_timing-GS and the two rendering ROMs.
+- **Unchanged counts:** the 18 earlier fixtures (reg_f, four CPU subset, thirteen timer) are identical to #77; none wakes from HALT on a device request.
 
 ## PPU fixtures and calibration probe (#73 D1)
 
@@ -96,6 +118,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-re
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-subset.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-timer.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-ppu.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-interrupts.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:
