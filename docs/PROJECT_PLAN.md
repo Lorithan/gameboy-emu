@@ -4,14 +4,14 @@ Updated 2026-11-20. [Documentation index](README.md).
 
 ## Current position
 
-M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) retains its f0d38ef evidence. M4 now has [video-memory storage #71](DEVICES.md#video-memory-foundation), [eight passive LCD data registers #72](DEVICES.md#passive-lcd-data-registers), [LCDC with an internal dot clock #74](DEVICES.md#lcdc-and-internal-dot-clock) and [live LY/STAT readback #75](DEVICES.md#live-ly-and-stat-readback). Latest no-fail-fast fixture-inclusive regression, 2026-11-20: **520 passed, zero failed** (382 unit, 138 integration), including all eighteen external fixtures, which now take Mooneye's on-screen reporter path with every LY wait completing; formatting and strict Clippy pass. Timing and status follow the agreed provisional model and are not hardware-calibrated. PPU interrupts, access restrictions and rendering do not exist yet. See [testing](TESTING.md).
+M1 cartridge/memory, M2 functional CPU execution/cleanup and **M3 timers/interrupts are complete for their declared DMG scope**. The [M3 gate review](M3_COMPLETION_REVIEW.md) retains its f0d38ef evidence. M4 now has [video-memory storage #71](DEVICES.md#video-memory-foundation), [eight passive LCD data registers #72](DEVICES.md#passive-lcd-data-registers), [LCDC with an internal dot clock #74](DEVICES.md#lcdc-and-internal-dot-clock), [live LY/STAT readback #75](DEVICES.md#live-ly-and-stat-readback) and [STAT/VBlank interrupts #76](DEVICES.md#stat-and-vblank-interrupts). Latest no-fail-fast fixture-inclusive regression, 2026-11-20: **533 passed, zero failed** (395 unit, 138 integration), including all eighteen external fixtures, which now take Mooneye's on-screen reporter path with every LY wait completing; formatting and strict Clippy pass. Timing, status and interrupts follow the agreed provisional model and are not hardware-calibrated. Access restrictions and rendering do not exist yet. See [testing](TESTING.md).
 
-**Next: agree the [#76 STAT and VBlank interrupt contract](tasks/LCD_REGISTERS.md#slice-b-stat-and-vblank-interrupts-76)**, drafted from sources 2026-11-20, then user implementation. Open provisional decisions: immediate LYC-write comparison while the LCD is on, the collapsed STAT-write quirk and the line-144 mode-2 pulse.
+**Next: draft the [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77) VRAM/OAM access-restriction contract**, then user implementation. #76 landed with three provisional decisions (immediate LYC-write comparison while on, the collapsed STAT-write quirk, the line-144 mode-2 pulse) that #73 must calibrate.
 
 The 2026-11-20 gate change splits the former #73 gate into four slices:
 
 - [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback, complete.
-- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts.
+- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts, complete.
 - [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): VRAM/OAM access restrictions.
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration against audited Mooneye PPU ROMs, required before any hardware-accuracy claim and the M4 gate.
 

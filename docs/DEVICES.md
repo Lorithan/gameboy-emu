@@ -60,13 +60,25 @@ Four new tests verify startup/read purity, every byte with per-register/full-mem
 
 ## Live LY and STAT readback
 
-[#75](https://github.com/Lorithan/gameboy-emu/issues/75) makes FF44 and FF41 readable from the dot clock. It requests no interrupts and adds no access restrictions; DMA (FF46) remains fallback.
+[#75](https://github.com/Lorithan/gameboy-emu/issues/75) makes FF44 and FF41 readable from the dot clock. It adds no access restrictions; DMA (FF46) remains fallback.
 
 - **LY (FF44):** `PpuTiming::visible_ly()` returns the physical line, except on line 153, which shows 153 at dots 0-3 and 0 from dot 4 (provisional, after Pan Docs and GBEDG). With the LCD off, timing sits at line 0, so LY reads 0. Writes are ignored.
 - **STAT (FF41):** `LcdStatus`, held in LcdRegisters, owns the byte layout. Reads give `0x80 | select | LY=LYC flag << 2 | mode`. Bit 7 is unused and always reads 1, independent of LCDC. Writes store only the select bits (`& 0x78`). With the LCD off, mode reads 0.
-- **LY=LYC flag:** stored, not computed on read. `Ppu::tick` updates it after each enabled tick from `visible_ly()` and LYC. It holds while the LCD is off, across LYC writes and disabling, and after enable until the first enabled tick. It starts true, so the existing seed reads LY 00 / STAT 85 without hard-coded bytes.
+- **LY=LYC flag:** stored, not computed on read. `Ppu::tick` updates it after each enabled tick from `visible_ly()` and LYC, and since #76 so does an LYC write while the LCD is on. It holds while the LCD is off, across LYC writes and disabling, and after enable until the first enabled tick. It starts true, so the existing seed reads LY 00 / STAT 85 without hard-coded bytes.
 
-Live LY switches Mooneye fixtures to the on-screen reporter; measured costs are in [testing](TESTING.md#live-lystat-75). STAT/VBlank interrupts are #76; VRAM/OAM access restrictions are #77; calibration of these provisional constants is #73.
+Live LY switches Mooneye fixtures to the on-screen reporter; measured costs are in [testing](TESTING.md#live-lystat-75). STAT/VBlank interrupts are [below](#stat-and-vblank-interrupts); VRAM/OAM access restrictions are #77; calibration of these provisional constants is #73.
+
+## STAT and VBlank interrupts
+
+[#76](https://github.com/Lorithan/gameboy-emu/issues/76) adds PPU interrupt requests on the provisional dot clock. Register readback is unchanged except that LYC writes now compare immediately while the LCD is on.
+
+- **Effects:** `Ppu::tick`, `write_stat` and `write_lyc` return `PpuEffects { vblank, lcd_stat }`, independent flags that can both be set by one tick. Bus applies them with `request_interrupt` in `advance_mcycle` and in its FF41/FF45 write arms. Bus never inspects IE or IME; CPU dispatch is unchanged.
+- **VBlank:** requested on the enabled tick that enters physical line 144 / dot 0 (`PpuTiming::just_entered_line_144`), once per frame, independent of STAT selects.
+- **STAT line:** `LcdStatus` owns one combined line, the OR of HBlank, VBlank, OAM (mode 2, or the line-144 pulse) and LY=LYC sources, each gated by its select bit. LCDStat is requested only on a rising edge against the stored previous level, so overlapping sources block each other. The stored level starts low and only edge detection writes it.
+- **Writes while on:** an LYC write recomputes the flag and evaluates the line. A STAT write applies the DMG quirk collapsed into the write: evaluate with all selects (may request), store the real selects, re-evaluate without requesting.
+- **LCD off:** no ticks, no effects. STAT/LYC writes only store. The flag and stored line level are held across disable/enable, and LCDC writes request nothing.
+
+Write-raised requests set IF after the access, so the CPU samples them one step later than tick-raised ones, exactly like a direct IF store. The line-144 pulse, immediate LYC comparison and collapsed quirk are provisional decisions; #73 calibrates them.
 
 ## Interrupt registers
 

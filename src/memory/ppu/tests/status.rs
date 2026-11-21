@@ -98,12 +98,13 @@ fn ly_writes_are_ignored_for_every_byte() {
 }
 
 #[test]
-fn ly_and_stat_match_the_model_at_every_mcycle_without_interrupts() {
+fn ly_and_stat_match_the_model_at_every_mcycle() {
+    // Readback only; the interrupt requests these selects cause since #76
+    // are checked in `interrupts`.
     for lyc in [0u8, 1, 143, 144, 153, 0xFF] {
         let mut bus = fresh_bus();
-        bus.write(0xFF0F, 0);
         bus.write(0xFF45, lyc);
-        bus.write(0xFF41, 0x78); // Every select bit: still no requests in slice A.
+        bus.write(0xFF41, 0x78);
         let mut ly_153_samples = 0;
         for mcycle in 1..=2 * MCYCLES_PER_FRAME {
             bus.advance_mcycle();
@@ -115,7 +116,6 @@ fn ly_and_stat_match_the_model_at_every_mcycle_without_interrupts() {
                 expected_stat(0x78, ly == lyc, mode),
                 "LYC {lyc}, mcycle {mcycle}"
             );
-            assert_eq!(bus.read(0xFF0F), 0xE0, "IF changed at mcycle {mcycle}");
         }
         assert_eq!(ly_153_samples, 2, "one LY 153 sample per frame");
     }

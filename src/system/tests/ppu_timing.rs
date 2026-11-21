@@ -186,6 +186,7 @@ fn cpu_ldh_reads_of_ly_and_stat_return_the_value_at_their_exact_mcycle() {
     ]);
     system.memory.write(0xFF0F, 0);
     let mut reference = reference_bus();
+    reference.write(0xFF0F, 0);
     let mut seen_ly = [false; 154];
     let (mut flag_reads, mut stat_reads) = (0, 0);
     for _ in 0..3 * 17_556 {
@@ -209,7 +210,14 @@ fn cpu_ldh_reads_of_ly_and_stat_return_the_value_at_their_exact_mcycle() {
             }
             _ => {}
         }
-        assert_eq!(system.memory.read(0xFF0F), 0xE0, "no PPU interrupts");
+        // IME stays off, so PPU requests accumulate in IF exactly as on the
+        // reference (since #76).
+        assert_eq!(
+            system.memory.read(0xFF0F),
+            reference.read(0xFF0F),
+            "IF at tick {}",
+            system.elapsed_ticks()
+        );
     }
     // LY 153 is visible at one 4-dot sample per frame; this 9-M-cycle poll
     // loop reaches only 3 of 9 phases, so the Bus-level status tests own that

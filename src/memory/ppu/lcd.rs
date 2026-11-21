@@ -70,6 +70,7 @@ impl LcdControl {
 pub(super) struct LcdStatus {
     interrupt_enable_bits: u8,
     lyc_equal: bool,
+    previous_level: bool,
 }
 
 impl LcdStatus {
@@ -77,6 +78,7 @@ impl LcdStatus {
         Self {
             interrupt_enable_bits: 0x00,
             lyc_equal: true,
+            previous_level: false,
         }
     }
 
@@ -94,5 +96,23 @@ impl LcdStatus {
 
     pub(super) fn set_lyc_equal(&mut self, lyc_equal: bool) {
         self.lyc_equal = lyc_equal;
+    }
+
+    pub(super) fn line_level(&self, mode: PpuMode, mode2_pulse: bool) -> bool {
+        self.line_level_with(self.interrupt_enable_bits, mode, mode2_pulse)
+    }
+
+    pub(super) fn line_level_with(&self, selects: u8, mode: PpuMode, mode2_pulse: bool) -> bool {
+        ((selects & 0x08 > 0) && matches!(mode, PpuMode::HBlank))
+            || ((selects & 0x10 > 0) && matches!(mode, PpuMode::VBlank))
+            || ((selects & 0x20 > 0) && (matches!(mode, PpuMode::OamScan) || mode2_pulse))
+            || ((selects & 0x40 > 0) && self.lyc_equal)
+    }
+
+    pub(super) fn update_line(&mut self, level: bool) -> bool {
+        let rising_edge = !self.previous_level && level;
+        self.previous_level = level;
+
+        rising_edge
     }
 }

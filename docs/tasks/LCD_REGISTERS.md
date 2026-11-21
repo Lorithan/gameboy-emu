@@ -2,8 +2,8 @@
 
 Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #71, the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) and [#74, LCDC and an internal dot clock](https://github.com/Lorithan/gameboy-emu/issues/74), are implemented and verified against the provisional model below ([devices](../DEVICES.md#lcdc-and-internal-dot-clock), [testing](../TESTING.md)). **Gate change, agreed 2026-11-20:** live LY and STAT are now mapped on the provisional model and then calibrated against audited ROMs, because the calibration ROMs cannot run without readable LY and STAT. The split is:
 
-- [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75). **Next: #76.**
-- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts.
+- [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75).
+- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts. Agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#stat-and-vblank-interrupts) and [testing](../TESTING.md#stat-and-vblank-interrupts-76). **Next: #77.**
 - [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions.
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
 
@@ -22,7 +22,7 @@ This table specifies the DMG skipped-boot profile and implementation order. Regi
 | Address | Register | Startup read | Read and write contract | Slice |
 | --- | --- | --- | --- | --- |
 | FF40 | LCDC | 91 | Read all bits; writes replace configuration and apply enable/disable transitions below | Implement #74 |
-| FF41 | STAT | 85 as the documented DMG readable profile | Bit 7 reads 1; bits 3-6 writable; mode and clocked comparison status | Readback #75; interrupts #76 |
+| FF41 | STAT | 85 as the documented DMG readable profile | Bit 7 reads 1; bits 3-6 writable; mode and clocked comparison status | Readback #75; interrupts #76 (done) |
 | FF42 | SCY | 00 | Full-byte read/write | Implemented #72 |
 | FF43 | SCX | 00 | Full-byte read/write | Implemented #72 |
 | FF44 | LY | 00 as the documented DMG readable profile | PPU-generated; CPU writes ignored | Implement #75 |
@@ -133,7 +133,7 @@ The pinned helpers below were re-audited for slice A:
 
 ## Slice B: STAT and VBlank interrupts (#76)
 
-Proposed contract, drafted 2026-11-20 and awaiting agreement. It adds interrupt requests on top of the slice A registers; register readback does not change. All timing remains the provisional model; #73 calibrates it.
+Agreed 2026-11-20, with the three provisional decisions in points 4-5 and the line-144 pulse as drafted; implemented and verified the same day. It adds interrupt requests on top of the slice A registers; register readback changes only through the immediate LYC comparison in point 4. All timing remains the provisional model; #73 calibrates it.
 
 ### Sources
 
@@ -211,7 +211,7 @@ Disabling must not recompute the flag just because visible LY becomes 0, and res
 - Running stat_irq_blocking, vblank_stat_intr or stat_lyc_onoff as fixtures; they need the #73 audit first. Their conditions are reproduced as local tests instead.
 - DMA, rendering.
 
-### Slice B acceptance (proposed)
+### Slice B acceptance
 
 **Line and effects model**
 - For all 16 select combinations × LYC values {0, 1, 143, 144, 153, FF}, over two frames from the seed and from enable, `Ppu::tick` effects match an independent line/edge model at every tick.

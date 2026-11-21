@@ -11,7 +11,7 @@ pub use joypad::Button;
 
 use crate::memory::{
     joypad::{Joypad, JoypadEvent},
-    ppu::Ppu,
+    ppu::{Ppu, PpuEffects},
     timer::Timer,
 };
 
@@ -91,10 +91,16 @@ impl Bus {
             0xFF07 => self.timer.write_tac(value),
             0xFF0F => self.interrupt_controller.write_flag(value),
             0xFF40 => self.ppu.write_lcdc(value),
-            0xFF41 => self.ppu.write_stat(value),
+            0xFF41 => {
+                let effects = self.ppu.write_stat(value);
+                self.handle_ppu_effects(effects);
+            }
             0xFF42 => self.ppu.write_scy(value),
             0xFF43 => self.ppu.write_scx(value),
-            0xFF45 => self.ppu.write_lyc(value),
+            0xFF45 => {
+                let effects = self.ppu.write_lyc(value);
+                self.handle_ppu_effects(effects);
+            }
             0xFF47 => self.ppu.write_bgp(value),
             0xFF48 => self.ppu.write_obp0(value),
             0xFF49 => self.ppu.write_obp1(value),
@@ -126,7 +132,8 @@ impl Bus {
                 self.request_interrupt(Interrupt::Timer);
             }
 
-            self.ppu.tick();
+            let effects = self.ppu.tick();
+            self.handle_ppu_effects(effects);
         }
     }
 
@@ -142,6 +149,15 @@ impl Bus {
 
     pub(crate) fn stop_wake_active(&self) -> bool {
         self.joypad.stop_wake_active()
+    }
+
+    fn handle_ppu_effects(&mut self, effects: PpuEffects) {
+        if effects.vblank {
+            self.request_interrupt(Interrupt::VBlank);
+        }
+        if effects.lcd_stat {
+            self.request_interrupt(Interrupt::LCDStat);
+        }
     }
 
     /// Test-only opaque view of private PPU timing, compared for equality by

@@ -71,6 +71,10 @@ impl PpuTiming {
         }
     }
 
+    pub(super) fn just_entered_line_144(&self) -> bool {
+        self.line == 144 && self.dot == 0
+    }
+
     pub(super) fn tick(&mut self) {
         self.dot += 1; // This doesn't need to worry about wrapping, as we'll reset it before u16 max
 

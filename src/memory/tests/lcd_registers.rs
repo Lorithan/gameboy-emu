@@ -59,6 +59,11 @@ fn passive_lcd_all_bytes_preserve_other_registers_storage_irq_phase_and_instance
             let value = byte.wrapping_add(index as u8 * 23);
             bus.write(address, value);
             expected[usize::from(address)] = value;
+            if address == 0xFF45 {
+                // Since #76, LYC writes while on update the STAT flag at once.
+                let flag = if bus.read(0xFF44) == value { 0x04 } else { 0 };
+                expected[0xFF41] = (expected[0xFF41] & !0x04) | flag;
+            }
             // Check each access separately so aliases cannot be hidden by
             // writing identical values to all registers in the same pass.
             for (probe, _) in REGISTERS {

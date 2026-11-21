@@ -6,6 +6,13 @@ mod timing;
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PpuEffects {
+    pub(super) vblank: bool,
+    pub(super) lcd_stat: bool,
+}
+
+#[derive(Debug)]
 pub(super) struct Ppu {
     vram: [u8; 0x2000],
     oam: [u8; 0xA0],
@@ -59,8 +66,26 @@ impl Ppu {
         self.lcd_registers.lyc
     }
 
-    pub(super) fn write_lyc(&mut self, value: u8) {
+    pub(super) fn write_lyc(&mut self, value: u8) -> PpuEffects {
         self.lcd_registers.lyc = value;
+
+        if self.lcd_registers.lcd_control.is_enabled() {
+            let lyc_equal = value == self.timing.visible_ly();
+            self.lcd_registers.set_lyc_equal(lyc_equal);
+
+            let level = self
+                .lcd_registers
+                .lcd_stat
+                .line_level(self.timing.mode(), self.timing.just_entered_line_144());
+            let lcd_stat = self.lcd_registers.lcd_stat.update_line(level);
+
+            PpuEffects {
+                vblank: false,
+                lcd_stat,
+            }
+        } else {
+            PpuEffects::default()
+        }
     }
 
     pub(super) fn read_bgp(&self) -> u8 {
@@ -127,17 +152,56 @@ impl Ppu {
         self.lcd_registers.read_stat(self.timing.mode())
     }
 
-    pub(super) fn write_stat(&mut self, value: u8) {
-        self.lcd_registers.write_stat(value);
+    pub(super) fn write_stat(&mut self, value: u8) -> PpuEffects {
+        if self.lcd_registers.lcd_control.is_enabled() {
+            // Seems to be a weird bug or hardware quirk, where it looks like the interrupt is computed with all selection bits
+            // despite what is actually written.
+            let level = self.lcd_registers.lcd_stat.line_level_with(
+                0xFF,
+                self.timing.mode(),
+                self.timing.just_entered_line_144(),
+            );
+            let lcd_stat = self.lcd_registers.lcd_stat.update_line(level);
+            let effect = PpuEffects {
+                vblank: false,
+                lcd_stat,
+            };
+
+            self.lcd_registers.write_stat(value);
+
+            let level = self
+                .lcd_registers
+                .lcd_stat
+                .line_level(self.timing.mode(), self.timing.just_entered_line_144());
+            self.lcd_registers.lcd_stat.update_line(level);
+
+            effect
+        } else {
+            self.lcd_registers.write_stat(value);
+
+            PpuEffects::default()
+        }
     }
 
-    pub(super) fn tick(&mut self) {
+    pub(super) fn tick(&mut self) -> PpuEffects {
         if self.lcd_registers.lcd_control.is_enabled() {
             self.timing.tick();
 
             self.lcd_registers
                 .set_lyc_equal(self.timing.visible_ly() == self.lcd_registers.lyc);
+
+            let vblank = self.timing.just_entered_line_144(); // Also serves as the mode 2 pulse for lcd_stat
+
+            let level = self
+                .lcd_registers
+                .lcd_stat
+                .line_level(self.timing.mode(), vblank);
+            let lcd_stat = self.lcd_registers.lcd_stat.update_line(level);
+
+            return PpuEffects { vblank, lcd_stat };
         }
+
+        PpuEffects::default()
     }
 
     #[cfg(test)]

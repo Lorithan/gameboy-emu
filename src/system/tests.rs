@@ -9,6 +9,7 @@ mod divider_oracle;
 mod halt;
 mod joypad;
 mod lcd_registers;
+mod ppu_interrupts;
 mod ppu_memory;
 mod ppu_timing;
 mod reti;
@@ -1444,6 +1445,11 @@ fn ldh_stores_follow_joyp_lcd_ie_and_hram_mapping_at_final_completion() {
                         && matches!(offset, 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF)
                     {
                         expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
+                    }
+                    if store && phase == cycles && offset == 0x45 {
+                        // Since #76, the LYC store compares at once: LY 0 vs
+                        // LYC 5A clears the startup STAT flag (85 -> 81).
+                        expected[0xFF41] &= !0x04;
                     }
                     for addr in 0u16..=65535 {
                         assert_eq!(
