@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **Next: D3.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 contract drafted below, awaiting agreement.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -102,3 +102,76 @@ Contract for #79 (corrected 2026-11-20): a request that becomes eligible during 
 - The full suite has 559 passing tests: 403 unit, 156 integration, 35 gated external fixtures and the probe.
 
 Still in the probe: lcdon_timing-GS and lcdon_write_timing-GS (D3), plus the two rendering ROMs.
+
+## D3: LCD-enable timing (proposed contract)
+
+Drafted 2026-11-20, awaiting agreement.
+
+### Decoding
+
+Each sample in both ROMs is `ldh (LCDC),a` (enable), N NOPs, then a 2-M-cycle `ld a,(de)` or `ld (de),a`. Our enable store applies after its own M-cycle's ticks and the access happens after its cycle's ticks, so the access sees **dot 4N + 8** of the enabled timing. The local test `memory::ppu::tests::lcdon` (both Mooneye tables, 158 cells) reproduces this through Bus. Against the current model **10 cells fail**:
+
+| Line dots | Lines sampled | Observer | Hardware | Current model |
+| --- | --- | --- | --- | --- |
+| 452-455 | end of lines 0, 1 | LY | next line (01, 02) | current line |
+| 452-455 | end of lines 0, 1 | LY=LYC flag | 0 for LYC 0 and LYC 1 | compares the current line |
+| 452-455 | end of lines 0, 1 | OAM read | blocked (FF) | accessible |
+| 76-79 | lines 1, 2 | VRAM read | blocked (FF) | accessible |
+| 76-79 | lines 1, 2 | OAM write | lands | blocked |
+
+The other 148 cells match, including every STAT mode edge (mode 2 to 3 at 80, mode 3 to 0 at 252, line start at 0), all of the first line after enable, OAM writes and VRAM writes at 452-455 (both land), and VRAM writes at 76-79 (land). That confirms the 4N + 8 sampling phase.
+
+**No sub-M-cycle state is needed.** Lines (456 dots) and frames (70,224) are multiples of 4, and both enable (dot 0) and the post-boot seed (dot 4) are 4-aligned. So CPU accesses only ever observe dots that are multiples of 4. Mooneye's "late by 2 T-cycles" first line is invisible on that grid: on line 0 the VRAM-read lock and mode 3 both fall in dots 77-80, which our dot 80 already satisfies.
+
+### Proposed rules (provisional, 4-dot resolution)
+
+A **normal line** is a visible line (0-143) that is not the first line after enable. Its STAT mode is unchanged: 2 for dots 0-79, 3 for 80-251, 0 for 252-455.
+
+1. **Line-end window, dots 452-455 of lines 0-142:**
+   - LY reads the next line;
+   - the LY=LYC flag is 0, also for LYC writes in that window;
+   - OAM reads are blocked;
+   - STAT still reads mode 0, and OAM writes and VRAM still pass.
+2. **Mode 2 tail, dots 76-79 of normal lines:**
+   - VRAM reads are blocked;
+   - OAM writes pass;
+   - STAT still reads mode 2, OAM reads stay blocked and VRAM writes pass.
+3. **Everything else is unchanged.** VRAM is blocked in Drawing for both reads and writes. OAM is blocked in OamScan and Drawing except for point 2's write gap. The first line after enable keeps its current behaviour.
+
+The resulting locks, as half-open dot ranges within a line:
+
+| Lock | Normal line | First line after enable |
+| --- | --- | --- |
+| OAM read | 0-251, plus 452-455 of the previous visible line | 80-251 |
+| OAM write | 0-75 and 80-251 | 80-251 |
+| VRAM read | 76-251 | 80-251 |
+| VRAM write | 80-251 | 80-251 |
+
+### Scope limits (decisions)
+
+- **Covered by the evidence:** the ends of lines 0 and 1 and lines 1-2, generalised to every visible-line transition (line ends 0-142), since Mooneye says lines 1 and 2 have "normal timings".
+- **Not covered, proposed unchanged:**
+  - the line-end window at the ends of lines 143-153;
+  - the line-153 LY quirk;
+  - LYC=153 matching;
+  - OAM read locking before line 0 of the next frame.
+  If the LY register really updates 4 dots before each line, the line-153 window may also belong 4 dots earlier. No pinned ROM here settles that, and moving it would change LYC=153 matching, so it stays a documented provisional item for a later source.
+- **The STAT interrupt line** keeps using the STAT-visible mode and the flag. One consequence of rule 1: with only the LYC and OAM selects set, a flag that matched the old line now drops at dot 452 rather than dot 0, so the next line's mode-2 source can raise a new edge. That is a genuine behaviour change; the slice B model tests will pin it.
+
+### Proposed types and ownership
+
+- **`PpuTiming` keeps owning "where in the frame"** and answers per-observer questions from line, dot and first-line state. Rough shapes, your choice:
+  - `visible_ly()` gains the line-end window;
+  - a comparison view returning `Option<u8>`, which is `None` in the line-end window. Ppu sets the flag to "Some and equal to LYC" after each tick and on LYC writes;
+  - a small `Copy` value or four queries describing the CPU access locks (OAM read, OAM write, VRAM read, VRAM write).
+- **`mode()` stays the STAT-visible mode.** The locks stop being "a function of mode" and become their own table, which is exactly what the hardware shows.
+- **Ppu** combines the locks with LCDC enable, as now. Bus is unchanged.
+- **Rejected alternative:** a second "internal line" counter offset by 4 dots. It is more stored state that could drift, and only 4-dot windows are observable anyway.
+
+### Acceptance
+
+- `memory::ppu::tests::lcdon`: both tables, all 158 cells (assistant; written, currently 10 failures).
+- lcdon_timing-GS and lcdon_write_timing-GS pass and move from the probe to the PPU regression group.
+- Slice A-C model tests are updated to the new windows: status, interrupts and access, with the shared position model extended. Every change is listed.
+- All 35 gated fixtures still pass with counts recorded. LY waits can now end one M-cycle earlier, so small count changes are expected and each is explained.
+- Full suite, fmt and strict Clippy pass.
