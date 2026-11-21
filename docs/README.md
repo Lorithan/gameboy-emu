@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md); M4 has verified [video-memory storage](DEVICES.md#video-memory-foundation) and [passive LCD registers](DEVICES.md#passive-lcd-data-registers). Next is [LCDC and an internal dot-clock foundation](tasks/LCD_REGISTERS.md), followed by required calibration before live LY/STAT mapping.
+Start with the [project plan](PROJECT_PLAN.md). M3 is complete within its [reviewed scope](M3_COMPLETION_REVIEW.md). M4 has verified [video memory](DEVICES.md#video-memory-foundation), [passive LCD registers](DEVICES.md#passive-lcd-data-registers), [LCDC and the dot clock](DEVICES.md#lcdc-and-internal-dot-clock), [live LY/STAT](DEVICES.md#live-ly-and-stat-readback), [STAT/VBlank interrupts](DEVICES.md#stat-and-vblank-interrupts) and [VRAM/OAM access restrictions](DEVICES.md#vram-and-oam-access-restrictions), all on a provisional model ([contracts](tasks/LCD_REGISTERS.md)). Next is the [PPU calibration plan](tasks/PPU_CALIBRATION.md).
 
 | Guide | Contents |
 | --- | --- |

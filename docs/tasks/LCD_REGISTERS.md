@@ -5,7 +5,7 @@ Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #
 - [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75).
 - [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts. Agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#stat-and-vblank-interrupts) and [testing](../TESTING.md#stat-and-vblank-interrupts-76).
 - [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions. [Contract](#slice-c-cpu-vram-and-oam-access-restrictions-77) agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#vram-and-oam-access-restrictions) and [testing](../TESTING.md#vramoam-access-restrictions-77). **Next: #73.**
-- [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
+- [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. [Calibration plan](PPU_CALIBRATION.md) drafted 2026-11-20. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
 
 ## Ownership and representation
 
