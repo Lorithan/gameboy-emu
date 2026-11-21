@@ -2,6 +2,13 @@
 
 Latest fixture-inclusive regression, #77 on 2026-11-20: **539 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (401 unit, 138 integration), after the user's VRAM/OAM access restrictions. Formatting and strict Clippy pass; the three checksum-gated fixture scripts pass.
 
+## PPU fixtures and calibration probe (#73 D1)
+
+The pinned Mooneye PPU set is wired through [mooneye-ppu.json](../tests/fixtures/mooneye-ppu.json) and [run-mooneye-ppu.ps1](../tests/scripts/run-mooneye-ppu.ps1), which hash-checks all twelve ROMs and their symbols before Cargo:
+
+- **Gated passes (3):** stat_irq_blocking 197,274 M-cycles, stat_lyc_onoff 245,527, vblank_stat_intr-GS 323,803.
+- **Calibration probe (9, non-asserting):** reports outcome, M-cycles and measured vs expected registers. It still asserts complete reports below one silent LY-wait timeout. All nine currently report failure; see the [calibration plan](tasks/PPU_CALIBRATION.md) for values and the D2 HALT finding ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)).
+
 ## VRAM/OAM access restrictions (#77)
 
 Six new tests verify the [slice C contract](DEVICES.md#vram-and-oam-access-restrictions):
@@ -88,6 +95,7 @@ An ordinary fixture-free checkout explicitly ignores eighteen external tests; ig
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-reg-f.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-subset.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-timer.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-ppu.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:

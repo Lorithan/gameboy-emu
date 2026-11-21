@@ -11,7 +11,7 @@ use std::{
 use gameboy_emu::{
     cpu::{CpuError, CycleAction, CycleOutcome, OpcodeEncoding},
     memory::Cartridge,
-    system::{System, SystemError},
+    system::{MachineStep, System, SystemError},
 };
 use runner::{FAIL_SIGNATURE, Limits, Outcome, PASS_SIGNATURE, Timeout};
 
@@ -127,6 +127,99 @@ fn mooneye_timer_tima_write_reloading() {
 #[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-timer.ps1"]
 fn mooneye_timer_tma_write_reloading() {
     run_cpu_fixture("acceptance/timer/tma_write_reloading.gb");
+}
+
+// #73 D1: pinned Mooneye PPU ROMs (tests/fixtures/mooneye-ppu.json). The
+// three regression ROMs must pass; the other nine are calibration targets
+// measured by the non-asserting probe below.
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_stat_irq_blocking() {
+    run_cpu_fixture("acceptance/ppu/stat_irq_blocking.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_stat_lyc_onoff() {
+    run_cpu_fixture("acceptance/ppu/stat_lyc_onoff.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_vblank_stat_intr_gs() {
+    run_cpu_fixture("acceptance/ppu/vblank_stat_intr-GS.gb");
+}
+
+/// Mooneye's `setup_assertions` saves F,A,C,B,E,D,L,H at FF80-FF87, the
+/// assertion mask at FF88 and the expected values at FF89-FF90 (per each
+/// ROM's .sym). Returns the last value the CPU wrote to each of FF80-FF90.
+fn mooneye_assertion_writes(path: &std::path::Path, mcycles: u64) -> [Option<u8>; 17] {
+    let mut system = System::new(Cartridge::from_filepath(path).unwrap());
+    let mut written = [None; 17];
+    for _ in 0..mcycles {
+        if let Ok(MachineStep::Cycle(trace)) = system.step_machine_cycle()
+            && let CycleAction::Write {
+                addr: addr @ 0xFF80..=0xFF90,
+                value,
+            } = trace.record.action
+        {
+            written[usize::from(addr - 0xFF80)] = Some(value);
+        }
+    }
+    written
+}
+
+#[test]
+#[ignore = "Calibration probe; never asserts a pass. Run tests/scripts/run-mooneye-ppu.ps1 -Mode probe"]
+fn mooneye_ppu_calibration_probe() {
+    let root = std::env::var_os("MOONEYE_CPU_ROM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/test-roms/mooneye")
+        });
+    for name in [
+        "intr_1_2_timing-GS",
+        "intr_2_0_timing",
+        "intr_2_mode0_timing",
+        "intr_2_mode3_timing",
+        "intr_2_oam_ok_timing",
+        "lcdon_timing-GS",
+        "lcdon_write_timing-GS",
+        "hblank_ly_scx_timing-GS",
+        "intr_2_mode0_timing_sprites",
+    ] {
+        let path = root.join(format!("acceptance/ppu/{name}.gb"));
+        let report = runner::run_file(&path, runner::MOONEYE_LIMITS)
+            .unwrap_or_else(|error| panic!("{name} setup failed: {error}"));
+        // A complete report, not a hang or malformed output, and below one
+        // silent wait_ly_with_timeout timeout.
+        assert!(
+            matches!(report.outcome, Outcome::Passed | Outcome::ReportedFailure),
+            "{name}: {report:#?}"
+        );
+        assert!(
+            report.mcycles < 851_968,
+            "{name}: possible silent LY-wait timeout"
+        );
+        let written = mooneye_assertion_writes(&path, report.mcycles);
+        let byte = |index: usize| written[index].map_or("--".to_owned(), |v| format!("{v:02X}"));
+        let registers = ["F", "A", "C", "B", "E", "D", "L", "H"];
+        let saved: Vec<_> = (0..8)
+            .map(|i| format!("{}={}", registers[i], byte(i)))
+            .collect();
+        let expected: Vec<_> = (0..8)
+            .map(|i| format!("{}={}", registers[i], byte(9 + i)))
+            .collect();
+        eprintln!(
+            "PPU probe {name}: {:?}, {} M-cycles; assert mask {}; saved [{}]; expected [{}]",
+            report.outcome,
+            report.mcycles,
+            byte(8),
+            saved.join(" "),
+            expected.join(" ")
+        );
+    }
 }
 
 fn run_cpu_fixture(relative: &str) {

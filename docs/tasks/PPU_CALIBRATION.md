@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Proposed 2026-11-20, awaiting agreement. Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 is complete; D2 found a CPU-side cause, [#79](https://github.com/Lorithan/gameboy-emu/issues/79). Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -66,8 +66,30 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 3. **D3, enable timing.** Decode lcdon_timing-GS and lcdon_write_timing-GS sample by sample against our model. Calibrate the first-line timing (Mooneye: "late by 2 T-cycles"), the enable phase, and the earlier OAM write blocking near the mode 2 edge. This may need a dot-level offset that cannot be expressed at M-cycle granularity. Propose its representation before implementing.
 4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits.
 
-## Decisions to agree
+## Agreed decisions
 
 1. The grouping above: three regression fixtures, seven calibration targets, two deferred to rendering, two provisional items with no source.
 2. Known-failing ROMs go into a non-asserting diagnostic probe, not into ignored tests that fail.
 3. Order: D1, then D2 (shared offset) before D3, because the offset probably affects the lcdon tables too.
+
+## D1 status (complete)
+
+[tests/fixtures/mooneye-ppu.json](../../tests/fixtures/mooneye-ppu.json) records all twelve ROM and symbol hashes, blobs, groups and the audit (no SB/SC writes, no DMA, common quit reporter, VRAM/OAM setup with the LCD off). [run-mooneye-ppu.ps1](../../tests/scripts/run-mooneye-ppu.ps1) verifies all 24 hashes before Cargo, then runs `mooneye_ppu_regression_*` (three gated passes) and `mooneye_ppu_calibration_probe`. The probe never asserts a pass. It does assert a complete Passed/ReportedFailure report below one silent timeout, and prints the measured vs expected `setup_assertions` registers. Those columns are meaningful only for ROMs using `setup_assertions` (the five `intr_*`); lcdon and the rendering ROMs use that HRAM differently.
+
+## D2 finding: HALT wake with IME=1 is one M-cycle late (#79)
+
+The interval analysis rules out the PPU. Each `intr_*` loop period P (4 M-cycles for the interrupt-ended loops, 8 for the polled ones) bounds our error: our wake-to-end interval is 1 to P-1 M-cycles shorter than hardware. intr_1_2 runs from one STAT interrupt to another, so no STAT-raise shift can shorten it. The shared start, `ei; halt` woken by STAT, is the cause.
+
+Exploratory runs of pinned Mooneye CPU ROMs (hash-checked against the archive, not yet manifest fixtures) separate the candidates:
+
+| ROM | Isolates | Result |
+| --- | --- | --- |
+| intr_timing | 5-cycle dispatch while running | Passed |
+| halt_ime0_nointr_timing | VBlank interval, HALT with IME=0 | Passed |
+| halt_ime1_timing2-GS | Same interval, HALT with IME=1 | Failed: D 11 = 11; E 11, expected 12 |
+| di_timing-GS | HALT IME=1 VBlank wake, then delay to the next VBlank | Failed |
+| halt_ime1_timing, halt_ime0_ei, ei_timing, rapid_di_ei, reti_intr_timing | Other HALT/EI/RETI rules | Passed |
+
+The frame period and ordinary dispatch are right; only HALT with IME=1 plus dispatch is late. Cause: `System::step_machine_cycle` wakes a halted CPU only before the device advance, so a request raised during the advance waits for the next step, whereas a running CPU accepts it after the advance in the same step. A public-API probe with one Timer request measured entry at steps (27, 28) after HALT vs (26, 27) after NOPs. A one-cycle shift maps every observed `intr_*` value onto its expected value, so the prediction is that all five pass after the fix, with no PPU constant changed.
+
+Contract for #79: with IME=1, a request that becomes eligible during a halted M-cycle's advance is accepted in that same step, as for a running CPU; IME=0 HALT exit timing is unchanged. Acceptance test (assistant): `system::tests::halt::halt_with_ime_services_a_device_raised_request_like_a_nop_wait`. After the fix, propose adding the HALT/EI/DI ROMs above to the CPU fixture manifest.
