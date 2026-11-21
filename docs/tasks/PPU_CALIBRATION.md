@@ -54,7 +54,7 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 
 ## Grouping
 
-- **Regression fixtures (8):** stat_irq_blocking, stat_lyc_onoff, vblank_stat_intr-GS (slice B), plus the five `intr_*` since #79.
+- **Regression fixtures (10):** stat_irq_blocking, stat_lyc_onoff, vblank_stat_intr-GS (slice B), the five `intr_*` since #79, and both lcdon ROMs since D3.
 - **In-scope calibration (0 remaining):** lcdon_timing-GS and lcdon_write_timing-GS (D3) moved to regression on 2026-11-21.
 - **Deferred to rendering (2):** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites need variable mode-3 length. They are listed in the M4 rendering gate, not #73.
 - **No source among these ROMs:** the line-153 visible-LY window and the startup seed phase. They stay documented as provisional unless an audited source is found, and are named as limits in the #73 gate.
@@ -64,7 +64,7 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 1. **D1, fixture wiring (assistant).** Audit all twelve, add a manifest, a checksum-gated script and gated pass tests for the three passing ROMs. Add a diagnostic probe for the other nine that reports outcome, M-cycles and measured vs expected registers without asserting a pass, so the remaining calibration work is measurable and no failing test sits in the suite.
 2. **D2, the shared `intr_*` offset.** The assistant works out what each candidate predicts per ROM, picks the one consistent with all seven in-scope ROMs plus the three passing ones, and proposes a contract change with local tests. The user implements; the target is the five `intr_*` passing with no regressions among the 18 + 3 fixtures. If the answer is CPU-side (candidate 2), the M3 evidence is rerun and recorded.
 3. **D3, enable timing.** Decode lcdon_timing-GS and lcdon_write_timing-GS sample by sample against our model. Calibrate the first-line timing (Mooneye: "late by 2 T-cycles"), the enable phase, and the earlier OAM write blocking near the mode 2 edge. This may need a dot-level offset that cannot be expressed at M-cycle granularity. Propose its representation before implementing.
-4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits.
+4. **D4, gate review.** All ten in-scope ROMs (3 + 7) pass with recorded counts; the deferred two and the unsourced provisional items are listed as M4 limits. Detailed in [D4](#d4-gate-review-proposed-2026-11-21).
 
 ## Agreed decisions
 
@@ -182,7 +182,36 @@ The user implemented the contract as `PpuTiming::lyc_compare_line() -> Option<u8
 
 - **Local acceptance:** the seven D3 tests (both `lcdon` tables, 158 cells; timing `visible_ly`; status LY/STAT; interrupts tick effects; access locks; System CPU access) failed before the change, each only at a D3 window, and pass after it. Two review findings were fixed on the way: the LCD-enable check had been dropped from the locks (OAM read and write were blocked with the LCD off), and the first line after enable omitted the line-end window from the OAM read lock (rule 1 applies to the end of every line 0-142, including the first; the table above lists within-line ranges only).
 - **lcdon_timing-GS:** Passed, 529,375 M-cycles (330,712 failing in the baseline).
-- **lcdon_write_timing-GS:** Passed, 977,240 M-cycles (629,625 failing in the baseline). It makes 43 `wait_ly_with_timeout` calls, so a pass legitimately exceeds the probe's 851,968 heuristic. A one-off trace confirmed the `wait_ly_with_timeout@timeout` label (4A20) is never fetched; the read ROM's label (4D18) is never fetched either. Its margin under the 1,000,000 M-cycle cap is 22,760 M-cycles (about 2.3%), the tightest of any fixture.
+- **lcdon_write_timing-GS:** Passed, 977,240 M-cycles (629,625 failing in the baseline). It makes 43 `wait_ly_with_timeout` calls, so a pass legitimately exceeds the probe's 851,968 heuristic. A one-off trace confirmed the `wait_ly_with_timeout@timeout` label (4A20) is never fetched; the read ROM's label (4D18) is never fetched either. Its margin under the shared 1,000,000 M-cycle cap was 22,760 M-cycles (about 2.3%), so this one fixture runs with its own 1,200,000 cap (agreed 2026-11-21): about 223,000 M-cycles of margin, and one silent timeout (977,240 + 851,968) still exceeds it.
 - **Other 35 gated fixtures:** all pass with counts identical to #79. The contract expected possible one-M-cycle changes from earlier LY visibility; none occurred. Not traced per wait; a poll only exits earlier when its LY read lands in the single M-cycle window.
 - **Probe:** now covers only the two rendering ROMs, both ReportedFailure as before (deferred).
 - **Full suite:** 563 passed, 0 failed (405 unit, 158 integration), 37 gated fixtures plus the probe; fmt and strict Clippy pass.
+
+## D4: gate review (proposed 2026-11-21)
+
+D4 closes #73 with an exact statement of what the pinned ROMs calibrate and what stays provisional. It needs no emulator code unless a check below finds a defect. All work is the assistant's; the user agrees the limits list and the next M4 slice.
+
+### Steps
+
+1. **Traceability table.** Every provisional PPU timing decision from slices A-D gets one of three statuses, citing the ROM routine or expectation cells that observe it:
+   - **calibrated:** a pinned ROM samples it directly and would fail if it moved by one M-cycle;
+   - **exercised:** a pinned ROM passes through it but does not isolate it;
+   - **unsourced:** no pinned ROM observes it.
+
+   Candidates: the dot schedule edges (80, 252, 456), the first line after enable, the line-end window and mode-2 tail on lines 0-2 versus their generalisation to lines 3-142, the line-153 LY window, the startup seed, the line-144 pulse, immediate LYC compares on writes, the held LY=LYC flag and line level while off, the collapsed STAT-write quirk, rising-edge STAT blocking, and the VBlank-line ends (143-153).
+2. **Mutation checks.** In a scratch copy only (never committed, production code restored and diffed afterwards), move each calibrated boundary by 4 dots or disable each rule, and record which local tests and which ROMs fail. A mutation that no test catches is a gap: add a local test, or downgrade that item's status in the table.
+3. **Gate run.** fmt, strict Clippy, full release suite with `--include-ignored`, and all five checksum-gated scripts, with every fixture count recorded.
+4. **Gate record.** Add the table, mutation results and counts to this file, list the M4 limits below, close #73, and update the project plan.
+
+### M4 limits carried forward (draft; final list after step 1)
+
+- **Deferred to rendering:** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites (variable mode-3 length from SCX and objects). Mode 3 stays a fixed 172 dots until rendering.
+- **Unsourced, provisional:** the line-153 LY window, the startup seed phase (line 153, dot 4), the line-end window at the ends of lines 143-153, and any decision step 1 marks unsourced.
+- **Separate issues:** [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption bug, FEA0-FEFF reads); OAM DMA (FF46) is not implemented and accesses during DMA are unrestricted.
+
+### Acceptance
+
+- Every candidate has a status and a citation; nothing is described as hardware-verified without one.
+- Every surviving mutation is resolved by a new test or a documented downgrade.
+- The gate run passes with counts recorded and explained against D3.
+- #73 is closed with a link to the gate record.

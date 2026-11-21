@@ -190,7 +190,16 @@ fn mooneye_ppu_regression_lcdon_timing_gs() {
 #[test]
 #[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
 fn mooneye_ppu_regression_lcdon_write_timing_gs() {
-    run_cpu_fixture("acceptance/ppu/lcdon_write_timing-GS.gb");
+    // A pass takes about 977,000 M-cycles (43 LY waits), too close to the
+    // shared 1,000,000 cap. 1,200,000 keeps margin while one silent
+    // wait_ly_with_timeout timeout (851,968) still exceeds the cap.
+    run_cpu_fixture_within(
+        "acceptance/ppu/lcdon_write_timing-GS.gb",
+        Limits {
+            mcycles: 1_200_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
 }
 
 // #79: pinned Mooneye HALT/EI/DI/interrupt-entry ROMs
@@ -312,17 +321,25 @@ fn mooneye_ppu_calibration_probe() {
 }
 
 fn run_cpu_fixture(relative: &str) {
+    run_cpu_fixture_within(relative, runner::MOONEYE_LIMITS);
+}
+
+fn run_cpu_fixture_within(relative: &str, limits: Limits) {
     let root = std::env::var_os("MOONEYE_CPU_ROM_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/test-roms/mooneye")
         });
-    assert_external_pass(&root.join(relative));
+    assert_external_pass_within(&root.join(relative), limits);
 }
 
 fn assert_external_pass(path: &std::path::Path) {
+    assert_external_pass_within(path, runner::MOONEYE_LIMITS);
+}
+
+fn assert_external_pass_within(path: &std::path::Path, limits: Limits) {
     let started = std::time::Instant::now();
-    let report = runner::run_file(path, runner::MOONEYE_LIMITS)
+    let report = runner::run_file(path, limits)
         .unwrap_or_else(|error| panic!("external fixture setup failed: {error}"));
     eprintln!(
         "Mooneye {}: {:?}, {} M-cycles, {} ticks, host {:?}, packet {:?}, CPU {:?}",
