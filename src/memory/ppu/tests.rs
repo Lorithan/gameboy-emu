@@ -4,6 +4,7 @@
 
 mod access;
 mod interrupts;
+mod lcdon;
 mod model;
 mod status;
 

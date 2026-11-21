@@ -357,6 +357,9 @@ fn stat_lyc_onoff_rounds_request_only_on_a_held_false_to_true_flag() {
         bus.write(0xFF45, 0x50);
         bus.write(0xFF41, 0x40); // LYC select only.
         run_to_ly(&mut bus, if retained { 0x50 } else { 0x51 });
+        // Since #73 D3, LY first shows a line during the previous line's
+        // last four dots, when the flag reads 0; step into the line proper.
+        advance(&mut bus, 2);
         assert_eq!(bus.read(0xFF41) & 0x04 != 0, retained, "{label}");
         bus.write(0xFF40, 0x11);
         clear_if(&mut bus);

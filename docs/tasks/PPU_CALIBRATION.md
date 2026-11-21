@@ -1,6 +1,6 @@
 # PPU calibration plan (#73 slice D)
 
-Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 contract agreed 2026-11-20; user implementation next.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
+Agreed 2026-11-20 (grouping, non-asserting probe, D2 before D3). D1 and D2 are complete: D2 found and fixed a CPU-side cause ([#79](https://github.com/Lorithan/gameboy-emu/issues/79)), and the five `intr_*` ROMs now pass as regression fixtures. **D3 is complete (2026-11-21): both lcdon ROMs pass and are regression fixtures. D4 gate review is next.** Slices A-C ([LCD registers](LCD_REGISTERS.md)) publish LY/STAT, STAT/VBlank interrupts and VRAM/OAM access restrictions on a provisional model. This plan says which pinned Mooneye PPU ROMs calibrate which provisional decisions, records an exploratory baseline, and splits the work into reviewable steps. [#78](https://github.com/Lorithan/gameboy-emu/issues/78) (OAM corruption, FEA0-FEFF) is outside it.
 
 ## Sources
 
@@ -55,7 +55,7 @@ Each candidate predicts different results for intr_1_2 (which ends on an interru
 ## Grouping
 
 - **Regression fixtures (8):** stat_irq_blocking, stat_lyc_onoff, vblank_stat_intr-GS (slice B), plus the five `intr_*` since #79.
-- **In-scope calibration (2 remaining):** lcdon_timing-GS and lcdon_write_timing-GS (D3). Both must pass for the #73 gate.
+- **In-scope calibration (0 remaining):** lcdon_timing-GS and lcdon_write_timing-GS (D3) moved to regression on 2026-11-21.
 - **Deferred to rendering (2):** hblank_ly_scx_timing-GS and intr_2_mode0_timing_sprites need variable mode-3 length. They are listed in the M4 rendering gate, not #73.
 - **No source among these ROMs:** the line-153 visible-LY window and the startup seed phase. They stay documented as provisional unless an audited source is found, and are named as limits in the #73 gate.
 
@@ -101,7 +101,7 @@ Contract for #79 (corrected 2026-11-20): a request that becomes eligible during 
 - The 18 earlier fixture counts are unchanged.
 - The full suite has 559 passing tests: 403 unit, 156 integration, 35 gated external fixtures and the probe.
 
-Still in the probe: lcdon_timing-GS and lcdon_write_timing-GS (D3), plus the two rendering ROMs.
+Still in the probe after D2: lcdon_timing-GS and lcdon_write_timing-GS (D3, since passed), plus the two rendering ROMs.
 
 ## D3: LCD-enable timing (agreed contract)
 
@@ -175,3 +175,14 @@ The resulting locks, as half-open dot ranges within a line:
 - Slice A-C model tests are updated to the new windows: status, interrupts and access, with the shared position model extended. Every change is listed.
 - All 35 gated fixtures still pass with counts recorded. LY waits can now end one M-cycle earlier, so small count changes are expected and each is explained.
 - Full suite, fmt and strict Clippy pass.
+
+### D3 result (complete, 2026-11-21)
+
+The user implemented the contract as `PpuTiming::lyc_compare_line() -> Option<u8>`, a widened `visible_ly()`, and four position-based locks (`oam_read_blocked`, `oam_write_blocked`, `vram_read_blocked`, `vram_write_blocked`) that Ppu combines with LCD enable. `mode()` is unchanged.
+
+- **Local acceptance:** the seven D3 tests (both `lcdon` tables, 158 cells; timing `visible_ly`; status LY/STAT; interrupts tick effects; access locks; System CPU access) failed before the change, each only at a D3 window, and pass after it. Two review findings were fixed on the way: the LCD-enable check had been dropped from the locks (OAM read and write were blocked with the LCD off), and the first line after enable omitted the line-end window from the OAM read lock (rule 1 applies to the end of every line 0-142, including the first; the table above lists within-line ranges only).
+- **lcdon_timing-GS:** Passed, 529,375 M-cycles (330,712 failing in the baseline).
+- **lcdon_write_timing-GS:** Passed, 977,240 M-cycles (629,625 failing in the baseline). It makes 43 `wait_ly_with_timeout` calls, so a pass legitimately exceeds the probe's 851,968 heuristic. A one-off trace confirmed the `wait_ly_with_timeout@timeout` label (4A20) is never fetched; the read ROM's label (4D18) is never fetched either. Its margin under the 1,000,000 M-cycle cap is 22,760 M-cycles (about 2.3%), the tightest of any fixture.
+- **Other 35 gated fixtures:** all pass with counts identical to #79. The contract expected possible one-M-cycle changes from earlier LY visibility; none occurred. Not traced per wait; a poll only exits earlier when its LY read lands in the single M-cycle window.
+- **Probe:** now covers only the two rendering ROMs, both ReportedFailure as before (deferred).
+- **Full suite:** 563 passed, 0 failed (405 unit, 158 integration), 37 gated fixtures plus the probe; fmt and strict Clippy pass.

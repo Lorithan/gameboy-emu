@@ -1,5 +1,6 @@
-//! #77 slice C: CPU VRAM/OAM access restrictions by PPU mode, black-box
-//! through Bus reads and writes, against the independent `model` positions.
+//! #77 slice C: CPU VRAM/OAM access restrictions, black-box through Bus
+//! reads and writes, against the independent `model` positions. Since #73 D3
+//! reads and writes have separate locks (`Pos::*_blocked`).
 
 use super::{
     advance, fresh_bus, memory,
@@ -9,14 +10,6 @@ use crate::memory::Bus;
 
 const VRAM: [u16; 5] = [0x8000, 0x8001, 0x8FFF, 0x9800, 0x9FFF];
 const OAM: [u16; 5] = [0xFE00, 0xFE01, 0xFE4F, 0xFE9E, 0xFE9F];
-
-fn vram_blocked(mode: u8) -> bool {
-    mode == 3
-}
-
-fn oam_blocked(mode: u8) -> bool {
-    mode == 2 || mode == 3
-}
 
 /// Bus at physical (line, dot), advanced from the seed with no accesses.
 fn bus_at(line: u32, dot: u32) -> Bus {
@@ -64,7 +57,8 @@ fn reads_and_writes_follow_the_mode_model_at_every_mcycle() {
         } else {
             Pos::SEED
         };
-        let mut counts = [[0u32; 2]; 2]; // [region][blocked]
+        let mut counts = [[[0u32; 2]; 2]; 2]; // [region][read, write][blocked]
+        let mut split = [0u32; 2]; // [region]: read and write locks differ
         let mut first_line_oam_allowed = 0;
         for mcycle in 1..=2 * MCYCLES_PER_FRAME {
             for _ in 0..4 {
@@ -72,36 +66,40 @@ fn reads_and_writes_follow_the_mode_model_at_every_mcycle() {
             }
             bus.advance_mcycle();
             reference.advance_mcycle();
-            let mode = pos.mode();
             let label = format!("enable {from_enable}, mcycle {mcycle}, {pos:?}");
             for (index, &addr) in addresses.iter().enumerate() {
                 let is_oam = addr >= 0xFE00;
-                let blocked = if is_oam {
-                    oam_blocked(mode)
+                let (read_blocked, write_blocked) = if is_oam {
+                    (pos.oam_read_blocked(), pos.oam_write_blocked())
                 } else {
-                    vram_blocked(mode)
+                    (pos.vram_read_blocked(), pos.vram_write_blocked())
                 };
-                counts[usize::from(is_oam)][usize::from(blocked)] += 1;
-                if is_oam && !blocked && pos.first && pos.dot < 80 {
+                let region = usize::from(is_oam);
+                counts[region][0][usize::from(read_blocked)] += 1;
+                counts[region][1][usize::from(write_blocked)] += 1;
+                split[region] += u32::from(read_blocked != write_blocked);
+                if is_oam && !read_blocked && pos.first && pos.dot < 80 {
                     first_line_oam_allowed += 1;
                 }
-                let expected_read = if blocked { 0xFF } else { stored[index] };
+                let expected_read = if read_blocked { 0xFF } else { stored[index] };
                 assert_eq!(bus.read(addr), expected_read, "read {addr:04X}, {label}");
                 let new = value(mcycle, index);
                 bus.write(addr, new);
-                if !blocked {
+                if !write_blocked {
                     stored[index] = new;
                 }
-                let expected_read = if blocked { 0xFF } else { new };
+                let expected_read = if read_blocked { 0xFF } else { stored[index] };
                 assert_eq!(bus.read(addr), expected_read, "reread {addr:04X}, {label}");
             }
             assert_eq!(observable(&bus), observable(&reference), "{label}");
         }
         for (region, name) in [(0, "VRAM"), (1, "OAM")] {
-            assert!(
-                counts[region][0] > 0 && counts[region][1] > 0,
-                "{name} {counts:?}"
-            );
+            // #73 D3 windows (line end, mode 2 tail) were exercised.
+            assert!(split[region] > 0, "{name}: no read/write lock split");
+            for kind in 0..2 {
+                let [allowed, blocked] = counts[region][kind];
+                assert!(allowed > 0 && blocked > 0, "{name} {counts:?}");
+            }
         }
         if from_enable {
             // Dots 4-76 of the first line report HBlank: 19 M-cycles x 5 addresses.

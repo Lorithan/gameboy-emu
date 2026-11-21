@@ -11,14 +11,16 @@ const MCYCLES_PER_FRAME: u32 = DOTS_PER_FRAME / 4;
 /// Post-boot seed: physical line 153, dot 4, as dots since line 0 / dot 0.
 const SEED: u32 = 153 * DOTS_PER_LINE + 4;
 
-/// (visible LY, STAT mode bits) at `frame_dot` of an ordinary frame.
-fn model(frame_dot: u32) -> (u8, u8) {
+/// (visible LY, LY=LYC comparison value, STAT mode bits) at `frame_dot` of an
+/// ordinary frame. Since #73 D3 the last four dots of lines 0-142 show the
+/// next line with no comparison value (the flag reads 0).
+fn model(frame_dot: u32) -> (u8, Option<u8>, u8) {
     let line = frame_dot / DOTS_PER_LINE;
     let dot = frame_dot % DOTS_PER_LINE;
-    let visible_ly = if line == 153 && dot >= 4 {
-        0
-    } else {
-        line as u8
+    let (visible_ly, compare) = match (line, dot) {
+        (153, 4..) => (0, Some(0)),
+        (0..=142, 452..) => (line as u8 + 1, None),
+        _ => (line as u8, Some(line as u8)),
     };
     let mode = match (line, dot) {
         (144..=153, _) => 1,
@@ -26,7 +28,7 @@ fn model(frame_dot: u32) -> (u8, u8) {
         (_, 80..=251) => 3,
         _ => 0,
     };
-    (visible_ly, mode)
+    (visible_ly, compare, mode)
 }
 
 fn expected_stat(select: u8, flag: bool, mode: u8) -> u8 {
@@ -108,12 +110,12 @@ fn ly_and_stat_match_the_model_at_every_mcycle() {
         let mut ly_153_samples = 0;
         for mcycle in 1..=2 * MCYCLES_PER_FRAME {
             bus.advance_mcycle();
-            let (ly, mode) = model((SEED + 4 * mcycle) % DOTS_PER_FRAME);
+            let (ly, compare, mode) = model((SEED + 4 * mcycle) % DOTS_PER_FRAME);
             ly_153_samples += u32::from(ly == 153);
             assert_eq!(bus.read(0xFF44), ly, "LYC {lyc}, mcycle {mcycle}");
             assert_eq!(
                 bus.read(0xFF41),
-                expected_stat(0x78, ly == lyc, mode),
+                expected_stat(0x78, compare == Some(lyc), mode),
                 "LYC {lyc}, mcycle {mcycle}"
             );
         }
@@ -139,6 +141,9 @@ fn lcd_off_holds_the_flag_across_lyc_writes_and_enable_recompares_ly_0() {
         let mut bus = fresh_bus();
         bus.write(0xFF45, 0x50);
         run_to_ly(&mut bus, if retained { 0x50 } else { 0x51 });
+        // Since #73 D3, LY first shows a line during the previous line's
+        // last four dots, when the flag reads 0; step into the line proper.
+        advance(&mut bus, 2);
         assert_eq!(bus.read(0xFF41) & 0x04 != 0, retained);
         bus.write(0xFF40, 0x11);
         for _ in 0..3 {

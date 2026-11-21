@@ -181,6 +181,18 @@ fn mooneye_ppu_regression_intr_2_oam_ok_timing() {
     run_cpu_fixture("acceptance/ppu/intr_2_oam_ok_timing.gb");
 }
 
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_lcdon_timing_gs() {
+    run_cpu_fixture("acceptance/ppu/lcdon_timing-GS.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-ppu.ps1"]
+fn mooneye_ppu_regression_lcdon_write_timing_gs() {
+    run_cpu_fixture("acceptance/ppu/lcdon_write_timing-GS.gb");
+}
+
 // #79: pinned Mooneye HALT/EI/DI/interrupt-entry ROMs
 // (tests/fixtures/mooneye-cpu-interrupts.json).
 
@@ -265,12 +277,7 @@ fn mooneye_ppu_calibration_probe() {
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/test-roms/mooneye")
         });
-    for name in [
-        "lcdon_timing-GS",
-        "lcdon_write_timing-GS",
-        "hblank_ly_scx_timing-GS",
-        "intr_2_mode0_timing_sprites",
-    ] {
+    for name in ["hblank_ly_scx_timing-GS", "intr_2_mode0_timing_sprites"] {
         let path = root.join(format!("acceptance/ppu/{name}.gb"));
         let report = runner::run_file(&path, runner::MOONEYE_LIMITS)
             .unwrap_or_else(|error| panic!("{name} setup failed: {error}"));

@@ -31,7 +31,7 @@ impl Ppu {
     }
 
     pub(super) fn read_vram(&self, offset: usize) -> u8 {
-        if self.vram_blocked() {
+        if self.vram_read_blocked() {
             0xFF
         } else {
             self.vram[offset]
@@ -39,13 +39,13 @@ impl Ppu {
     }
 
     pub(super) fn write_vram(&mut self, offset: usize, value: u8) {
-        if !self.vram_blocked() {
+        if !self.vram_write_blocked() {
             self.vram[offset] = value;
         }
     }
 
     pub(super) fn read_oam(&self, offset: usize) -> u8 {
-        if self.oam_blocked() {
+        if self.oam_read_blocked() {
             0xFF
         } else {
             self.oam[offset]
@@ -53,7 +53,7 @@ impl Ppu {
     }
 
     pub(super) fn write_oam(&mut self, offset: usize, value: u8) {
-        if !self.oam_blocked() {
+        if !self.oam_write_blocked() {
             self.oam[offset] = value;
         }
     }
@@ -82,7 +82,7 @@ impl Ppu {
         self.lcd_registers.lyc = value;
 
         if self.lcd_on() {
-            let lyc_equal = value == self.timing.visible_ly();
+            let lyc_equal = Some(value) == self.timing.lyc_compare_line();
             self.lcd_registers.set_lyc_equal(lyc_equal);
 
             let level = self
@@ -200,7 +200,7 @@ impl Ppu {
             self.timing.tick();
 
             self.lcd_registers
-                .set_lyc_equal(self.timing.visible_ly() == self.lcd_registers.lyc);
+                .set_lyc_equal(self.timing.lyc_compare_line() == Some(self.lcd_registers.lyc));
 
             let vblank = self.timing.just_entered_line_144(); // Also serves as the mode 2 pulse for lcd_stat
 
@@ -220,16 +220,20 @@ impl Ppu {
         self.lcd_registers.lcd_control.is_enabled()
     }
 
-    fn vram_blocked(&self) -> bool {
-        self.lcd_on() && matches!(self.timing.mode(), timing::PpuMode::Drawing)
+    fn vram_read_blocked(&self) -> bool {
+        self.lcd_on() && self.timing.vram_read_blocked()
     }
 
-    fn oam_blocked(&self) -> bool {
-        self.lcd_on()
-            && matches!(
-                self.timing.mode(),
-                timing::PpuMode::Drawing | timing::PpuMode::OamScan
-            )
+    fn vram_write_blocked(&self) -> bool {
+        self.lcd_on() && self.timing.vram_write_blocked()
+    }
+
+    fn oam_read_blocked(&self) -> bool {
+        self.lcd_on() && self.timing.oam_read_blocked()
+    }
+
+    fn oam_write_blocked(&self) -> bool {
+        self.lcd_on() && self.timing.oam_write_blocked()
     }
 
     #[cfg(test)]

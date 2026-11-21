@@ -1,9 +1,11 @@
-//! #77 slice C at CPU level. Every VRAM/OAM access made by a running program
-//! is checked against STAT's mode at that M-cycle on a reference Bus advanced
-//! in lockstep (stores applied after the cycle's ticks), so blocking uses the
-//! mode after the access cycle's four ticks.
+//! #77 slice C at CPU level (locks refined by #73 D3). Every VRAM/OAM access
+//! made by a running program is checked against independent position-based
+//! locks and a shadow of the expected contents, and against a lockstep
+//! reference Bus. Accesses see the position after their cycle's four ticks.
 
 use super::super::System;
+use std::collections::HashMap;
+
 use crate::{
     cpu::CycleAction,
     memory::{Bus, Cartridge},
@@ -29,42 +31,72 @@ fn machine() -> System {
     System::new(Cartridge::from_bytes(&rom()).unwrap())
 }
 
-fn blocked(addr: u16, mode: u8) -> bool {
+/// Physical (line, dot) after `ticks` base ticks from the post-boot seed
+/// (line 153, dot 4). The program never writes LCDC, so the LCD stays on and
+/// no line is a first-after-enable line.
+fn position(ticks: u64) -> (u64, u64) {
+    let frame_dot = (153 * 456 + 4 + ticks) % 70_224;
+    (frame_dot / 456, frame_dot % 456)
+}
+
+/// Independent CPU access locks (#77, refined by #73 D3) for (read, write).
+fn blocked(addr: u16, ticks: u64) -> (bool, bool) {
+    let (line, dot) = position(ticks);
+    let visible = line < 144;
+    let drawing = visible && (80..252).contains(&dot);
     match addr {
-        0x8000..=0x9FFF => mode == 3,
-        0xFE00..=0xFE9F => mode >= 2,
-        _ => false,
+        0x8000..=0x9FFF => (visible && (76..252).contains(&dot), drawing),
+        0xFE00..=0xFE9F => (
+            (visible && dot < 252) || (line <= 142 && dot >= 452),
+            (visible && dot < 76) || drawing,
+        ),
+        _ => (false, false),
     }
 }
 
 #[test]
-fn cpu_vram_and_oam_accesses_follow_the_mode_at_their_mcycle() {
+fn cpu_vram_and_oam_accesses_follow_the_locks_at_their_mcycle() {
     let mut system = machine();
     let mut reference = Bus::new(Cartridge::from_bytes(&rom()).unwrap());
     // [vram, oam] x [read, write] x [allowed, blocked]
     let mut counts = [[[0u32; 2]; 2]; 2];
+    // Expected VRAM/OAM contents (zero at startup), updated only by stores
+    // the independent locks allow.
+    let mut shadow = HashMap::<u16, u8>::new();
     for _ in 0..3 * 17_556 {
         let trace = expect_cycle(system.step_machine_cycle().unwrap());
         reference.advance_mcycle();
-        let mode = reference.read(0xFF41) & 0x03;
         let tick = system.elapsed_ticks();
         match trace.record.action {
             CycleAction::Read { addr } if region(addr).is_some() => {
+                let (read_lock, _) = blocked(addr, tick);
                 let value = trace.record.read_value.unwrap();
-                assert_eq!(value, reference.read(addr), "read {addr:04X}, tick {tick}");
-                if blocked(addr, mode) {
-                    assert_eq!(value, 0xFF, "blocked read {addr:04X}, tick {tick}");
-                }
-                if let Some(region) = region(addr) {
-                    counts[region][0][usize::from(blocked(addr, mode))] += 1;
-                }
+                let expected = if read_lock {
+                    0xFF
+                } else {
+                    shadow.get(&addr).copied().unwrap_or(0)
+                };
+                assert_eq!(value, expected, "read {addr:04X}, tick {tick}");
+                assert_eq!(
+                    value,
+                    reference.read(addr),
+                    "reference {addr:04X}, tick {tick}"
+                );
+                counts[region(addr).unwrap()][0][usize::from(read_lock)] += 1;
             }
             CycleAction::Write { addr, value } => {
-                let was_blocked = blocked(addr, mode);
                 reference.write(addr, value);
                 if let Some(region) = region(addr) {
-                    counts[region][1][usize::from(was_blocked)] += 1;
-                    let expected = if was_blocked { 0xFF } else { value };
+                    let (read_lock, write_lock) = blocked(addr, tick);
+                    counts[region][1][usize::from(write_lock)] += 1;
+                    if !write_lock {
+                        shadow.insert(addr, value);
+                    }
+                    let expected = if read_lock {
+                        0xFF
+                    } else {
+                        shadow.get(&addr).copied().unwrap_or(0)
+                    };
                     assert_eq!(
                         system.memory.read(addr),
                         expected,
@@ -91,11 +123,17 @@ fn cpu_vram_and_oam_accesses_follow_the_mode_at_their_mcycle() {
             );
         }
     }
-    // Hidden storage agrees too: blocked stores never landed in either.
+    // Hidden storage: blocked stores never landed, allowed ones did.
     system.memory.write(0xFF40, 0x11);
     reference.write(0xFF40, 0x11);
     for addr in (0x8000u16..=0x9FFF).chain(0xFE00..=0xFE9F) {
-        assert_eq!(system.memory.read(addr), reference.read(addr), "{addr:04X}");
+        let expected = shadow.get(&addr).copied().unwrap_or(0);
+        assert_eq!(system.memory.read(addr), expected, "{addr:04X}");
+        assert_eq!(
+            system.memory.read(addr),
+            reference.read(addr),
+            "reference {addr:04X}"
+        );
     }
 }
 

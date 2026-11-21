@@ -47,12 +47,50 @@ impl Pos {
         }
     }
 
+    /// The last four dots of lines 0-142 (#73 D3).
+    fn line_end_window(self) -> bool {
+        self.line <= 142 && self.dot >= 452
+    }
+
+    /// A visible line other than the first after enable.
+    fn normal_line(self) -> bool {
+        self.line < 144 && !self.first
+    }
+
     pub(super) fn ly(self) -> u8 {
         if self.line == 153 && self.dot >= 4 {
             0
+        } else if self.line_end_window() {
+            self.line as u8 + 1
         } else {
             self.line as u8
         }
+    }
+
+    /// The LY value the LY=LYC comparison sees; none in the line-end window,
+    /// where the flag reads 0.
+    pub(super) fn compare(self) -> Option<u8> {
+        (!self.line_end_window()).then(|| self.ly())
+    }
+
+    /// CPU access locks while the LCD is on (#77, refined by #73 D3).
+    pub(super) fn oam_read_blocked(self) -> bool {
+        let drawing = self.line < 144 && (80..252).contains(&self.dot);
+        (self.normal_line() && self.dot < 80) || drawing || self.line_end_window()
+    }
+
+    pub(super) fn oam_write_blocked(self) -> bool {
+        let drawing = self.line < 144 && (80..252).contains(&self.dot);
+        (self.normal_line() && self.dot < 76) || drawing
+    }
+
+    pub(super) fn vram_read_blocked(self) -> bool {
+        let start = if self.normal_line() { 76 } else { 80 };
+        self.line < 144 && (start..252).contains(&self.dot)
+    }
+
+    pub(super) fn vram_write_blocked(self) -> bool {
+        self.line < 144 && (80..252).contains(&self.dot)
     }
 
     /// One-dot mode-2 source at physical line 144 / dot 0 (provisional).
@@ -65,6 +103,6 @@ impl Pos {
         (selects & 0x08 != 0 && mode == 0)
             || (selects & 0x10 != 0 && mode == 1)
             || (selects & 0x20 != 0 && (mode == 2 || self.pulse()))
-            || (selects & 0x40 != 0 && self.ly() == lyc)
+            || (selects & 0x40 != 0 && self.compare() == Some(lyc))
     }
 }

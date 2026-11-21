@@ -1,6 +1,15 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #79 on 2026-11-20: **559 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (403 unit, 156 integration), including 35 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all five checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #73 D3 on 2026-11-21: **563 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (405 unit, 158 integration), including 37 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all five checksum-gated fixture scripts pass.
+
+## LCD-enable timing (#73 D3)
+
+Contract and full result: [PPU calibration, D3](tasks/PPU_CALIBRATION.md#d3-result-complete-2026-11-21).
+
+- **New unit tests (2),** `memory::ppu::tests::lcdon`: both DMG-verified Mooneye expectation tables (lcdon_timing-GS reads: LY, STAT with LYC 0 and 1, OAM, VRAM; lcdon_write_timing-GS: OAM and VRAM write acceptance), 158 cells, reproduced through Bus at dot 4N + 8 after enable.
+- **Updated tests (5):** the shared position model (`memory::ppu::tests::model`) gained the line-end window, a comparison view and four separate locks; `status`, `timing`, `interrupts` and `access` use it, and `access` now also requires cases where the read and write locks differ in each region. `system::tests::ppu_access` derives expected values from the position and a shadow of the stored bytes instead of the STAT mode. Both `stat_lyc_onoff` reproductions step 2 M-cycles past the first LY sample, since that sample can fall in the window where the flag reads 0. All seven failed against the pre-D3 code only at a D3 window, and pass after it.
+- **Fixtures:** lcdon_timing-GS (529,375 M-cycles) and lcdon_write_timing-GS (977,240) moved from the probe to the PPU regression group; ten PPU regressions in total. lcdon_write_timing-GS exceeds one silent LY-wait timeout by design (43 waits); a one-off trace confirmed its timeout label is never fetched. It has the smallest margin under the 1,000,000 M-cycle cap (22,760). The other 35 gated counts are identical to #79.
+- **What this proves:** the access locks, LY and LY=LYC flag match DMG hardware at every M-cycle sampled by the two lcdon ROMs (the first three lines after enable). The model tests show the generalised rule is implemented consistently at every M-cycle of two frames; they encode the agreed rule and are not hardware evidence for other lines. The ends of lines 143-153, the line-153 window and VBlank-line transitions are not covered by any pinned ROM and remain provisional.
 
 ## HALT wake timing (#79)
 

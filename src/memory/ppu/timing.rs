@@ -67,12 +67,68 @@ impl PpuTiming {
         if self.line == LINE_MAX {
             if self.dot > 3 { 0 } else { self.line }
         } else {
-            self.line
+            if self.line_end() {
+                self.line + 1
+            } else {
+                self.line
+            }
         }
+    }
+
+    pub(super) fn lyc_compare_line(&self) -> Option<u8> {
+        if self.line_end() {
+            return None;
+        }
+
+        Some(self.visible_ly())
     }
 
     pub(super) fn just_entered_line_144(&self) -> bool {
         self.line == 144 && self.dot == 0
+    }
+
+    fn line_end(&self) -> bool {
+        self.line < 143 && (self.dot > 451)
+    }
+
+    fn normal_line(&self) -> bool {
+        !self.first_enabled_line && self.line < VBLANK_START
+    }
+
+    fn in_drawing(&self) -> bool {
+        self.line < VBLANK_START && matches!(self.dot, 80..=251)
+    }
+
+    pub(super) fn oam_read_blocked(&self) -> bool {
+        if self.normal_line() {
+            self.dot < 252 || self.line_end()
+        } else {
+            self.in_drawing() || self.line_end()
+        }
+    }
+
+    pub(super) fn oam_write_blocked(&self) -> bool {
+        if self.normal_line() {
+            matches!(self.dot, 0..=75 | 80..=251)
+        } else {
+            self.in_drawing()
+        }
+    }
+
+    pub(super) fn vram_read_blocked(&self) -> bool {
+        if self.normal_line() {
+            matches!(self.dot, 76..=251)
+        } else {
+            self.in_drawing()
+        }
+    }
+
+    pub(super) fn vram_write_blocked(&self) -> bool {
+        if self.normal_line() {
+            matches!(self.dot, 80..=251)
+        } else {
+            self.in_drawing()
+        }
     }
 
     pub(super) fn tick(&mut self) {

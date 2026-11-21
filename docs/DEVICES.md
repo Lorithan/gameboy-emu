@@ -62,9 +62,9 @@ Four new tests verify startup/read purity, every byte with per-register/full-mem
 
 [#75](https://github.com/Lorithan/gameboy-emu/issues/75) makes FF44 and FF41 readable from the dot clock. It adds no access restrictions; DMA (FF46) remains fallback.
 
-- **LY (FF44):** `PpuTiming::visible_ly()` returns the physical line, except on line 153, which shows 153 at dots 0-3 and 0 from dot 4 (provisional, after Pan Docs and GBEDG). With the LCD off, timing sits at line 0, so LY reads 0. Writes are ignored.
+- **LY (FF44):** `PpuTiming::visible_ly()` returns the physical line, except on line 153, which shows 153 at dots 0-3 and 0 from dot 4 (provisional, after Pan Docs and GBEDG), and in the line-end window (dots 452-455 of lines 0-142, since #73 D3), which shows the next line. With the LCD off, timing sits at line 0, so LY reads 0. Writes are ignored.
 - **STAT (FF41):** `LcdStatus`, held in LcdRegisters, owns the byte layout. Reads give `0x80 | select | LY=LYC flag << 2 | mode`. Bit 7 is unused and always reads 1, independent of LCDC. Writes store only the select bits (`& 0x78`). With the LCD off, mode reads 0.
-- **LY=LYC flag:** stored, not computed on read. `Ppu::tick` updates it after each enabled tick from `visible_ly()` and LYC, and since #76 so does an LYC write while the LCD is on. It holds while the LCD is off, across LYC writes and disabling, and after enable until the first enabled tick. It starts true, so the existing seed reads LY 00 / STAT 85 without hard-coded bytes.
+- **LY=LYC flag:** stored, not computed on read. `Ppu::tick` updates it after each enabled tick, and since #76 so does an LYC write while the LCD is on. Since #73 D3 both compare LYC against `PpuTiming::lyc_compare_line()`, an `Option<u8>` that equals `Some(visible_ly())` except in the line-end window, where it is `None` and the flag reads 0 for every LYC. It holds while the LCD is off, across LYC writes and disabling, and after enable until the first enabled tick. It starts true, so the existing seed reads LY 00 / STAT 85 without hard-coded bytes.
 
 Live LY switches Mooneye fixtures to the on-screen reporter; measured costs are in [testing](TESTING.md#live-lystat-75). STAT/VBlank interrupts are [below](#stat-and-vblank-interrupts); VRAM/OAM access restrictions are [below](#vram-and-oam-access-restrictions); calibration of these provisional constants is #73.
 
@@ -82,14 +82,23 @@ Write-raised requests set IF after the access, so the CPU samples them one step 
 
 ## VRAM and OAM access restrictions
 
-[#77](https://github.com/Lorithan/gameboy-emu/issues/77) restricts ordinary CPU accesses through Bus. Ppu's `read_vram`/`write_vram`/`read_oam`/`write_oam` are the CPU path and derive accessibility from LCDC bit 7 and `PpuTiming::mode()` at the access; no lock state is stored and Bus does not inspect the mode.
+[#77](https://github.com/Lorithan/gameboy-emu/issues/77) restricts ordinary CPU accesses through Bus, refined by [#73 D3](tasks/PPU_CALIBRATION.md#d3-lcd-enable-timing-agreed-contract). Ppu's `read_vram`/`write_vram`/`read_oam`/`write_oam` are the CPU path. Each combines LCDC bit 7 with one of four position-based locks on `PpuTiming` (`oam_read_blocked`, `oam_write_blocked`, `vram_read_blocked`, `vram_write_blocked`) at the access; no lock state is stored, the locks no longer derive from `mode()`, and Bus is unchanged.
 
-- **Rule (provisional):** with the LCD on, VRAM is blocked in Drawing; OAM is blocked in OamScan and Drawing. The first line after enable reports HBlank for dots 0-79, so OAM is accessible there.
+- **Rule (calibrated against lcdon_timing-GS and lcdon_write_timing-GS at 4-dot resolution):** with the LCD on, on visible lines only:
+
+  | Lock | Normal line | First line after enable |
+  | --- | --- | --- |
+  | OAM read | 0-251, plus the line-end window | 80-251, plus the line-end window |
+  | OAM write | 0-75 and 80-251 | 80-251 |
+  | VRAM read | 76-251 | 80-251 |
+  | VRAM write | 80-251 | 80-251 |
+
+  The line-end window is dots 452-455 of lines 0-142. STAT still reports mode 2 at 76-79 and mode 0 at 452-455; the locks and the STAT mode are separate observers.
 - **Blocked:** reads return FF with no effect; writes are ignored. LY, STAT, IF and timing are unaffected.
 - **LCD off:** never blocked; disabling mid-Drawing unblocks the next access.
 - **FEA0-FEFF:** unchanged FF/ignored fallback in every mode. The DMG 00 read and the OAM corruption bug are deferred together.
 
-Accesses see the mode after their M-cycle's ticks. The hardware's earlier OAM write blocking near the mode 2 edge ([lcdon_write_timing-GS](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/lcdon_write_timing-GS.s)) and all edge timing are #73 targets. No unrestricted rendering or DMA path exists yet.
+Accesses see the position after their M-cycle's ticks. VBlank-line transitions, the ends of lines 143-153 and the line-153 window are not covered by the pinned ROMs and stay provisional. No unrestricted rendering or DMA path exists yet.
 
 ## Interrupt registers
 

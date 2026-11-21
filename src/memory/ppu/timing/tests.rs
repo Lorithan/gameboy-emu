@@ -133,10 +133,11 @@ fn post_boot_seed_reaches_ordinary_line_zero_after_exactly_452_ticks() {
 fn model_visible_ly(elapsed: u32) -> u8 {
     let frame_dot = elapsed % DOTS_PER_FRAME;
     let (line, dot) = (frame_dot / DOTS_PER_LINE, frame_dot % DOTS_PER_LINE);
-    if line == 153 && dot >= 4 {
-        0
-    } else {
-        line as u8
+    match (line, dot) {
+        (153, 4..) => 0,
+        // #73 D3: the last four dots of lines 0-142 already show the next line.
+        (0..=142, 452..) => line as u8 + 1,
+        _ => line as u8,
     }
 }
 
