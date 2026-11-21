@@ -1,6 +1,6 @@
 # OAM DMA (FF46) contract
 
-Proposed 2026-11-21 for the next M4 slice ([#80](https://github.com/Lorithan/gameboy-emu/issues/80)). Not yet agreed. The user implements; the assistant owns the tests, fixture wiring and review.
+Proposed and agreed 2026-11-21 for the next M4 slice ([#80](https://github.com/Lorithan/gameboy-emu/issues/80)): the user chose Bus ownership (decision 3); decisions 1 and 2 are adopted as proposed and each is pinned by one named test, so either can be revisited cheaply. The user implements; the assistant owns the tests, fixture wiring and review.
 
 OAM DMA copies 160 bytes from `XX00-XX9F` into OAM (`FE00-FE9F`) when the CPU writes `XX` to FF46. Games start it from an HRAM routine every frame to update sprites, so sprite rendering will depend on it.
 
@@ -19,33 +19,33 @@ All at the pinned Mooneye revision `31510e12`, verified on DMG. The ROMs are alr
 
 `oam_dma_start` states the timeline directly. For a fresh transfer: M=0 the FF46 write, M=1 nothing (OAM still accessible), M=2 the transfer starts and OAM reads return FF. For a restart: the previous transfer keeps running, and blocking OAM, during M=0 and M=1; the new one starts at M=2.
 
-## Proposed rules
+## Rules
 
 M-cycle numbers count from the M-cycle whose CPU access is the FF46 write (M0). Each later M-cycle's DMA progress happens in Bus advancement, before that M-cycle's CPU access, like the PPU and timer.
 
 1. **FF46 register.** Reads return the last written byte at all times. It starts at FF (Pan Docs DMG power-up table; no pinned ROM observes the startup value, so it is provisional). A write stores the value and schedules a transfer from source `value << 8`.
 2. **Timeline.** M1 does nothing. The transfer copies byte 0 during M2's advancement, byte *i* during M(2+*i*) and the last byte, 159, during M161. It is **active** for the CPU accesses of M2 through M161 (160 M-cycles) and inactive from M162. That is exactly what `oam_dma_timing` measures.
-3. **Restart.** A write while a transfer is active schedules a new one with the same M1/M2 timing. The old transfer keeps copying during M0 and M1 and is replaced at M2, with the new source starting at byte 0. The register always holds the latest value (reg_read rounds 5-6 write twice, four M-cycles apart). A second write before the first transfer has started replaces the pending start (provisional; no pinned ROM writes twice within two M-cycles).
+3. **Restart.** A write while a transfer is active schedules a new one with the same M1/M2 timing. The old transfer keeps copying during M0 and M1 and is replaced at M2, with the new source starting at byte 0. A restart written at M161 follows from the same rule: the old transfer has no bytes left at M162, so OAM is readable for that one M-cycle before the new transfer starts at M163 (derived, provisional). The register always holds the latest value (reg_read rounds 5-6 write twice, four M-cycles apart). A second write before the first transfer has started replaces the pending start (provisional; no pinned ROM writes twice within two M-cycles).
 4. **Source mapping.** Byte *i* is read from `(value << 8) + i`. Sources at E000 and above read WRAM at the address minus 0x2000, so `E0` reads C000, `FE` reads DE00 and `FF` reads DF00 (sources-GS). Reads go through a DMA-only path: no read side effects, and the CPU's PPU-mode VRAM lock does not apply to them (provisional; hardware conflicts with the PPU are a rendering-era question). With this ROM-only cartridge, A000-BFFF reads FF as it does for the CPU.
 5. **Destination.** Byte *i* goes to OAM index *i* directly, ignoring the PPU-mode OAM locks. The CPU path stays separate.
 6. **CPU OAM access while active.** CPU reads of FE00-FE9F return FF and writes are ignored, regardless of LCDC and PPU mode. This is in addition to the #77/D3 locks, not instead of them. FEA0-FEFF keeps its fallback.
 7. **Other CPU accesses: no bus conflicts (proposed simplification).** All other addresses behave normally during a transfer. On hardware, CPU accesses to the bus the DMA is using (external: ROM/SRAM/WRAM; video: VRAM) conflict. No pinned ROM checks conflict values, and `oam_dma_start` runs its wait loop from ROM during a VRAM-source transfer, which this rule allows. Software that follows the documented HRAM-only rule cannot tell the difference. Bus conflicts would be a separate, sourced issue.
 8. **Independence.** The transfer runs with the LCD on or off and while the CPU is halted, because Bus advancement continues. It does not advance while stopped, which matches the current STOP model, where no M-cycles advance. It requests no interrupts and does not change PPU, timer or interrupt state.
 
-## Proposed ownership and types
+## Ownership and types
 
 - **Bus owns the DMA state**, because the source can be anywhere in the memory map. A small `Copy`-able `OamDma` value (your design) holds the register byte, the active transfer (source page and next index) and the pending start (source page and remaining delay).
 - **Advancement:** once per M-cycle in `advance_mcycle`. Handle the pending start first, then copy one byte if a transfer is active. Whether it runs before or after the four PPU/timer ticks makes no observable difference yet.
 - **Ppu** gains a DMA-path OAM write that bypasses the CPU locks. Its CPU OAM accessors, or Bus, also consult "DMA active". Decide which owns that check; Bus is the simpler choice because the PPU never needs to know about DMA for CPU locking.
 - **Rejected:** copying all 160 bytes at the write. It cannot express the timeline, restart or blocking that the ROMs check.
 
-## Decisions for the user
+## Decisions
 
-1. Rule 7: no bus conflicts now (proposed), or model conflicts in this slice.
-2. Rule 1: FF46 starts at FF (proposed).
-3. Where the "DMA active blocks CPU OAM" check lives: Bus (proposed) or Ppu.
+1. Rule 7: no bus conflicts in this slice (adopted as proposed; test `no_bus_conflicts_and_no_other_state_changes_while_active`).
+2. Rule 1: FF46 starts at FF (adopted as proposed; test `ff46_starts_at_ff_and_every_write_reads_back_at_every_phase`).
+3. Bus owns the transfer state and the "DMA active blocks CPU OAM" check (agreed). Ppu gains only a DMA-path OAM write that bypasses the CPU locks.
 
-## Acceptance (assistant; written after agreement)
+## Acceptance (assistant; tests written 2026-11-21, failing until implementation)
 
 - **Local Bus tests:**
   - the timeline at every M-cycle from M0 to M163: OAM readable at M1, FF from M2 to M161, data at M162;
