@@ -1,84 +1,20 @@
 //! #76 slice B: STAT and VBlank interrupt requests. Ppu-level tests compare
 //! `Ppu::tick` effects with an independent line/edge model; Bus-level tests
-//! observe requests only through IF (FF0F). The model below shares no code
-//! with production timing or status logic.
+//! observe requests only through IF (FF0F). The position model (`model`)
+//! shares no code with production timing or status logic.
 
-use super::{advance, fresh_bus};
+use super::{
+    advance, fresh_bus,
+    model::{DOTS_PER_FRAME, DOTS_PER_LINE, MCYCLES_PER_FRAME, Pos, SEED_DOT},
+};
 use crate::memory::{
     Bus,
     ppu::{Ppu, PpuEffects},
 };
 
-const DOTS_PER_LINE: u32 = 456;
-const DOTS_PER_FRAME: u32 = DOTS_PER_LINE * 154;
-const MCYCLES_PER_FRAME: u32 = DOTS_PER_FRAME / 4;
-/// Post-boot seed: physical line 153, dot 4, as dots since line 0 / dot 0.
-const SEED_DOT: u32 = 153 * DOTS_PER_LINE + 4;
 /// Ticks from the seed to physical line 144 / dot 0.
 const SEED_TO_VBLANK: u32 = DOTS_PER_FRAME - SEED_DOT + 144 * DOTS_PER_LINE;
 const LYCS: [u8; 6] = [0, 1, 143, 144, 153, 0xFF];
-
-/// Independent position model: physical line, dot, and whether this is the
-/// first line after enable (which reports HBlank instead of OAM scan).
-#[derive(Clone, Copy, Debug)]
-struct Pos {
-    line: u32,
-    dot: u32,
-    first: bool,
-}
-
-impl Pos {
-    const SEED: Pos = Pos {
-        line: 153,
-        dot: 4,
-        first: false,
-    };
-    const ENABLED: Pos = Pos {
-        line: 0,
-        dot: 0,
-        first: true,
-    };
-
-    fn next(self) -> Pos {
-        let (mut line, mut dot, mut first) = (self.line, self.dot + 1, self.first);
-        if dot == DOTS_PER_LINE {
-            dot = 0;
-            first = false;
-            line = (line + 1) % 154;
-        }
-        Pos { line, dot, first }
-    }
-
-    fn mode(self) -> u8 {
-        match (self.line, self.dot) {
-            (144.., _) => 1,
-            (_, 80..=251) => 3,
-            (_, 0..=79) if !self.first => 2,
-            _ => 0,
-        }
-    }
-
-    fn ly(self) -> u8 {
-        if self.line == 153 && self.dot >= 4 {
-            0
-        } else {
-            self.line as u8
-        }
-    }
-
-    /// One-dot mode-2 source at physical line 144 / dot 0 (provisional).
-    fn pulse(self) -> bool {
-        self.line == 144 && self.dot == 0
-    }
-
-    fn line_level(self, selects: u8, lyc: u8) -> bool {
-        let mode = self.mode();
-        (selects & 0x08 != 0 && mode == 0)
-            || (selects & 0x10 != 0 && mode == 1)
-            || (selects & 0x20 != 0 && (mode == 2 || self.pulse()))
-            || (selects & 0x40 != 0 && self.ly() == lyc)
-    }
-}
 
 /// A Ppu with `selects`/`lyc` installed, plus the model's position and stored
 /// line level. From the seed the writes happen while on (write effects are

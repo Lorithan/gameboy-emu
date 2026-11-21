@@ -280,9 +280,13 @@ fn divider_bus_resets_phase_and_preserves_every_other_address() {
         bus.advance_mcycle();
         assert_eq!(bus.read(0xFF04), 1);
     }
+    // Since #77, VRAM/OAM reads depend on the PPU mode; disable the LCD so
+    // the stored bytes are readable (memory::ppu::tests::access covers modes).
+    bus.write(0xFF40, 0x11);
     for addr in 0u16..=65535 {
-        // Live LY/STAT advance with time; memory::ppu::tests::status covers them.
-        if matches!(addr, 0xFF41 | 0xFF44) {
+        // Live LY/STAT advance with time (memory::ppu::tests::status), and
+        // LCDC was just changed above.
+        if matches!(addr, 0xFF40 | 0xFF41 | 0xFF44) {
             continue;
         }
         let expected = if addr == 0xFF04 {

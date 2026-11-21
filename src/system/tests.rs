@@ -9,6 +9,7 @@ mod divider_oracle;
 mod halt;
 mod joypad;
 mod lcd_registers;
+mod ppu_access;
 mod ppu_interrupts;
 mod ppu_memory;
 mod ppu_timing;

@@ -3,8 +3,8 @@
 Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #71, the [eight passive data registers in #72](https://github.com/Lorithan/gameboy-emu/issues/72) and [#74, LCDC and an internal dot clock](https://github.com/Lorithan/gameboy-emu/issues/74), are implemented and verified against the provisional model below ([devices](../DEVICES.md#lcdc-and-internal-dot-clock), [testing](../TESTING.md)). **Gate change, agreed 2026-11-20:** live LY and STAT are now mapped on the provisional model and then calibrated against audited ROMs, because the calibration ROMs cannot run without readable LY and STAT. The split is:
 
 - [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75).
-- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts. Agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#stat-and-vblank-interrupts) and [testing](../TESTING.md#stat-and-vblank-interrupts-76). **Next: #77.**
-- [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions. [Contract](#slice-c-cpu-vram-and-oam-access-restrictions-77) drafted 2026-11-20, awaiting agreement.
+- [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts. Agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#stat-and-vblank-interrupts) and [testing](../TESTING.md#stat-and-vblank-interrupts-76).
+- [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions. [Contract](#slice-c-cpu-vram-and-oam-access-restrictions-77) agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#vram-and-oam-access-restrictions) and [testing](../TESTING.md#vramoam-access-restrictions-77). **Next: #73.**
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
 
 ## Ownership and representation
@@ -248,7 +248,7 @@ Disabling must not recompute the flag just because visible LY becomes 0, and res
 
 ## Slice C: CPU VRAM and OAM access restrictions (#77)
 
-Proposed contract, drafted 2026-11-20 and awaiting agreement. It restricts ordinary CPU accesses through Bus by PPU mode. All timing remains the provisional model; #73 calibrates it.
+Agreed 2026-11-20 with the three decisions below as drafted; implemented and verified the same day. It restricts ordinary CPU accesses through Bus by PPU mode. All timing remains the provisional model; #73 calibrates it.
 
 ### Sources
 
@@ -286,7 +286,7 @@ Proposed contract, drafted 2026-11-20 and awaiting agreement. It restricts ordin
 - Rendering's own VRAM/OAM reads; CGB VRAM banking/HDMA.
 - Calibrating any edge (#73), including running lcdon_timing-GS or lcdon_write_timing-GS as fixtures.
 
-### Slice C acceptance (proposed)
+### Slice C acceptance
 
 **Bus level, against an independent mode model**
 - From the seed and from enable, for every M-cycle of two frames: reads at 8000, 9FFF, FE00, FE9F and interior addresses return the stored byte when accessible and FF when blocked; writes land exactly when accessible. Blocked writes are confirmed unchanged by reading later with the LCD off.
@@ -306,7 +306,7 @@ Proposed contract, drafted 2026-11-20 and awaiting agreement. It restricts ordin
 - All 18 hash-verified fixtures pass with per-fixture M-cycle counts recorded. The reporter writes VRAM only with the LCD off, so counts should not change; any change must be explained.
 - Full suite, fmt and strict Clippy pass.
 
-### Decisions to agree
+### Agreed decisions
 
 1. Restrictions follow the reported mode exactly (point 1), with read/write edge differences left to #73.
 2. FEA0-FEFF stays on its current fallback (point 5).

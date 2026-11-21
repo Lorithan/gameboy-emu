@@ -1,6 +1,21 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #76 on 2026-11-20: **533 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (395 unit, 138 integration), after the user's STAT/VBlank interrupts. Formatting and strict Clippy pass; the three checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #77 on 2026-11-20: **539 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (401 unit, 138 integration), after the user's VRAM/OAM access restrictions. Formatting and strict Clippy pass; the three checksum-gated fixture scripts pass.
+
+## VRAM/OAM access restrictions (#77)
+
+Six new tests verify the [slice C contract](DEVICES.md#vram-and-oam-access-restrictions):
+
+- `memory::ppu::tests::access` (4), against the shared independent position model (`memory::ppu::tests::model`, extracted from the #76 tests unchanged):
+  - at every M-cycle for two frames, from the seed and from enable, reads and read-after-write at ten VRAM/OAM boundary and interior addresses match the model (FF when blocked); blocked and allowed accesses both occur in each region; the first enabled line allows OAM at exactly its 19 sampled HBlank M-cycles; LY/STAT/IF/timing equal an access-free reference Bus; with the LCD off afterwards every stored byte matches, so no blocked write landed;
+  - LCD off: every access round-trips for a frame, and disabling in Drawing unblocks the very next access;
+  - FEA0-FEFF reads FF and ignores writes in all four modes and with the LCD off, without aliasing OAM;
+  - writing every VRAM/OAM byte in Drawing changes no visible memory or state, and the hidden storage equals a reference Bus once the LCD is off.
+- `system::tests::ppu_access` (2): a program using `LD (HL),A`, `LD A,(HL)`, `LD (a16),A`, `LD A,(a16)`, `PUSH` and `POP` in VRAM and OAM runs three frames. Every VRAM/OAM read and store is checked against STAT's mode on a lockstep reference Bus at that M-cycle (FF and no store when blocked), with blocked and allowed reads and writes in both regions; hidden storage matches afterwards. Instruction-budget pauses give identical CPU state and storage.
+
+Migration: `divider_bus_resets_phase_and_preserves_every_other_address` now disables the LCD before its final all-address comparison, since OAM is blocked at that point. No mutation check was run.
+
+**Fixtures.** All eighteen hash-verified fixtures pass with M-cycle counts identical to #76 (16 at 183,194-183,522, ie_push 179,867, div_write 899,476), consistent with the audit that the reporter writes VRAM only with the LCD off. Tests verify the provisional model, not hardware timing.
 
 ## STAT and VBlank interrupts (#76)
 

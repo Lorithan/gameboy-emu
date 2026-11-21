@@ -2,7 +2,9 @@
 //! descendant of both `memory` and `ppu`, so it may inspect private Bus/Ppu
 //! state directly; PpuTiming fields stay private and are compared whole.
 
+mod access;
 mod interrupts;
+mod model;
 mod status;
 
 use super::timing::PpuTiming;

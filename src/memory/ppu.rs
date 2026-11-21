@@ -31,19 +31,31 @@ impl Ppu {
     }
 
     pub(super) fn read_vram(&self, offset: usize) -> u8 {
-        self.vram[offset]
+        if self.vram_blocked() {
+            0xFF
+        } else {
+            self.vram[offset]
+        }
     }
 
     pub(super) fn write_vram(&mut self, offset: usize, value: u8) {
-        self.vram[offset] = value;
+        if !self.vram_blocked() {
+            self.vram[offset] = value;
+        }
     }
 
     pub(super) fn read_oam(&self, offset: usize) -> u8 {
-        self.oam[offset]
+        if self.oam_blocked() {
+            0xFF
+        } else {
+            self.oam[offset]
+        }
     }
 
     pub(super) fn write_oam(&mut self, offset: usize, value: u8) {
-        self.oam[offset] = value;
+        if !self.oam_blocked() {
+            self.oam[offset] = value;
+        }
     }
 
     pub(super) fn read_scy(&self) -> u8 {
@@ -69,7 +81,7 @@ impl Ppu {
     pub(super) fn write_lyc(&mut self, value: u8) -> PpuEffects {
         self.lcd_registers.lyc = value;
 
-        if self.lcd_registers.lcd_control.is_enabled() {
+        if self.lcd_on() {
             let lyc_equal = value == self.timing.visible_ly();
             self.lcd_registers.set_lyc_equal(lyc_equal);
 
@@ -153,7 +165,7 @@ impl Ppu {
     }
 
     pub(super) fn write_stat(&mut self, value: u8) -> PpuEffects {
-        if self.lcd_registers.lcd_control.is_enabled() {
+        if self.lcd_on() {
             // Seems to be a weird bug or hardware quirk, where it looks like the interrupt is computed with all selection bits
             // despite what is actually written.
             let level = self.lcd_registers.lcd_stat.line_level_with(
@@ -184,7 +196,7 @@ impl Ppu {
     }
 
     pub(super) fn tick(&mut self) -> PpuEffects {
-        if self.lcd_registers.lcd_control.is_enabled() {
+        if self.lcd_on() {
             self.timing.tick();
 
             self.lcd_registers
@@ -202,6 +214,22 @@ impl Ppu {
         }
 
         PpuEffects::default()
+    }
+
+    fn lcd_on(&self) -> bool {
+        self.lcd_registers.lcd_control.is_enabled()
+    }
+
+    fn vram_blocked(&self) -> bool {
+        self.lcd_on() && matches!(self.timing.mode(), timing::PpuMode::Drawing)
+    }
+
+    fn oam_blocked(&self) -> bool {
+        self.lcd_on()
+            && matches!(
+                self.timing.mode(),
+                timing::PpuMode::Drawing | timing::PpuMode::OamScan
+            )
     }
 
     #[cfg(test)]
