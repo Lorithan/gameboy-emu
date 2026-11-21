@@ -4,7 +4,7 @@ Active M4 control/status contract, updated 2026-11-20. Video-memory foundation #
 
 - [#75 slice A](https://github.com/Lorithan/gameboy-emu/issues/75): live LY/STAT readback. Implemented and verified 2026-11-20; see [testing](../TESTING.md#live-lystat-75).
 - [#76 slice B](https://github.com/Lorithan/gameboy-emu/issues/76): STAT/VBlank interrupts. Agreed, implemented and verified 2026-11-20; see [devices](../DEVICES.md#stat-and-vblank-interrupts) and [testing](../TESTING.md#stat-and-vblank-interrupts-76). **Next: #77.**
-- [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions.
+- [#77 slice C](https://github.com/Lorithan/gameboy-emu/issues/77): CPU VRAM/OAM access restrictions. [Contract](#slice-c-cpu-vram-and-oam-access-restrictions-77) drafted 2026-11-20, awaiting agreement.
 - [#73 slice D](https://github.com/Lorithan/gameboy-emu/issues/73): calibration, required before any hardware-accuracy claim and before the M4 gate. User owns application implementation; assistant owns acceptance tests and review. The implemented passive contract remains in [devices](../DEVICES.md#passive-lcd-data-registers).
 
 ## Ownership and representation
@@ -245,6 +245,72 @@ Disabling must not recompute the flag just because visible LY becomes 0, and res
 ### History
 
 **Correction to the earlier proposal:** coincidence is real retained state, not always a pure expression of current LY/LYC. Pinned [stat_lyc_onoff.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/stat_lyc_onoff.s), blob 6d8a34fd0978bd6a79370a07dc830c870bfcf152, holds that latch while LCD is off, even across LYC writes. Enable resumes comparison with visible LY0. Its four cases are tabulated in the slice B contract above. CPU memory-access restrictions are #77; first blank-frame policy belongs to rendering.
+
+## Slice C: CPU VRAM and OAM access restrictions (#77)
+
+Proposed contract, drafted 2026-11-20 and awaiting agreement. It restricts ordinary CPU accesses through Bus by PPU mode. All timing remains the provisional model; #73 calibrates it.
+
+### Sources
+
+| Source | What it establishes |
+| --- | --- |
+| [Pan Docs: accessing VRAM and OAM](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Accessing_VRAM_and_OAM.md) | VRAM (8000-9FFF) is accessible in modes 0-2, so blocked in mode 3. OAM (FE00-FE9F) is accessible in modes 0-1, so blocked in modes 2-3. Blocked reads return "undefined data (typically $FF)"; blocked writes "are ignored (data remains unchanged)". "While the display is disabled, both VRAM and OAM are accessible." |
+| [Pan Docs: memory map](https://raw.githubusercontent.com/gbdev/pandocs/master/src/Memory_Map.md) | FEA0-FEFF reads FF while OAM is blocked; on DMG, reads otherwise return 00, and reads while blocked trigger OAM corruption. Writes are not described. |
+| [Pan Docs: OAM corruption bug](https://raw.githubusercontent.com/gbdev/pandocs/master/src/OAM_Corruption_Bug.md) | On DMG, accesses (and 16-bit inc/dec of a register) in FE00-FEFF during mode 2 corrupt OAM. |
+| [lcdon_timing-GS.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/lcdon_timing-GS.s) | DMG-verified. After enable, "line 0 starts with mode 0 and goes straight to mode 3", and OAM and VRAM are both readable early in line 0, then blocked together when mode 3 starts. Line 0 is "late by 2 T-cycles"; lines 1-2 are normal. |
+| [lcdon_write_timing-GS.s](https://github.com/Gekkio/mooneye-test-suite/blob/31510e12eea6286d36eea060a6adde755e1067aa/acceptance/ppu/lcdon_write_timing-GS.s) | DMG-verified write samples after enable. Its table suggests OAM writes become blocked a little earlier than OAM reads around the mode 0 to 2 edge, while VRAM writes follow mode 3. Calibration only. |
+
+### Proposed behaviour
+
+1. **Rule (provisional).** While the LCD is on, a CPU access is blocked when the mode reported by `PpuTiming::mode()` at the moment of the access is:
+   - VRAM: Drawing.
+   - OAM: OamScan or Drawing.
+   The first line after enable reports HBlank for dots 0-79, so OAM is accessible there, which matches lcdon_timing-GS qualitatively.
+2. **Blocked read:** returns FF and has no effect. **Blocked write:** ignored; storage is unchanged.
+3. **LCD off:** never blocked. Disabling the LCD mid-Drawing makes both accessible from the next access.
+4. **Sampling:** CPU accesses happen after the M-cycle's four ticks (existing schedule), so the access sees the mode after those ticks. Hardware read/write edge differences (lcdon_write_timing-GS) are #73 targets.
+5. **FEA0-FEFF (proposal: unchanged).** Keep the existing FF read / ignored write fallback in every mode. The DMG 00 read and corruption behaviour are recorded deviations, deferred to a separate issue with the OAM corruption bug. Implementing only the 00 read without corruption would be a half-model.
+6. **No other effects:** blocked accesses do not change LY, STAT, IF, timing or other memory.
+
+### Proposed types and ownership
+
+- **Ppu owns the rule.** The VRAM/OAM accessors Bus already calls become the CPU-facing, mode-checked path. Bus keeps mapping addresses and does not inspect PPU mode.
+- **Derive, don't store.** Accessibility is a function of the LCDC enable bit and the current mode; no separate lock booleans that could drift from timing.
+- **Unrestricted access stays internal.** Future rendering reads the arrays inside Ppu; future OAM DMA gets its own path when DMA is specified. Don't add those paths now.
+- Naming (keep `read_vram`/`write_vram`, or rename to make "CPU access" explicit) and whether the checks live in two small query methods are your choice.
+
+### Out of scope
+
+- OAM corruption bug; FEA0-FEFF DMG behaviour (point 5).
+- OAM DMA and its OAM-blocking (later DMA contract).
+- Rendering's own VRAM/OAM reads; CGB VRAM banking/HDMA.
+- Calibrating any edge (#73), including running lcdon_timing-GS or lcdon_write_timing-GS as fixtures.
+
+### Slice C acceptance (proposed)
+
+**Bus level, against an independent mode model**
+- From the seed and from enable, for every M-cycle of two frames: reads at 8000, 9FFF, FE00, FE9F and interior addresses return the stored byte when accessible and FF when blocked; writes land exactly when accessible. Blocked writes are confirmed unchanged by reading later with the LCD off.
+- Both blocked and allowed sets are non-empty for each region (non-vacuity), and the first line after enable allows OAM in dots 0-79.
+- LCD off: every byte accessible at every M-cycle; disable mid-Drawing unblocks the next access.
+- FEA0-FEFF reads FF and ignores writes in every mode.
+- Blocked accesses leave LY, STAT, IF, timing probe and all other memory unchanged.
+
+**CPU and System level**
+- CPU loads/stores to VRAM and OAM (e.g. `LD (HL),A`, `LD A,(HL)`, `LD (a16),A`, `PUSH` into OAM) observed against a reference Bus advanced in lockstep: trace read values, ignored stores and final memory match the mode after each access cycle's ticks.
+- Instruction-budget pauses do not change which accesses are blocked.
+
+**Migrations**
+- Existing tests that access VRAM/OAM with the LCD on after the seed's VBlank tail (113 M-cycles) may now hit blocked phases. Each is migrated explicitly, by disabling the LCD in setup or choosing an accessible phase, without weakening its own oracle.
+
+**Gate**
+- All 18 hash-verified fixtures pass with per-fixture M-cycle counts recorded. The reporter writes VRAM only with the LCD off, so counts should not change; any change must be explained.
+- Full suite, fmt and strict Clippy pass.
+
+### Decisions to agree
+
+1. Restrictions follow the reported mode exactly (point 1), with read/write edge differences left to #73.
+2. FEA0-FEFF stays on its current fallback (point 5).
+3. Ppu, not Bus, owns the check, with no stored lock state.
 
 ## Timing and ROM integration gate
 
