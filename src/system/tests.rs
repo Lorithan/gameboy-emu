@@ -14,6 +14,7 @@ mod ppu_access;
 mod ppu_interrupts;
 mod ppu_memory;
 mod ppu_timing;
+mod rendering;
 mod reti;
 mod stop;
 mod timer_registers;

@@ -98,7 +98,7 @@ Write-raised requests set IF after the access, so the CPU samples them one step 
 - **LCD off:** never blocked; disabling mid-Drawing unblocks the next access.
 - **FEA0-FEFF:** unchanged FF/ignored fallback in every mode. The DMG 00 read and the OAM corruption bug are deferred together.
 
-Accesses see the position after their M-cycle's ticks. VBlank-line transitions, the ends of lines 143-153 and the line-153 window are not covered by the pinned ROMs and stay provisional. No rendering path exists yet; OAM DMA bypasses these locks (see below).
+Accesses see the position after their M-cycle's ticks. VBlank-line transitions, the ends of lines 143-153 and the line-153 window are not covered by the pinned ROMs and stay provisional. The renderer and OAM DMA read storage directly and bypass these locks (see below).
 
 ## OAM DMA
 
@@ -110,6 +110,15 @@ Accesses see the position after their M-cycle's ticks. VBlank-line transitions, 
 - **Destination:** Ppu's `write_oam_dma` writes OAM without the PPU-mode locks.
 - **CPU access:** while a transfer is active, CPU reads of FE00-FE9F return FF and writes are ignored, checked in Bus before the PPU's own locks. All other addresses behave normally: no bus conflicts are modelled.
 - **Independence:** runs with the LCD on or off and during HALT; does not advance during STOP; requests no interrupts.
+
+## Frame output and background
+
+[#81](https://github.com/Lorithan/gameboy-emu/issues/81) (rendering R1, [contract](tasks/RENDERING.md)) draws the background into an in-core framebuffer. No window, sprites, colour mapping or frontend exist yet.
+
+- **Types:** the public `video` module holds `Shade` (`White`, `LightGray`, `DarkGray`, `Black`; `Shade::from_bits` uses the low two bits) and `Frame` (160×144 shades, row-major; `pixel` panics out of range). Ppu owns two frames and the completed-frame count; System exposes `frame()` and `frames_completed()` read-only through Bus.
+- **Rendering:** each line 0-143 is drawn in one step when timing reaches dot 80 (start of Drawing), from VRAM and the registers at that moment, into the back frame. Mode 3 keeps its fixed length, so writes during Drawing apply from the next line.
+- **Background:** SCX/SCY scroll with wrap at 256; map 9800 or 9C00 (LCDC bit 3); tile data 8000 unsigned or 9000 signed (LCDC bit 4); BGP maps colour indices to shades. With LCDC bit 0 clear, every pixel is index 0 through BGP.
+- **Publication:** at VBlank entry (line 144, the VBlank-request M-cycle) the frames are swapped and the count increments. Turning the LCD off publishes an all-White frame and increments the count once; nothing is published while it stays off.
 
 ## Interrupt registers
 

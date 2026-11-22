@@ -1,4 +1,7 @@
-use crate::memory::ppu::{lcd::LcdRegisters, timing::PpuTiming};
+use crate::{
+    memory::ppu::{lcd::LcdRegisters, timing::PpuTiming},
+    video::{Frame, Shade},
+};
 
 mod lcd;
 mod timing;
@@ -18,6 +21,9 @@ pub(super) struct Ppu {
     oam: [u8; 0xA0],
     lcd_registers: LcdRegisters,
     timing: PpuTiming,
+    front_frame: Frame,
+    back_frame: Frame,
+    frames_completed: u64,
 }
 
 impl Ppu {
@@ -27,6 +33,9 @@ impl Ppu {
             oam: [0; 0xA0],
             lcd_registers: LcdRegisters::dmg_post_boot(),
             timing: PpuTiming::dmg_post_boot(),
+            front_frame: Frame::new(),
+            back_frame: Frame::new(),
+            frames_completed: 0,
         }
     }
 
@@ -159,6 +168,10 @@ impl Ppu {
 
         if old_enable && !new_enabled {
             self.timing = PpuTiming::lcd_off();
+
+            // Clear front frame
+            self.front_frame = Frame::new();
+            self.frames_completed += 1;
         } else if !old_enable && new_enabled {
             self.timing = PpuTiming::lcd_on();
         }
@@ -203,14 +216,37 @@ impl Ppu {
         }
     }
 
+    pub(super) fn frame(&self) -> &Frame {
+        &self.front_frame
+    }
+
+    fn publish_frame(&mut self) {
+        std::mem::swap(&mut self.back_frame, &mut self.front_frame);
+        self.frames_completed += 1;
+    }
+
+    pub(super) fn frames_completed(&self) -> u64 {
+        self.frames_completed
+    }
+
     pub(super) fn tick(&mut self) -> PpuEffects {
         if self.lcd_on() {
             self.timing.tick();
+
+            if self.timing.just_entered_drawing() {
+                // Render a line
+                let ly = self.timing.visible_ly();
+                self.render_line(ly);
+            }
 
             self.lcd_registers
                 .set_lyc_equal(self.timing.lyc_compare_line() == Some(self.lcd_registers.lyc));
 
             let vblank = self.timing.just_entered_line_144(); // Also serves as the mode 2 pulse for lcd_stat
+
+            if vblank {
+                self.publish_frame();
+            }
 
             let level = self
                 .lcd_registers
@@ -247,5 +283,51 @@ impl Ppu {
     #[cfg(test)]
     pub(super) fn timing_probe(&self) -> String {
         format!("{:?}", self.timing)
+    }
+
+    fn render_line(&mut self, ly: u8) {
+        // These are fixed for the whole line
+        let lcdc = self.lcd_registers.lcd_control.bits();
+        let scx = self.lcd_registers.scx;
+        let scy = self.lcd_registers.scy;
+        let bgp = self.lcd_registers.bgp;
+        let by = scy.wrapping_add(ly) as usize;
+
+        let bg_enabled = lcdc & (1 << 0) != 0;
+        let map_start: usize = if lcdc & (1 << 3) != 0 { 0x1C00 } else { 0x1800 };
+        let unsigned_tiles = lcdc & (1 << 4) != 0;
+
+        for x in 0..Frame::WIDTH {
+            let index = if bg_enabled {
+                // Calculate background column
+                let bx = scx.wrapping_add(x as u8) as usize;
+
+                //  Read the tile number stored in the map.
+                let tile_number = self.vram[map_start + (by / 8) * 32 + (bx / 8)];
+
+                // Find that tile's 16 bytes. 0x9000 is vram offset 0x1000.
+                let tile_start = if unsigned_tiles {
+                    tile_number as usize * 16
+                } else {
+                    (0x1000 + (tile_number as i8 as isize) * 16) as usize
+                };
+
+                // Two bytes per row: little endian
+                let row = tile_start + (by % 8) * 2;
+                let low = self.vram[row];
+                let high = self.vram[row + 1];
+
+                // Bit 7 is the leftmost pixel.
+                let bit = 7 - (bx % 8);
+                (((high >> bit) & 1) << 1) | ((low >> bit) & 1)
+            } else {
+                0
+            };
+
+            // Map the color index through BGP
+            let shade = Shade::from_bits(bgp >> (index * 2));
+
+            self.back_frame.write_pixel(x, ly as usize, shade);
+        }
     }
 }

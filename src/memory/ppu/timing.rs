@@ -84,7 +84,11 @@ impl PpuTiming {
     }
 
     pub(super) fn just_entered_line_144(&self) -> bool {
-        self.line == 144 && self.dot == 0
+        self.line == VBLANK_START && self.dot == 0
+    }
+
+    pub(super) fn just_entered_drawing(&self) -> bool {
+        self.line < VBLANK_START && self.dot == 80
     }
 
     fn line_end(&self) -> bool {

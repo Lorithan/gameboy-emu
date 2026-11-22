@@ -1,6 +1,6 @@
 # Rendering into a framebuffer
 
-Proposed and agreed 2026-11-21 for M4 (decisions below; the host interface names await confirmation). The user implements; the assistant owns the tests, fixture wiring and review.
+Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). R1 is complete (2026-11-22); see [testing](../TESTING.md#rendering-r1-frame-publication-and-background-81). The user implements; the assistant owns the tests, fixture wiring and review.
 
 This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the later SDL2 frontend, whose scope is agreed separately. The core stays independent of SDL2.
 
@@ -41,9 +41,9 @@ Coordinates: `x` 0-159, `ly` 0-143. A *colour index* is the 2-bit value from til
 3. **LCD off publishes a blank frame:** turning the LCD off publishes one all-`White` frame and increments the counter once; no frames are produced while it stays off. The first frame after turning it back on is published normally (hardware shows it blank; provisional).
 4. **Shades are an enum**, so an invalid shade cannot be represented.
 
-## Host interface (proposed, for the user to confirm before R1 tests)
+## Host interface (agreed 2026-11-21, implemented in R1)
 
-The tests name these, so they are fixed before the tests are written. Internals stay the user's choice.
+The tests name these. Internals are the user's choice. The implementation also adds `Shade::from_bits` (low two bits).
 
 - A public `video` module at the crate root holds the host-facing types, with no PPU internals:
   - `Shade`: `White`, `LightGray`, `DarkGray`, `Black` (shades 0-3).
@@ -57,7 +57,7 @@ Each slice is a separate issue with tests written first.
 
 | Slice | Scope | Evidence |
 | --- | --- | --- |
-| R1 [#81](https://github.com/Lorithan/gameboy-emu/issues/81) | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
+| R1 [#81](https://github.com/Lorithan/gameboy-emu/issues/81), complete 2026-11-22 | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
 | R2 [#82](https://github.com/Lorithan/gameboy-emu/issues/82) | Window (rule 3) | WX/WY edges, the line counter across lines where the window is turned off and on, WY latching |
 | R3 [#83](https://github.com/Lorithan/gameboy-emu/issues/83) | Objects (rules 4-6) | Selection limit and order, X/Y flip, 8×16, palettes, priority ties, BG priority with LCDC bit 0 clear |
 | R4 [#84](https://github.com/Lorithan/gameboy-emu/issues/84) | dmg-acid2 fixture | Provenance recorded first; the frame matches `reference-dmg.png` exactly; how the reference is compared without adding a dependency is decided then |

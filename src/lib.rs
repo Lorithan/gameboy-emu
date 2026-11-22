@@ -1,6 +1,7 @@
 pub mod cpu;
 pub mod memory;
 pub mod system;
+pub mod video;
 
 #[cfg(test)]
 use cpu::CycleOutcome as InstructionCycleOutcome;

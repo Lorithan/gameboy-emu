@@ -1,6 +1,16 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #80 OAM DMA on 2026-11-21: **580 passed, zero failed**, with `--include-ignored` (417 unit, 163 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #81 rendering R1 on 2026-11-22: **592 passed, zero failed**, with `--include-ignored` (428 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+
+## Rendering R1: frame publication and background (#81)
+
+Contract: [rendering](tasks/RENDERING.md). Latest fixture-inclusive regression after the user's R1 implementation, 2026-11-22: **592 passed, zero failed** (428 unit, 164 integration), including the 42 hash-verified gated fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six fixture scripts pass.
+
+- **System tests (11),** `system::tests::rendering`, with the CPU spinning on `JR -2`: startup frame and count; `pixel` bounds; the background against an independent model for both tile-data modes, both maps and five scroll positions (including wrap), five BGP values and LCDC bit 0 clear; `pixel` against `pixels` row-major order; publication in exactly the VBlank-request M-cycle and every 17,556 M-cycles; no change to the published frame between publications (sampled every 61 M-cycles); register writes during OAM scan applying to that line and during Drawing or HBlank from the next (decision 1); LCD disable publishing one White frame with BGP index 0 Black, no publication while off or on enable, and a normal first frame after enable (decision 3).
+- **Integration test (1),** `tests/video_api.rs`: `video::Frame`, `video::Shade`, `System::frame` and `System::frames_completed` are public.
+- **Before implementation:** against an interface stub, the startup and bounds tests passed and the other eight failed. A throwaway reference renderer in a scratch worktree (never committed) passed all eleven, and each of nine deliberate breaks failed at least one test: render at HBlank, single buffer, no blank on disable, wrong signed base, SCY ignored, map bit ignored, LCDC bit 0 ignored, bit planes swapped, no SCX wrap.
+- **Fixtures:** all 42 gated counts are identical to #80, checked from a single-threaded run. Rendering changes no timing.
+- **What this proves:** the background follows the agreed rules at every pixel of the tested configurations, frames are published only whole and at VBlank, and the scanline timing choice behaves as agreed. It is not hardware evidence; dmg-acid2 (#84) is the external check. The window and objects are not drawn yet.
 
 ## OAM DMA (#80)
 

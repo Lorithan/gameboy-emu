@@ -9,10 +9,13 @@ pub use interrupts::Interrupt;
 use interrupts::InterruptController;
 pub use joypad::Button;
 
-use crate::memory::{
-    joypad::{Joypad, JoypadEvent},
-    ppu::{Ppu, PpuEffects},
-    timer::Timer,
+use crate::{
+    memory::{
+        joypad::{Joypad, JoypadEvent},
+        ppu::{Ppu, PpuEffects},
+        timer::Timer,
+    },
+    video::Frame,
 };
 
 #[cfg(test)]
@@ -211,6 +214,14 @@ impl Bus {
                 // Ignore writes
             }
         }
+    }
+
+    pub(super) fn frame(&self) -> &Frame {
+        self.ppu.frame()
+    }
+
+    pub(super) fn frames_completed(&self) -> u64 {
+        self.ppu.frames_completed()
     }
 
     pub(crate) fn request_interrupt(&mut self, interrupt: Interrupt) {

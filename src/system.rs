@@ -4,6 +4,7 @@ use crate::{
         InterruptSample, Registers,
     },
     memory::{Bus, Button, Cartridge},
+    video::Frame,
 };
 
 #[cfg(test)]
@@ -248,5 +249,13 @@ impl System {
 
         let wake = self.memory.stop_wake_active();
         self.cpu.wake_from_stop_if(wake);
+    }
+
+    pub fn frame(&self) -> &Frame {
+        self.memory.frame()
+    }
+
+    pub fn frames_completed(&self) -> u64 {
+        self.memory.frames_completed()
     }
 }
