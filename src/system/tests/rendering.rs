@@ -630,3 +630,23 @@ fn lyc_and_stat_writes_mid_frame_leave_the_window_alone() {
     run_to_publication(&mut system);
     assert_frame(&system, &expected_frame(scene), "LYC rewritten");
 }
+
+#[test]
+fn an_lcd_restart_mid_window_starts_the_next_frame_fresh() {
+    // Turning the LCD off mid-frame ends that frame (decision 3), so the
+    // first frame after enable starts with a clear Y condition and row 0.
+    let window = Scene {
+        lcdc: 0x31,
+        wx: 7,
+        wy: 10,
+        ..SCROLLED
+    };
+    let later = Scene { wy: 50, ..window };
+    let mut system = enabled_with(window);
+    run_to_hblank(&mut system, 90); // Y condition set, counter at 81.
+    system.memory.write(LCDC, window.lcdc);
+    write_registers(&mut system, later);
+    system.memory.write(LCDC, 0x80 | window.lcdc);
+    run_to_publication(&mut system);
+    assert_frame(&system, &expected_frame(later), "first frame after enable");
+}
