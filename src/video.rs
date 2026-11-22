@@ -8,7 +8,7 @@ pub enum Shade {
 }
 
 impl Shade {
-    pub fn from_bits(value: u8) -> Self {
+    pub(crate) fn from_bits(value: u8) -> Self {
         match value & 3 {
             0 => Shade::White,
             1 => Shade::LightGray,

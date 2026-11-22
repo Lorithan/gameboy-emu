@@ -1,7 +1,7 @@
-//! #81 rendering R1: frame publication and the background
-//! (docs/tasks/RENDERING.md, rules 1, 2 and 7, decisions 1-3). Written ahead
-//! of implementation. Expected frames come from the independent background
-//! model below, never from production code.
+//! #81 rendering R1: frame publication and the background, and #82 R2: the
+//! window (docs/tasks/RENDERING.md, rules 1-3 and 7, decisions 1-3). Written
+//! ahead of implementation. Expected frames come from the independent model
+//! below, never from production code.
 //!
 //! The CPU spins on `JR -2` in ROM with IME 0, so it never touches video
 //! state. Setup writes go straight to the Bus between M-cycles.
@@ -29,7 +29,10 @@ const STAT: u16 = 0xFF41;
 const SCY: u16 = 0xFF42;
 const SCX: u16 = 0xFF43;
 const LY: u16 = 0xFF44;
+const LYC: u16 = 0xFF45;
 const BGP: u16 = 0xFF47;
+const WY: u16 = 0xFF4A;
+const WX: u16 = 0xFF4B;
 const IF: u16 = 0xFF0F;
 
 fn machine() -> System {
@@ -51,57 +54,102 @@ fn vram(addr: u16) -> u8 {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Background {
-    /// LCDC without bit 7; only bits 0, 3 and 4 are used in R1.
+struct Scene {
+    /// LCDC without bit 7: bits 0, 3 and 4 (R1) and 5 and 6 (R2).
     lcdc: u8,
     scx: u8,
     scy: u8,
     bgp: u8,
+    wy: u8,
+    wx: u8,
 }
 
-const BASE: Background = Background {
+/// Window disabled (LCDC bit 5 clear); WX 7 and WY 0 would cover the
+/// whole screen once it is enabled.
+const BASE: Scene = Scene {
     lcdc: 0x11,
     scx: 0,
     scy: 0,
     bgp: 0xE4,
+    wy: 0,
+    wx: 7,
 };
 
-/// Rules 1 and 2 for one line.
-fn expected_line(bg: Background, ly: usize) -> Vec<Shade> {
+/// Colour index at `(px, py)` of the 256x256 layer whose tile map is `map`,
+/// with LCDC bit 4 selecting the tile data.
+fn layer_index(lcdc: u8, map: u16, px: usize, py: usize) -> u8 {
+    let tile = vram(map + (py / 8 * 32 + px / 8) as u16);
+    let base = if lcdc & 0x10 != 0 {
+        0x8000 + u16::from(tile) * 16
+    } else {
+        (0x9000 + i32::from(tile as i8) * 16) as u16
+    };
+    let row = base + (py % 8 * 2) as u16;
+    let bit = 7 - px % 8;
+    let low = vram(row) >> bit & 1;
+    let high = vram(row + 1) >> bit & 1;
+    high << 1 | low
+}
+
+/// Rules 1-3 for one line. `window_row` is the window's internal line
+/// counter when the window is drawn on this line.
+fn expected_line(scene: Scene, ly: usize, window_row: Option<usize>) -> Vec<Shade> {
+    let bg_map = if scene.lcdc & 0x08 != 0 {
+        0x9C00
+    } else {
+        0x9800
+    };
+    let window_map = if scene.lcdc & 0x40 != 0 {
+        0x9C00
+    } else {
+        0x9800
+    };
+    let wx = usize::from(scene.wx);
     (0..W)
         .map(|x| {
-            let index = if bg.lcdc & 0x01 == 0 {
+            let index = if scene.lcdc & 0x01 == 0 {
                 0
             } else {
-                let px = (usize::from(bg.scx) + x) % 256;
-                let py = (usize::from(bg.scy) + ly) % 256;
-                let map = if bg.lcdc & 0x08 != 0 { 0x9C00 } else { 0x9800 };
-                let tile = vram(map + (py / 8 * 32 + px / 8) as u16);
-                let base = if bg.lcdc & 0x10 != 0 {
-                    0x8000 + u16::from(tile) * 16
-                } else {
-                    (0x9000 + i32::from(tile as i8) * 16) as u16
-                };
-                let row = base + (py % 8 * 2) as u16;
-                let bit = 7 - px % 8;
-                let low = vram(row) >> bit & 1;
-                let high = vram(row + 1) >> bit & 1;
-                high << 1 | low
+                match window_row {
+                    Some(row) if x + 7 >= wx => {
+                        layer_index(scene.lcdc, window_map, x + 7 - wx, row)
+                    }
+                    _ => layer_index(
+                        scene.lcdc,
+                        bg_map,
+                        (usize::from(scene.scx) + x) % 256,
+                        (usize::from(scene.scy) + ly) % 256,
+                    ),
+                }
             };
-            SHADES[usize::from(bg.bgp >> (2 * index) & 3)]
+            SHADES[usize::from(scene.bgp >> (2 * index) & 3)]
         })
         .collect()
 }
 
-/// A frame whose line `ly` is drawn with `line_bg(ly)`.
-fn expected_frame_by_line(line_bg: impl Fn(usize) -> Background) -> Vec<Shade> {
-    (0..H)
-        .flat_map(|ly| expected_line(line_bg(ly), ly))
-        .collect()
+/// A frame whose line `ly` is drawn with `scene(ly)`, the registers as they
+/// are when that line starts Drawing. The Y condition and the window line
+/// counter start clear for each frame (rule 3).
+fn expected_frame_by_line(scene: impl Fn(usize) -> Scene) -> Vec<Shade> {
+    let mut y_condition = false;
+    let mut window_line = 0;
+    let mut frame = Vec::with_capacity(W * H);
+    for ly in 0..H {
+        let scene = scene(ly);
+        // Set by a line with LY == WY whatever LCDC bit 5 is (Pan Docs,
+        // Window: DMG; GBC differs).
+        y_condition |= usize::from(scene.wy) == ly;
+        let drawn = y_condition && scene.lcdc & 0x20 != 0 && scene.wx <= 166;
+        frame.extend(expected_line(scene, ly, drawn.then_some(window_line)));
+        if drawn {
+            window_line += 1;
+        }
+    }
+    frame
 }
 
-fn expected_frame(bg: Background) -> Vec<Shade> {
-    expected_frame_by_line(|_| bg)
+fn expected_frame(scene: Scene) -> Vec<Shade> {
+    expected_frame_by_line(|_| scene)
 }
 
 fn assert_frame(system: &System, expected: &[Shade], context: &str) {
@@ -118,21 +166,23 @@ fn assert_frame(system: &System, expected: &[Shade], context: &str) {
     }
 }
 
-fn write_background_registers(system: &mut System, bg: Background) {
+fn write_registers(system: &mut System, bg: Scene) {
     system.memory.write(SCY, bg.scy);
     system.memory.write(SCX, bg.scx);
     system.memory.write(BGP, bg.bgp);
+    system.memory.write(WY, bg.wy);
+    system.memory.write(WX, bg.wx);
 }
 
 /// Turn the LCD off (publishing the blank frame), fill VRAM, set the
 /// registers, and turn it back on with `bg.lcdc`.
-fn enabled_with(bg: Background) -> System {
+fn enabled_with(bg: Scene) -> System {
     let mut system = machine();
     system.memory.write(LCDC, 0x00);
     for addr in 0x8000..=0x9FFF {
         system.memory.write(addr, vram(addr));
     }
-    write_background_registers(&mut system, bg);
+    write_registers(&mut system, bg);
     system.memory.write(LCDC, 0x80 | bg.lcdc);
     system
 }
@@ -190,7 +240,7 @@ fn pixel_panics_past_the_bottom_edge() {
 fn background_matches_the_model_for_both_tile_data_modes_maps_and_scrolls() {
     for lcdc in [0x11, 0x19, 0x01, 0x09] {
         for (scx, scy) in [(0, 0), (3, 5), (255, 255), (100, 200), (161, 90)] {
-            let bg = Background {
+            let bg = Scene {
                 lcdc,
                 scx,
                 scy,
@@ -205,7 +255,7 @@ fn background_matches_the_model_for_both_tile_data_modes_maps_and_scrolls() {
 
 #[test]
 fn pixel_reads_the_row_major_position() {
-    let bg = Background {
+    let bg = Scene {
         scx: 3,
         scy: 5,
         ..BASE
@@ -225,7 +275,7 @@ fn pixel_reads_the_row_major_position() {
 #[test]
 fn bgp_maps_each_colour_index_through_its_own_field() {
     for bgp in [0x1B, 0x9C, 0x27, 0x00, 0xFF] {
-        let bg = Background { bgp, ..BASE };
+        let bg = Scene { bgp, ..BASE };
         let mut system = enabled_with(bg);
         run_to_publication(&mut system);
         assert_frame(&system, &expected_frame(bg), &format!("BGP {bgp:02X}"));
@@ -236,7 +286,7 @@ fn bgp_maps_each_colour_index_through_its_own_field() {
 fn lcdc_bit_0_clear_shows_bgp_index_0_everywhere() {
     // Rule 2: index 0 through BGP, so a BGP whose index 0 is 3 gives Black.
     for (lcdc, bgp, shade) in [(0x10, 0xE7, Shade::Black), (0x18, 0x1A, Shade::DarkGray)] {
-        let mut system = enabled_with(Background { lcdc, bgp, ..BASE });
+        let mut system = enabled_with(Scene { lcdc, bgp, ..BASE });
         run_to_publication(&mut system);
         assert_frame(&system, &[shade; W * H], &format!("LCDC {lcdc:02X}"));
     }
@@ -280,7 +330,7 @@ fn publication_happens_with_the_vblank_request_every_154_lines() {
 fn the_published_frame_never_shows_a_frame_in_progress() {
     // Decision 2: changes made after a publication appear only at the next.
     let first = BASE;
-    let second = Background {
+    let second = Scene {
         scx: 77,
         scy: 31,
         bgp: 0x1B,
@@ -290,7 +340,7 @@ fn the_published_frame_never_shows_a_frame_in_progress() {
     run_to_publication(&mut system);
     let first_frame = expected_frame(first);
     assert_frame(&system, &first_frame, "first");
-    write_background_registers(&mut system, second); // During VBlank.
+    write_registers(&mut system, second); // During VBlank.
     let published = system.frames_completed();
     let mut mcycles = 0;
     while system.frames_completed() == published {
@@ -321,7 +371,7 @@ fn register_writes_take_effect_from_the_next_line_rendered() {
     run_to(&mut system, 120, 0);
     system.memory.write(SCY, scy);
     run_to_publication(&mut system);
-    let expected = expected_frame_by_line(|ly| Background {
+    let expected = expected_frame_by_line(|ly| Scene {
         scx: if ly >= 40 { scx } else { BASE.scx },
         bgp: if ly >= 91 { bgp } else { BASE.bgp },
         scy: if ly >= 121 { scy } else { BASE.scy },
@@ -334,7 +384,7 @@ fn register_writes_take_effect_from_the_next_line_rendered() {
 fn turning_the_lcd_off_publishes_one_white_frame_and_then_nothing() {
     // Decision 3. BGP index 0 is Black here, so the blank frame cannot be
     // a background rendered through BGP.
-    let bg = Background { bgp: 0x1B, ..BASE };
+    let bg = Scene { bgp: 0x1B, ..BASE };
     let mut system = enabled_with(bg);
     run_to_publication(&mut system);
     assert_frame(&system, &expected_frame(bg), "before disable");
@@ -358,4 +408,225 @@ fn turning_the_lcd_off_publishes_one_white_frame_and_then_nothing() {
     );
     run_to_publication(&mut system);
     assert_frame(&system, &expected_frame(bg), "first frame after enable");
+}
+
+// R2 (#82): the window, rule 3. Pan Docs (Window) is the source; WX 0 and
+// WX 166 have DMG quirks and are left out (see RENDERING.md).
+
+/// Scroll that differs from the window, so a window drawn with SCX/SCY or
+/// the background map fails.
+const SCROLLED: Scene = Scene {
+    scx: 13,
+    scy: 200,
+    ..BASE
+};
+
+/// Step to the first M-cycle of line `ly`'s HBlank.
+fn run_to_hblank(system: &mut System, ly: u8) {
+    run_to(system, ly, 3);
+    run_to(system, ly, 0);
+}
+
+#[test]
+fn the_window_covers_x_from_wx_minus_7_and_lines_from_wy() {
+    // WX 1-6 start the window off the left edge; WX 167+ and WY 144+ hide it.
+    let positions = [1, 6, 7, 8, 50, 159, 165, 167, 200, 255]
+        .map(|wx| (wx, 0))
+        .into_iter()
+        .chain([1, 77, 143, 144, 255].map(|wy| (7, wy)))
+        .chain([(100, 60)]);
+    for (wx, wy) in positions {
+        let scene = Scene {
+            lcdc: 0x31,
+            wx,
+            wy,
+            ..SCROLLED
+        };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        assert_frame(&system, &expected_frame(scene), &format!("{scene:?}"));
+    }
+}
+
+#[test]
+fn the_window_uses_its_own_map_and_the_shared_tile_data() {
+    // Bit 6 selects the window map independently of bit 3; bit 4 selects
+    // the tile data for both layers.
+    for lcdc in [0x31, 0x39, 0x71, 0x79, 0x21, 0x29, 0x61, 0x69] {
+        let scene = Scene {
+            lcdc,
+            wx: 40,
+            wy: 30,
+            ..SCROLLED
+        };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        assert_frame(&system, &expected_frame(scene), &format!("{scene:?}"));
+    }
+}
+
+#[test]
+fn lcdc_bit_5_clear_hides_the_window() {
+    for lcdc in [0x11, 0x51, 0x19, 0x59] {
+        let scene = Scene { lcdc, ..SCROLLED };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        let background = expected_frame(Scene {
+            lcdc: lcdc & !0x60,
+            ..scene
+        });
+        assert_frame(&system, &background, &format!("LCDC {lcdc:02X}"));
+    }
+}
+
+#[test]
+fn lcdc_bit_0_clear_blanks_the_window_too() {
+    // Rule 2 (LCDC, bit 0, DMG: "the Window Display Bit is ignored").
+    for lcdc in [0x30, 0x70, 0x38] {
+        let scene = Scene {
+            lcdc,
+            bgp: 0xE7,
+            ..SCROLLED
+        };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        assert_frame(&system, &[Shade::Black; W * H], &format!("LCDC {lcdc:02X}"));
+    }
+}
+
+#[test]
+fn the_line_counter_pauses_while_the_window_is_hidden_by_lcdc_or_wx() {
+    // "If the Window is hidden (by any means) on a given scanline, the row
+    // of pixels rendered the next time it's shown will be the same as if it
+    // had not been hidden." Writes in HBlank apply from the next line.
+    let shown = Scene {
+        lcdc: 0x31,
+        wx: 7,
+        wy: 20,
+        ..SCROLLED
+    };
+    let mut system = enabled_with(shown);
+    run_to_hblank(&mut system, 50);
+    system.memory.write(LCDC, 0x80 | 0x11);
+    run_to_hblank(&mut system, 80);
+    system.memory.write(LCDC, 0x80 | 0x31);
+    run_to_hblank(&mut system, 100);
+    system.memory.write(WX, 200);
+    run_to_hblank(&mut system, 110);
+    system.memory.write(WX, 30);
+    run_to_publication(&mut system);
+    let expected = expected_frame_by_line(|ly| Scene {
+        lcdc: if (51..=80).contains(&ly) { 0x11 } else { 0x31 },
+        wx: match ly {
+            0..=100 => 7,
+            101..=110 => 200,
+            _ => 30,
+        },
+        ..shown
+    });
+    // Rows 0-30 on lines 20-50, 31-50 on 81-100, then 51 from line 111.
+    assert_frame(&system, &expected, "hidden twice");
+}
+
+#[test]
+fn the_y_condition_latches_for_the_rest_of_the_frame() {
+    // Set on a line with LY == WY, then kept until VBlank: a WY for a line
+    // already passed never triggers, a later WY triggers on its line, and
+    // moving WY after triggering does not hide the window.
+    let scene = Scene {
+        lcdc: 0x31,
+        wx: 60,
+        wy: 200,
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    run_to_hblank(&mut system, 60);
+    system.memory.write(WY, 50);
+    run_to_hblank(&mut system, 80);
+    system.memory.write(WY, 90);
+    run_to_hblank(&mut system, 110);
+    system.memory.write(WY, 255);
+    run_to_publication(&mut system);
+    let expected = expected_frame_by_line(|ly| Scene {
+        wy: match ly {
+            0..=60 => 200,
+            61..=80 => 50,
+            81..=110 => 90,
+            _ => 255,
+        },
+        ..scene
+    });
+    // The window starts at line 90 with row 0 and stays to line 143.
+    assert_frame(&system, &expected, "latched");
+}
+
+#[test]
+fn the_y_condition_is_set_while_the_window_is_disabled() {
+    // DMG: the Y condition does not depend on LCDC bit 5 (Pan Docs notes
+    // the reset on clearing bit 5 for GBC only). Enabled after line WY,
+    // the window starts with row 0.
+    let scene = Scene {
+        lcdc: 0x11,
+        wx: 20,
+        wy: 30,
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    run_to_hblank(&mut system, 70);
+    system.memory.write(LCDC, 0x80 | 0x31);
+    run_to_publication(&mut system);
+    let expected = expected_frame_by_line(|ly| Scene {
+        lcdc: if ly > 70 { 0x31 } else { 0x11 },
+        ..scene
+    });
+    assert_frame(&system, &expected, "enabled after WY");
+}
+
+#[test]
+fn the_y_condition_and_line_counter_restart_every_frame() {
+    // Cleared at VBlank: the next frame starts the window at its own WY
+    // with row 0, and an unchanged frame repeats exactly.
+    let first = Scene {
+        lcdc: 0x31,
+        wx: 7,
+        wy: 10,
+        ..SCROLLED
+    };
+    let second = Scene {
+        wx: 50,
+        wy: 60,
+        ..first
+    };
+    let mut system = enabled_with(first);
+    run_to_publication(&mut system);
+    assert_frame(&system, &expected_frame(first), "first");
+    write_registers(&mut system, second); // During VBlank.
+    for frame in 0..2 {
+        run_to_publication(&mut system);
+        assert_frame(
+            &system,
+            &expected_frame(second),
+            &format!("frame {frame} after"),
+        );
+    }
+}
+
+#[test]
+fn lyc_and_stat_writes_mid_frame_leave_the_window_alone() {
+    // dmg-acid2 changes LYC from LY=LYC interrupts every few lines; only
+    // VBlank and an LCD restart reset the Y condition and line counter.
+    let scene = Scene {
+        lcdc: 0x31,
+        wx: 30,
+        wy: 20,
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    for (ly, lyc) in [(10u8, 11u8), (40, 41), (60, 0), (100, 101)] {
+        run_to_hblank(&mut system, ly);
+        system.memory.write(LYC, lyc);
+        system.memory.write(STAT, 0x40);
+    }
+    run_to_publication(&mut system);
+    assert_frame(&system, &expected_frame(scene), "LYC rewritten");
 }

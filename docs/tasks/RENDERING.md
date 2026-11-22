@@ -1,6 +1,6 @@
 # Rendering into a framebuffer
 
-Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). R1 is complete (2026-11-22); see [testing](../TESTING.md#rendering-r1-frame-publication-and-background-81). The user implements; the assistant owns the tests, fixture wiring and review.
+Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). R1 and R2 are complete (2026-11-22); see testing for [R1](../TESTING.md#rendering-r1-frame-publication-and-background-81) and [R2](../TESTING.md#rendering-r2-the-window-82). The user implements; the assistant owns the tests, fixture wiring and review.
 
 This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the later SDL2 frontend, whose scope is agreed separately. The core stays independent of SDL2.
 
@@ -17,7 +17,12 @@ Coordinates: `x` 0-159, `ly` 0-143. A *colour index* is the 2-bit value from til
 
 1. **Background** (LCDC bit 0 set). Pixel `(x, ly)` reads the background at `((SCX + x) mod 256, (SCY + ly) mod 256)`. The tile map is 9C00 if LCDC bit 3 is set, else 9800 (32×32 tile numbers). Tile data: LCDC bit 4 set uses 8000 with unsigned tile numbers; clear uses 9000 with signed tile numbers (8800-97FF). Each tile row is two bytes: the low bit plane, then the high bit plane; bit 7 is the leftmost pixel. Shade = `(BGP >> (2 * index)) & 3`.
 2. **Background disabled** (LCDC bit 0 clear, DMG): background and window are blank, colour index 0 shaded through BGP. Objects still draw and see background index 0 for priority.
-3. **Window** (LCDC bits 5 and 0 set). The window starts on the first line of a frame where `ly == WY` (latched for the rest of the frame) and covers pixels with `x + 7 >= WX` when `WX <= 166`. It uses its own tile map (9C00 if LCDC bit 6 set, else 9800), the same tile data selection, and an **internal line counter**: row 0 on the first line it draws, incremented only after lines where it was actually drawn, reset each frame. Window pixels replace background pixels.
+3. **Window** (LCDC bits 5 and 0 set). Checked against Pan Docs (Window, Tile Maps, LCDC) on 2026-11-22.
+   - **Y condition.** It becomes true at the start of a line where `LY == WY` and stays true until VBlank clears it. On DMG this does not depend on LCDC bit 5, so a window enabled after its WY line still appears (GBC resets it when bit 5 is cleared). The renderer checks at the start of Drawing, so WY writes during OAM scan are a known limit.
+   - **Horizontal.** The window covers pixels with `x + 7 >= WX` on lines where the Y condition is true and `WX <= 166`. WX 1-6 start it off the left edge; WX 167 and above and WY 144 and above hide it.
+   - **Content.** It uses its own tile map (9C00 if LCDC bit 6 set, else 9800) and the same tile data selection as the background. It ignores SCX and SCY. Window pixels replace background pixels.
+   - **Internal line counter.** Row 0 on the first line the window is drawn. It increments only after lines where it was drawn, so hiding the window by LCDC bit 5 or by WX pauses it and showing it again resumes the next row. It resets each frame (Pan Docs does not state the reset; it follows from the Y condition clearing at VBlank).
+   - **Not modelled (DMG quirks, provisional):** WX 0 (shifted left by `SCX % 8`), WX 166 (full-width window one line lower), and the single colour-0 pixel inserted when bit 5 is clear but the other conditions hold. dmg-acid2 does not use them. Whether the counter advances while LCDC bit 0 is clear is not stated and not tested.
 4. **Object selection** (LCDC bit 1 set). For each line, scan OAM in order and select the first 10 objects with `ly + 16` in `[Y, Y + height)`, where height is 16 if LCDC bit 2 is set, else 8. X is not considered when selecting, so off-screen objects still count toward the 10.
 5. **Object pixels.** Object `x` position is `X - 8`. Attributes: bit 7 BG priority, bit 6 Y flip, bit 5 X flip, bit 4 palette (OBP1 if set, else OBP0). Tile data always uses 8000 unsigned. For 8×16 objects bit 0 of the tile number is ignored (top tile `n & 0xFE`, bottom `n | 1`), and Y flip mirrors all 16 rows. Colour index 0 is transparent.
 6. **Object priority.** At each pixel, take the highest-priority selected object whose pixel there is not transparent: smaller X wins, and with equal X the lower OAM index wins. Transparent pixels let lower-priority objects show through. Object-to-object priority is resolved first, then the winner's BG-priority bit: it is hidden where the background/window colour index is 1-3, and in that case no lower-priority object shows there either. (Pan Docs, object priority; the exact text is to be confirmed before R3.)
@@ -43,7 +48,7 @@ Coordinates: `x` 0-159, `ly` 0-143. A *colour index* is the 2-bit value from til
 
 ## Host interface (agreed 2026-11-21, implemented in R1)
 
-The tests name these. Internals are the user's choice. The implementation also adds `Shade::from_bits` (low two bits).
+The tests name these. Internals are the user's choice. The implementation also adds a crate-internal `Shade::from_bits` (low two bits).
 
 - A public `video` module at the crate root holds the host-facing types, with no PPU internals:
   - `Shade`: `White`, `LightGray`, `DarkGray`, `Black` (shades 0-3).
@@ -58,7 +63,7 @@ Each slice is a separate issue with tests written first.
 | Slice | Scope | Evidence |
 | --- | --- | --- |
 | R1 [#81](https://github.com/Lorithan/gameboy-emu/issues/81), complete 2026-11-22 | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
-| R2 [#82](https://github.com/Lorithan/gameboy-emu/issues/82) | Window (rule 3) | WX/WY edges, the line counter across lines where the window is turned off and on, WY latching |
+| R2 [#82](https://github.com/Lorithan/gameboy-emu/issues/82), complete 2026-11-22 | Window (rule 3) | 9 tests in `src/system/tests/rendering.rs`: WX 1-8, 50, 159, 165 and 167+, WY 1, 77, 143 and 144+; both window maps with both tile data modes under scroll; bit 5 and bit 0 hiding; the counter paused by bit 5 and by WX; the Y condition latching, set while disabled, and restarting each frame. Validated against a throwaway reference: 11 mutants killed; a mid-frame LYC/STAT test added in review. The 42 fixtures keep their counts |
 | R3 [#83](https://github.com/Lorithan/gameboy-emu/issues/83) | Objects (rules 4-6) | Selection limit and order, X/Y flip, 8×16, palettes, priority ties, BG priority with LCDC bit 0 clear |
 | R4 [#84](https://github.com/Lorithan/gameboy-emu/issues/84) | dmg-acid2 fixture | Provenance recorded first; the frame matches `reference-dmg.png` exactly; how the reference is compared without adding a dependency is decided then |
 

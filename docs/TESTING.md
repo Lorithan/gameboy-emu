@@ -1,6 +1,16 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #81 rendering R1 on 2026-11-22: **592 passed, zero failed**, with `--include-ignored` (428 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #82 rendering R2 on 2026-11-22: **601 passed, zero failed**, with `--include-ignored` (437 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+
+## Rendering R2: the window (#82)
+
+Contract: [rendering](tasks/RENDERING.md), rule 3 (checked against Pan Docs Window, Tile Maps and LCDC). Latest fixture-inclusive regression after the user's R2 implementation, 2026-11-22: **601 passed, zero failed** (437 unit, 164 integration), including the 42 hash-verified gated fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six fixture scripts pass.
+
+- **System tests (9),** `system::tests::rendering`, against the same independent model extended with the window: WX 1, 6, 7, 8, 50, 159, 165, 167, 200 and 255 and WY 1, 77, 143, 144 and 255 under a scroll the window must ignore; all four combinations of LCDC bits 3 and 6 with both tile-data modes; bit 5 clear and bit 0 clear hiding the window; the line counter paused by bit 5 and by WX 200 and resuming on the next row; the Y condition latching (a WY already passed never triggers, a later one does, moving WY afterwards does not hide it); the Y condition set while bit 5 is clear (DMG); the Y condition and counter restarting each frame; and LYC/STAT writes mid-frame leaving the window alone.
+- **Before implementation:** six of the first eight tests failed against the background-only renderer; the two hiding tests passed vacuously, as expected. A throwaway reference window in a scratch worktree (never committed) passed all of them, and each of eleven deliberate breaks failed at least one test: no latch, counter on every line, no frame reset, background map used, WX-8 offset, no WX ≤ 166 check, window scrolled, latch requiring bit 5, row from LY − WY, bit 5 ignored, window drawn with bit 0 clear.
+- **Review:** the first implementation drew a fixed pixel and did not latch the Y condition (six failures), and reset the window state in `write_lyc`, which no test covered. The LYC/STAT test was added for it and fails with that reset restored.
+- **Fixtures:** all 42 gated counts are identical to #81, compared ROM by ROM against a single-threaded run of the previous commit.
+- **What this proves:** the window follows the sourced rules at every pixel of the tested configurations. Not modelled: the DMG quirks at WX 0 and WX 166, and the colour-0 pixel inserted when bit 5 is clear. dmg-acid2 (#84) is the external check. Objects are not drawn yet.
 
 ## Rendering R1: frame publication and background (#81)
 
