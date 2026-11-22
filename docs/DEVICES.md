@@ -98,7 +98,18 @@ Write-raised requests set IF after the access, so the CPU samples them one step 
 - **LCD off:** never blocked; disabling mid-Drawing unblocks the next access.
 - **FEA0-FEFF:** unchanged FF/ignored fallback in every mode. The DMG 00 read and the OAM corruption bug are deferred together.
 
-Accesses see the position after their M-cycle's ticks. VBlank-line transitions, the ends of lines 143-153 and the line-153 window are not covered by the pinned ROMs and stay provisional. No unrestricted rendering or DMA path exists yet.
+Accesses see the position after their M-cycle's ticks. VBlank-line transitions, the ends of lines 143-153 and the line-153 window are not covered by the pinned ROMs and stay provisional. No rendering path exists yet; OAM DMA bypasses these locks (see below).
+
+## OAM DMA
+
+[#80](https://github.com/Lorithan/gameboy-emu/issues/80) implements FF46 OAM DMA to the [agreed contract](tasks/OAM_DMA.md). Bus owns the state: the FF46 byte, an optional running transfer (source page, next index) and an optional pending start (source page, cycles left). The register starts at FF and reads back the last write at all times.
+
+- **Timeline:** the FF46 write is M0. `advance_mcycle` steps DMA once per M-cycle, after the four PPU/timer ticks: the pending start first, then one byte. Byte 0 is copied in M2's advance and byte 159 in M161's; the transfer is active for the CPU accesses of M2-M161 and cleared in M162's advance.
+- **Restart:** a write while active only replaces the pending start; the old transfer keeps copying through M1 and is replaced at M2. A write before a start has begun replaces that pending start.
+- **Source:** a Bus-only read maps E000 and above down by 0x2000, reads ROM, WRAM and VRAM storage directly (VRAM through Ppu's lock-free `read_vram_dma`), returns FF for A000-BFFF and other areas, and has no side effects.
+- **Destination:** Ppu's `write_oam_dma` writes OAM without the PPU-mode locks.
+- **CPU access:** while a transfer is active, CPU reads of FE00-FE9F return FF and writes are ignored, checked in Bus before the PPU's own locks. All other addresses behave normally: no bus conflicts are modelled.
+- **Independence:** runs with the LCD on or off and during HALT; does not advance during STOP; requests no interrupts.
 
 ## Interrupt registers
 

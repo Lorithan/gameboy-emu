@@ -1,0 +1,19 @@
+{
+    "suite": "Gekkio/mooneye-test-suite",
+    "source_revision": "31510e12eea6286d36eea060a6adde755e1067aa",
+    "shared_provenance_manifest": "mooneye-reg-f.json",
+    "archive_sha256": "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+    "verification": "All five ROMs and symbol files match their pinned official ZIP entries; source blob SHAs match the GitHub tree at the pinned revision (checked 2026-11-21)",
+    "target": "DMG current skipped-boot model with the #80 OAM DMA contract (docs/tasks/OAM_DMA.md)",
+    "components": "Inherit official prebuilt WLA-DX workflow, MIT notice and separate Darkrose font provenance/limits from the shared manifest; no independently reproduced build or binary redistribution",
+    "reporting": "Audited bodies write no SB/SC; all report through common quit (quit_ok, quit_check_asserts, quit_failure_string, quit_inline). Require the first packet and B/C/D/E/H/L signature. All five are ROM-only (header 0147 = 00) and DMG-verified in their source headers.",
+    "limits_review": "Bounded 40-iteration DMA waits and VBlank waits in the bodies; the common on-screen reporter may use wait_ly_with_timeout (silent 851968 M-cycle timeouts), so counts are recorded and must stay below that. Existing 1000000 M-cycle and 10 host-second caps are kept.",
+    "excluded": "oam_dma/sources-GS (MBC5 cartridge, outside planned scope); its source table is reproduced in memory::tests::oam_dma. madness/mgb_oam_dma_halt_sprites (MGB, needs sprite rendering).",
+    "fixtures": [
+        {"id": "oam_dma/basic", "source_git_blob_sha": "ab3cbf54c6bd11f88fc9d609e66d49d4b6c9de2c", "sha256": "326b747cac8cc96b62d6ee508e73b87eda24bfe29553d3d32e719f3b6d76c97c", "symbols_sha256": "c6465a3706f465bb7f9b4a6b4edcd626fa0d2cc63b38c293694e3a4a0f3834df", "checks": "All 160 bytes copied from a ROM source"},
+        {"id": "oam_dma/reg_read", "source_git_blob_sha": "67b7735e84000da8a390269868d338e142d00d4e", "sha256": "006516fcb302867a2848b47529208ef530669c6445e41d4f3d2dbd33995154a3", "symbols_sha256": "b2560f63b2832254eb630a6e7e0c64e6a39bf0b822fb9a03c14d272a68c523b1", "checks": "FF46 reads the last written value during and after transfers"},
+        {"id": "oam_dma_timing", "source_git_blob_sha": "62b0c606e0766554c17721ae9cf5fc1b31b89698", "sha256": "e8477c5da80e4fb7999da08abf01ad2438d65fb308a8f0c36b0c7e464c0ad0e0", "symbols_sha256": "1f59c7ce2f467a3324498cf539ab165fde75ab3f3eb7ecf6ff0e671729a4eddd", "checks": "OAM blocked at M161, readable at M162"},
+        {"id": "oam_dma_restart", "source_git_blob_sha": "08328144f905c1651dbd2061ac02d02dc8493af3", "sha256": "5234eaaa78fcf722a4c8d32bb4f108c65c24e327d062315c6b61f60e535e25de", "symbols_sha256": "51272797120ce50c599a611054fa15d72ad0fe4386093ed3f3198f9b08839e6d", "checks": "A restart ends 161 M-cycles after the second write"},
+        {"id": "oam_dma_start", "source_git_blob_sha": "aff65dd6cb10d91bfa36e6e4c4a4f4b4aad2e871", "sha256": "7c39f8f6f8043fe0ea289d8015b3e72c125ac302a22159b49514dd4e78d89dd3", "symbols_sha256": "b88947cb23c2ffcb6d2865a47800e7a795aef143696e3db0da25da09e4db0233", "checks": "M1 accessible, M2 blocked; a restart keeps the old transfer blocking during M0-M1"}
+    ]
+}

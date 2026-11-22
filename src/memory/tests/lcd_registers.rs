@@ -91,7 +91,7 @@ fn passive_lcd_all_bytes_preserve_other_registers_storage_irq_phase_and_instance
 }
 
 #[test]
-fn passive_lcd_mapping_keeps_status_ly_dma_and_neighbors_unmapped() {
+fn passive_lcd_mapping_keeps_neighbors_unmapped() {
     let (mut bus, _) = fixture();
     for (index, &(address, _)) in REGISTERS.iter().enumerate() {
         bus.write(address, 0x20 + index as u8);
@@ -101,7 +101,8 @@ fn passive_lcd_mapping_keeps_status_ly_dma_and_neighbors_unmapped() {
     let original: Vec<_> = (0u16..=u16::MAX).map(|addr| bus.read(addr)).collect();
     let timer = bus.timer;
     // FF40 (#74) and FF41/FF44 (#75) are mapped; see memory::ppu::tests.
-    for address in [0xFF3F, 0xFF46, 0xFF4C] {
+    // FF46 is mapped by #80; see memory::tests::oam_dma.
+    for address in [0xFF3F, 0xFF4C] {
         assert_eq!(bus.read(address), 0xFF);
         for value in [0, 0x5A, 0xFF] {
             bus.write(address, value);

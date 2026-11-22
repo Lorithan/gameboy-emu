@@ -172,7 +172,7 @@ fn ldh_c_and_immediate_forms_agree_with_absolute_addressing_for_every_offset() {
                 complete(&mut system, if immediate { 3 } else { 2 });
                 complete(&mut system, 4);
                 let mapped =
-                    matches!(offset, 5 | 6 | 0x40 | 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF);
+                    matches!(offset, 5 | 6 | 0x40 | 0x42..=0x43 | 0x45..=0x4B | 0x80..=0xFF);
                 assert_eq!(
                     system.cpu_snapshot().af,
                     u16::from(if offset == 0 {

@@ -9,6 +9,7 @@ mod divider_oracle;
 mod halt;
 mod joypad;
 mod lcd_registers;
+mod oam_dma;
 mod ppu_access;
 mod ppu_interrupts;
 mod ppu_memory;
@@ -1443,7 +1444,9 @@ fn ldh_stores_follow_joyp_lcd_ie_and_hram_mapping_at_final_completion() {
                     }
                     if store
                         && phase == cycles
-                        && matches!(offset, 0x42..=0x43 | 0x45 | 0x47..=0x4B | 0x80..=0xFF)
+                        // FF46 reads back the stored byte since #80; the
+                        // transfer it schedules has not started at M0.
+                        && matches!(offset, 0x42..=0x43 | 0x45..=0x4B | 0x80..=0xFF)
                     {
                         expected[usize::from(0xFF00u16 + u16::from(offset))] = 0x5A;
                     }

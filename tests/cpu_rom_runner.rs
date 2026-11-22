@@ -202,6 +202,38 @@ fn mooneye_ppu_regression_lcdon_write_timing_gs() {
     );
 }
 
+// #80: pinned Mooneye OAM DMA ROMs (tests/fixtures/mooneye-oam-dma.json).
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-oam-dma.ps1"]
+fn mooneye_oam_dma_basic() {
+    run_cpu_fixture("acceptance/oam_dma/basic.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-oam-dma.ps1"]
+fn mooneye_oam_dma_reg_read() {
+    run_cpu_fixture("acceptance/oam_dma/reg_read.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-oam-dma.ps1"]
+fn mooneye_oam_dma_timing() {
+    run_cpu_fixture("acceptance/oam_dma_timing.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-oam-dma.ps1"]
+fn mooneye_oam_dma_restart() {
+    run_cpu_fixture("acceptance/oam_dma_restart.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-oam-dma.ps1"]
+fn mooneye_oam_dma_start() {
+    run_cpu_fixture("acceptance/oam_dma_start.gb");
+}
+
 // #79: pinned Mooneye HALT/EI/DI/interrupt-entry ROMs
 // (tests/fixtures/mooneye-cpu-interrupts.json).
 

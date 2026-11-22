@@ -1,6 +1,27 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #73 D3 on 2026-11-21: **563 passed, zero failed**, release build, no-fail-fast with `--include-ignored` (405 unit, 158 integration), including 37 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all five checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #80 OAM DMA on 2026-11-21: **580 passed, zero failed**, with `--include-ignored` (417 unit, 163 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+
+## OAM DMA (#80)
+
+Contract and decisions: [OAM DMA](tasks/OAM_DMA.md). Latest fixture-inclusive regression after the user's #80 implementation, 2026-11-21: **580 passed, zero failed** (417 unit, 163 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+
+- **Bus tests (8),** `memory::tests::oam_dma`: FF46 startup value and readback at every M-cycle of a transfer; OAM readable at M1, FF from M2 to M161 and holding the source at M162; all 160 bytes from every one of the 256 source pages, against an independent model of rule 4 (ROM, VRAM, absent external RAM, WRAM, E0-FF minus 0x2000); restarts written at M2, 3, 4, 7, 8, 80, 159, 160 and 161; a second write before the start; CPU OAM writes ignored while active; the copy landing during OamScan and Drawing with the LCD on, from a VRAM source; and no other memory, IF or timer change against a reference Bus that never started a transfer (LCD on and off).
+- **System tests (4),** `system::tests::oam_dma`: an oam_dma_timing reproduction run from ROM, instruction-budget pauses, a transfer continuing across HALT, and an HRAM routine like Mooneye's `dma_proc`.
+- **Migrated tests (4):** the LCD gap test, the unimplemented-address test, the System LDH store test and the integration LDH round-trip test now treat FF46 as mapped. The unimplemented-address and integration LDH tests were missed when the DMA tests were written; they failed against the implementation and were then updated.
+- **Before implementation:** 11 of the 12 new tests and the System LDH store test failed at their first DMA assertion, and all five ROMs reported failure. The no-conflict test passed vacuously, as expected with no transfer. During implementation, review caught a transfer ending one M-cycle early, the last byte not being copied and the CPU read path being used for the source (VRAM lock, pages FE/FF); the LCD-on test then caught the remaining VRAM lock on the DMA path. One test-model bug was fixed: the ROM pattern omitted the header checksum byte at 014D.
+- **Fixtures (5),** [manifest](../tests/fixtures/mooneye-oam-dma.json) and `run-mooneye-oam-dma.ps1`:
+
+| Fixture | M-cycles |
+| --- | ---: |
+| oam_dma/basic | 185,071 |
+| oam_dma/reg_read | 181,355 |
+| oam_dma_timing | 235,872 |
+| oam_dma_restart | 235,871 |
+| oam_dma_start | 257,248 |
+
+  All are well below one silent 851,968 M-cycle LY-wait timeout. The other 37 gated counts are identical to a clean run of `834f631`.
+- **What this proves:** the DMG start delay, 160-M-cycle blocking window, restart behaviour and FF46 readback that the five ROMs measure, and the source mapping reproduced from sources-GS. It does not prove bus-conflict behaviour (not modelled, decision 1), the FF46 startup value (no pinned ROM), or the restart-at-M161 and two-writes-within-two-M-cycles cases, which are tested locally against the derived rules only; those remain provisional.
 
 ## LCD-enable timing (#73 D3)
 
@@ -120,7 +141,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-An ordinary fixture-free checkout explicitly ignores eighteen external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
+An ordinary fixture-free checkout explicitly ignores 43 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-reg-f.ps1
@@ -128,6 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cp
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-timer.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-ppu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-interrupts.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-oam-dma.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:

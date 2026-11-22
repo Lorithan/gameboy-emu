@@ -1,6 +1,6 @@
 # OAM DMA (FF46) contract
 
-Proposed and agreed 2026-11-21 for the next M4 slice ([#80](https://github.com/Lorithan/gameboy-emu/issues/80)): the user chose Bus ownership (decision 3); decisions 1 and 2 are adopted as proposed and each is pinned by one named test, so either can be revisited cheaply. The user implements; the assistant owns the tests, fixture wiring and review.
+Complete 2026-11-21 ([result](#result-complete-2026-11-21)). Proposed and agreed 2026-11-21 for the M4 slice ([#80](https://github.com/Lorithan/gameboy-emu/issues/80)): the user chose Bus ownership (decision 3); decisions 1 and 2 are adopted as proposed and each is pinned by one named test, so either can be revisited cheaply. The user implements; the assistant owns the tests, fixture wiring and review.
 
 OAM DMA copies 160 bytes from `XX00-XX9F` into OAM (`FE00-FE9F`) when the CPU writes `XX` to FF46. Games start it from an HRAM routine every frame to update sprites, so sprite rendering will depend on it.
 
@@ -45,7 +45,7 @@ M-cycle numbers count from the M-cycle whose CPU access is the FF46 write (M0). 
 2. Rule 1: FF46 starts at FF (adopted as proposed; test `ff46_starts_at_ff_and_every_write_reads_back_at_every_phase`).
 3. Bus owns the transfer state and the "DMA active blocks CPU OAM" check (agreed). Ppu gains only a DMA-path OAM write that bypasses the CPU locks.
 
-## Acceptance (assistant; tests written 2026-11-21, failing until implementation)
+## Acceptance (assistant; tests written 2026-11-21, all met)
 
 - **Local Bus tests:**
   - the timeline at every M-cycle from M0 to M163: OAM readable at M1, FF from M2 to M161, data at M162;
@@ -59,3 +59,12 @@ M-cycle numbers count from the M-cycle whose CPU access is the FF46 write (M0). 
 - **System tests:** a transfer continues across HALT; instruction-budget pauses do not change the result; an HRAM routine like Mooneye's `dma_proc` completes.
 - **Fixtures:** the five ROM-only Mooneye DMA ROMs pinned in a manifest with a checksum-gated script, all passing, with M-cycle counts recorded. The 37 existing fixtures keep their counts.
 - Full suite, fmt and strict Clippy pass.
+
+## Result (complete 2026-11-21)
+
+The user's implementation follows the agreed ownership: a Bus-owned `OamDma` with separate register, running-transfer and pending-start state; a Bus source read with the E000+ mapping; and Ppu's lock-free `read_vram_dma` and `write_oam_dma`. All acceptance items are met:
+
+- 12 new tests (8 Bus, 4 System) and 4 migrated tests pass; full suite 580 passed (417 unit, 163 integration); fmt and strict Clippy pass.
+- The five Mooneye ROMs pass: basic 185,071, reg_read 181,355, oam_dma_timing 235,872, oam_dma_restart 235,871 and oam_dma_start 257,248 M-cycles. The 37 earlier fixtures keep their counts.
+
+Still provisional: the FF46 startup value, bus conflicts (decision 1), a restart written at M161, two writes within two M-cycles, and DMA reads of VRAM during Drawing. See [testing](../TESTING.md#oam-dma-80).

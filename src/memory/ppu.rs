@@ -38,6 +38,10 @@ impl Ppu {
         }
     }
 
+    pub(super) fn read_vram_dma(&self, offset: usize) -> u8 {
+        self.vram[offset]
+    }
+
     pub(super) fn write_vram(&mut self, offset: usize, value: u8) {
         if !self.vram_write_blocked() {
             self.vram[offset] = value;
@@ -56,6 +60,10 @@ impl Ppu {
         if !self.oam_write_blocked() {
             self.oam[offset] = value;
         }
+    }
+
+    pub(super) fn write_oam_dma(&mut self, offset: usize, value: u8) {
+        self.oam[offset] = value;
     }
 
     pub(super) fn read_scy(&self) -> u8 {
