@@ -1,6 +1,6 @@
-# Rendering into a framebuffer (proposal)
+# Rendering into a framebuffer
 
-Proposed 2026-11-21 for M4; **not yet agreed**. No issue exists yet; issues follow once the slices are agreed. The user implements; the assistant owns the tests, fixture wiring and review.
+Proposed and agreed 2026-11-21 for M4 (decisions below; the host interface names await confirmation). The user implements; the assistant owns the tests, fixture wiring and review.
 
 This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the later SDL2 frontend, whose scope is agreed separately. The core stays independent of SDL2.
 
@@ -27,29 +27,40 @@ Coordinates: `x` 0-159, `ly` 0-143. A *colour index* is the 2-bit value from til
 
 - **Scanline renderer.** Each visible line is rendered in one step when timing enters Drawing (dot 80 of lines 0-143), using VRAM, OAM and registers as they are at that moment. Mode 3 keeps its fixed 172-dot length. This covers register writes made during HBlank and OAM scan, which is what dmg-acid2 and most games use. Mid-line effects (writes during mode 3) apply to the next line instead of mid-line, a known limit. A pixel-FIFO renderer would remove that limit but needs variable mode-3 length, which the D3 calibration does not have; it would be a separate later issue.
 - **Ownership.** Ppu owns the renderer state (window line counter, WY latch, the frame in progress and the last complete frame). The line renderer reads Ppu storage directly, not through the CPU's locked accessors.
-- **Boundary.** The per-line work can be a function from (VRAM, OAM, registers, line, window state) to 160 shades, in its own Ppu submodule. That keeps it testable without clocking a whole frame. Your choice of exact signature.
+- **Boundary.** The per-line work can be a function from (VRAM, OAM, registers, line, window state) to 160 shades, in its own Ppu submodule. That keeps it testable without clocking a whole frame. Your choice of exact signature. Each visible line maps 2-bit colour indices to `Shade` through the palettes.
 - **Host interface.** System exposes, read-only:
   - the last complete frame, as a public `Frame` type with width and height constants and a way to read a shade at `(x, y)` or all pixels as a slice;
   - a count of completed frames, so the host can tell when a new frame is ready by comparing it to the last value it saw.
 
   No new step result or callback is needed; the host polls after each batch of steps.
 
-## Decisions
+## Decisions (agreed 2026-11-21)
 
-1. **Scanline renderer at the start of Drawing** (proposed above) vs. pixel FIFO now.
-2. **Frame publication:** two buffers in Ppu, copied (or swapped) at VBlank entry, plus a completed-frame counter (proposed) vs. a single buffer the host reads whenever it likes (simpler, but it can show a half-drawn frame).
-3. **LCD off:** proposed: when the LCD is turned off, the published frame becomes all shade 0 and the counter increments once, so the host shows a blank screen; no frames are produced while it stays off. The first frame after turning it back on is published normally (hardware shows it blank; provisional). Alternative: leave the last frame visible and let the host decide.
-4. **Pixel type:** a `u8` holding 0-3 with that invariant documented, or a small `Shade` enum. The enum makes invalid shades unrepresentable; the `u8` is simpler to compare against reference images. Your call; tests can be written either way.
-## Proposed slices
+1. **Scanline renderer** at the start of Drawing, with mode 3 kept at its fixed length. Pixel FIFO and variable mode-3 length are deferred to a later calibration issue (the `hblank_ly_scx_timing-GS` and `intr_2_mode0_timing_sprites` probes belong to it).
+2. **Double-buffered frame:** Ppu draws into one buffer and publishes it at VBlank entry; a completed-frame counter increments on each publication.
+3. **LCD off publishes a blank frame:** turning the LCD off publishes one all-`White` frame and increments the counter once; no frames are produced while it stays off. The first frame after turning it back on is published normally (hardware shows it blank; provisional).
+4. **Shades are an enum**, so an invalid shade cannot be represented.
+
+## Host interface (proposed, for the user to confirm before R1 tests)
+
+The tests name these, so they are fixed before the tests are written. Internals stay the user's choice.
+
+- A public `video` module at the crate root holds the host-facing types, with no PPU internals:
+  - `Shade`: `White`, `LightGray`, `DarkGray`, `Black` (shades 0-3).
+  - `Frame`: `Frame::WIDTH` (160) and `Frame::HEIGHT` (144) constants, `pixel(x, y) -> Shade` (panics out of range), and `pixels() -> &[Shade]` in row-major order (`y * WIDTH + x`).
+- `System::frame(&self) -> &Frame`: the last published frame. Before the first publication it is all `White`.
+- `System::frames_completed(&self) -> u64`: starts at 0 and increments on each publication (each VBlank entry with the LCD on, and once per LCD disable).
+
+## Slices
 
 Each slice is a separate issue with tests written first.
 
 | Slice | Scope | Evidence |
 | --- | --- | --- |
-| R1 | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
-| R2 | Window (rule 3) | WX/WY edges, the line counter across lines where the window is turned off and on, WY latching |
-| R3 | Objects (rules 4-6) | Selection limit and order, X/Y flip, 8×16, palettes, priority ties, BG priority with LCDC bit 0 clear |
-| R4 | dmg-acid2 fixture | Provenance recorded first; the frame matches `reference-dmg.png` exactly; how the reference is compared without adding a dependency is decided then |
+| R1 [#81](https://github.com/Lorithan/gameboy-emu/issues/81) | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
+| R2 [#82](https://github.com/Lorithan/gameboy-emu/issues/82) | Window (rule 3) | WX/WY edges, the line counter across lines where the window is turned off and on, WY latching |
+| R3 [#83](https://github.com/Lorithan/gameboy-emu/issues/83) | Objects (rules 4-6) | Selection limit and order, X/Y flip, 8×16, palettes, priority ties, BG priority with LCDC bit 0 clear |
+| R4 [#84](https://github.com/Lorithan/gameboy-emu/issues/84) | dmg-acid2 fixture | Provenance recorded first; the frame matches `reference-dmg.png` exactly; how the reference is compared without adding a dependency is decided then |
 
 ## Not in scope
 
