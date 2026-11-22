@@ -25,7 +25,7 @@ pub(super) struct Ppu {
     back_frame: Frame,
     frames_completed: u64,
     window_line_counter: usize,
-    wy_equals_ly: bool,
+    window_y_triggered: bool,
 }
 
 impl Ppu {
@@ -39,7 +39,7 @@ impl Ppu {
             back_frame: Frame::new(),
             frames_completed: 0,
             window_line_counter: 0,
-            wy_equals_ly: false,
+            window_y_triggered: false,
         }
     }
 
@@ -176,7 +176,7 @@ impl Ppu {
             // Clear frame
             self.front_frame = Frame::new();
             self.frames_completed += 1;
-            self.wy_equals_ly = false;
+            self.window_y_triggered = false;
             self.window_line_counter = 0;
         } else if !old_enable && new_enabled {
             self.timing = PpuTiming::lcd_on();
@@ -227,7 +227,7 @@ impl Ppu {
     }
 
     fn publish_frame(&mut self) {
-        self.wy_equals_ly = false;
+        self.window_y_triggered = false;
         self.window_line_counter = 0;
 
         std::mem::swap(&mut self.back_frame, &mut self.front_frame);
@@ -305,7 +305,7 @@ impl Ppu {
         let by = scy.wrapping_add(ly) as usize;
 
         if ly == wy {
-            self.wy_equals_ly = true;
+            self.window_y_triggered = true;
         }
 
         let bg_enabled = lcdc & (1 << 0) != 0;
@@ -313,17 +313,19 @@ impl Ppu {
         let window_map: usize = if lcdc & (1 << 6) != 0 { 0x1C00 } else { 0x1800 };
         let unsigned_tiles = lcdc & (1 << 4) != 0;
         let window_flag = lcdc & (1 << 5) != 0;
-        let window_drawn = self.wy_equals_ly && window_flag && wx <= 166;
+        let window_drawn = self.window_y_triggered && window_flag && wx <= 166;
 
         for x in 0..Frame::WIDTH {
-            let (px, py, map) = if window_drawn && x + 7 >= wx as usize {
-                (x + 7 - wx as usize, self.window_line_counter, window_map)
-            } else {
-                // Calculate background column
-                let bx = scx.wrapping_add(x as u8) as usize;
-                (bx, by, map_start)
-            };
             let index = if bg_enabled {
+                let (px, py, map) = if window_drawn && x + 7 >= wx as usize {
+                    // Calculate the window column
+                    (x + 7 - wx as usize, self.window_line_counter, window_map)
+                } else {
+                    // Calculate background column
+                    let bx = scx.wrapping_add(x as u8) as usize;
+                    (bx, by, map_start)
+                };
+
                 //  Read the tile number stored in the map.
                 let tile_number = self.vram[map + (py / 8) * 32 + (px / 8)];
 
