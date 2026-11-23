@@ -2,7 +2,7 @@
 
 Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
 
-## Frontend F4: demo ROMs (#88, in progress)
+## Frontend F3 and F4: input and demo ROMs (#87, #88)
 
 Manifest: [demo-roms.json](../tests/fixtures/demo-roms.json). On 2026-11-23, `cargo test --workspace -- --include-ignored` passes **638, zero failed** (613 core, 25 frontend). fmt and workspace-wide strict Clippy pass.
 
@@ -10,7 +10,7 @@ Manifest: [demo-roms.json](../tests/fixtures/demo-roms.json). On 2026-11-23, `ca
 - **Pinning:** `run-demo-roms.ps1` checks the SHA-256 of both ROMs and both licence files before running Cargo. Nothing is committed: the files stay under `target/test-roms`.
 - **Smoke tests (2),** `tests/demo_roms.rs`: each ROM runs headless like the frontend, with no core error or STOP. After button presses, Snake goes from 1 to 159 distinct pictures and MaxPirate from 3 to 20. With the presses disabled both fail, so the check depends on input reaching the game.
 - **APU:** neither game hangs without sound hardware. MaxPirate's hUGEDriver music runs against the unimplemented sound registers.
-- **Not yet done:** the manual play-through in the window, and the F3 key checklist.
+- **Manual play-through (2026-11-23):** the user played both games in the release frontend with no problems, and the F3 key checklist passed ([results](tasks/FRONTEND.md#f3-and-f4-result-complete-2026-11-23)).
 - **What this proves:** both games boot, draw, keep running and react to buttons through the core. It does not show that they play correctly; the play-through checks that.
 
 ## Frontend F2: SDL3 window and timer pacing (#86)

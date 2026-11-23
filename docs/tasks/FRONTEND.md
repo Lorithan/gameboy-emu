@@ -49,8 +49,8 @@ Each is a separate issue with acceptance criteria written first.
 | --- | --- | --- |
 | F1 [#85](https://github.com/Lorithan/gameboy-emu/issues/85), complete 2026-11-22 | Workspace split, core library-only, empty `gameboy-sdl` binary | `cargo build --workspace`; full suite, fmt, strict Clippy across the workspace; all seven fixture scripts pass with identical counts |
 | F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86), complete 2026-11-22 | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
-| F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87) | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
-| F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88) | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
+| F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87), complete 2026-11-23 | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
+| F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88), complete 2026-11-23 | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
 
 ## F2 contract (agreed 2026-11-22, [#86](https://github.com/Lorithan/gameboy-emu/issues/86))
 
@@ -183,3 +183,17 @@ impl<K: Copy + Eq + Hash> Input<K> {
 3. **Repeat:** holding a key does not re-trigger it.
 4. **Focus loss:** switching windows while holding a key leaves nothing stuck.
 5. **Quitting:** Esc still quits.
+
+## F3 and F4 result (complete 2026-11-23)
+
+The user played MaxPirate v1.0 and GB Snake in the release frontend and reported no problems. Both games played and controlled correctly. The F3 checklist passed:
+
+| Item | Result |
+| --- | --- |
+| 1. Each binding | WASD, arrows, J/K, Z/X, Enter, Right Shift and Backspace act as their buttons (Select through Snake) |
+| 2. Opposite directions | Last press wins; releasing it hands the axis back |
+| 3. Repeat | Holding a key does not re-trigger it |
+| 4. Focus loss | Nothing stuck after switching windows |
+| 5. Quitting | Esc quits |
+
+Automated evidence: 10 input unit tests, plus 2 headless demo smoke tests that fail with the button presses disabled. MaxPirate is the agreed ROM-only interactive demo for the M4 gate.
