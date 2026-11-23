@@ -137,6 +137,11 @@ The user implemented `display`, `pacing` and the SDL loop in `main.rs` against t
 - **A binding table, not a `match`.** Rebinding can later replace the table without touching the event loop. Rebinding itself is out of scope.
 - **Last press wins on each D-pad axis.** With both Left and Right (or Up and Down) held, the one pressed most recently is active; releasing it hands the axis back to the other if that is still held.
 
+**Later: controllers** (not in scope; noted 2026-11-22).
+- **One input for all devices.** Gamepads reuse `Input` through an enum key type, such as `Source::Key(Scancode)` or `Source::Pad(GamepadButton)`, with **one** `Input` for every device. Then holds and last-press-wins work across devices, and one device's release cannot cancel another's hold. Separate `Input`s per device would have exactly that bug.
+- **Analog input.** Sticks and triggers need a small converter with a dead zone and hysteresis that produces virtual key-downs and key-ups.
+- **Device handling.** Several pads need the device ID in the source. Unplugging a pad needs a per-device release, like `release_all`.
+
 **Core change (user):** `Button` derives `PartialEq, Eq` (and `Hash` if wanted), so bindings and tests can compare buttons.
 
 **Testable interface** (pure, no SDL calls; the logic is generic over the key type so a web frontend can reuse it):
