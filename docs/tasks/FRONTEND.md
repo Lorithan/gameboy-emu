@@ -128,3 +128,51 @@ The user implemented `display`, `pacing` and the SDL loop in `main.rs` against t
 **Notes:**
 - **CPU use is higher than emulation needs.** The core runs about 30 times real time in release, so emulation accounts for about 3% of a core; the rest is probably rendering and presenting, or per-cycle overhead. It is not a failure; profiling would be a separate issue if needed.
 - **Build time.** SDL3 builds from source in about 41 s (debug) or 50 s (release) the first time, and is cached afterwards.
+
+## F3 contract (agreed 2026-11-22, [#87](https://github.com/Lorithan/gameboy-emu/issues/87))
+
+**Agreed design.**
+- **Two key sets, both active.** WASD and the arrow keys for the D-pad; J/K and Z/X for B/A (B left of A, as on the Game Boy); Enter for Start; Right Shift or Backspace for Select. Esc stays free for quitting.
+- **Physical keys.** Bindings use SDL scancodes, so WASD keeps its physical position on any keyboard layout.
+- **A binding table, not a `match`.** Rebinding can later replace the table without touching the event loop. Rebinding itself is out of scope.
+- **Last press wins on each D-pad axis.** With both Left and Right (or Up and Down) held, the one pressed most recently is active; releasing it hands the axis back to the other if that is still held.
+
+**Core change (user):** `Button` derives `PartialEq, Eq` (and `Hash` if wanted), so bindings and tests can compare buttons.
+
+**Testable interface** (pure, no SDL calls; the logic is generic over the key type so a web frontend can reuse it):
+
+```rust
+// frontends/sdl/src/input.rs
+pub const DEFAULT_BINDINGS: &[(Scancode, Button)];           // the 15 bindings above
+pub struct Input<K>;
+impl<K: Copy + Eq> Input<K> {
+    pub fn new(bindings: &[(K, Button)]) -> Self;            // panics if a key is bound twice
+    pub fn key_down(&mut self, key: K) -> Vec<(Button, bool)>;
+    pub fn key_up(&mut self, key: K) -> Vec<(Button, bool)>;
+    pub fn release_all(&mut self) -> Vec<(Button, bool)>;    // focus loss: forget every held key
+}
+```
+
+**Rules.**
+- **Held buttons.** A button is held while any key bound to it is held. Unbound keys, a key-down for a key already held (SDL key repeat), and a key-up for a key not held change nothing.
+- **Recency.** For the last-press-wins rule it follows the button, not the key: it updates only when a direction goes from no keys held to at least one.
+- **Reported changes.** Each call returns exactly the buttons whose effective state changed: releases first, then presses, each button at most once. The loop passes each to `System::set_button`.
+- **Focus loss.** On `WindowFocusLost`, the loop calls `release_all`, because SDL may never deliver the key-ups.
+
+**Unit tests** (assistant, 2026-11-22): `frontends/sdl/src/input/tests.rs` (10), wired by `#[cfg(test)] mod tests;`.
+- **Default table:** the full table, every button reachable, Esc unbound.
+- **Basics:** duplicate keys rejected; press and release; unbound keys, repeats and stray releases.
+- **Rules:** buttons held by either of two keys; last press wins in both directions, including releasing the loser; axes and action buttons independent; recency per button; `release_all`.
+- **Random sequences:** 20 seeds of 2,000 events each against an independent model, checking order, uniqueness, no-op changes and the reported state, with `release_all` every 500 events.
+- **Validation.** In a scratch worktree, all 10 fail against stubs. A reference passes all 10, and each of 12 deliberate breaks fails at least one:
+  - recency per key press; repeats updating recency; duplicate keys allowed;
+  - first press wins; no rule; both-held-means-neither;
+  - presses before releases; one key releasing a two-key button; `release_all` keeping keys;
+  - Backspace missing; Z bound to A; axes crossed.
+
+**Manual checklist** (run with a ROM that reacts to buttons; the F4 demo, or a test ROM):
+1. **Each binding:** WASD, the arrows, J/K, Z/X, Enter, Right Shift and Backspace each act as their button.
+2. **Opposite directions:** holding Left then pressing Right moves right; releasing Right moves left again.
+3. **Repeat:** holding a key does not re-trigger it.
+4. **Focus loss:** switching windows while holding a key leaves nothing stuck.
+5. **Quitting:** Esc still quits.
