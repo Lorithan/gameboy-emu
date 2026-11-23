@@ -1,6 +1,6 @@
 # Rendering into a framebuffer
 
-Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). R1-R3 are complete (2026-11-22); see testing for [R1](../TESTING.md#rendering-r1-frame-publication-and-background-81), [R2](../TESTING.md#rendering-r2-the-window-82) and [R3](../TESTING.md#rendering-r3-objects-83). The user implements; the assistant owns the tests, fixture wiring and review.
+Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). All four slices are complete (2026-11-22); see testing for [R1](../TESTING.md#rendering-r1-frame-publication-and-background-81), [R2](../TESTING.md#rendering-r2-the-window-82), [R3](../TESTING.md#rendering-r3-objects-83) and [R4](../TESTING.md#rendering-r4-dmg-acid2-84). The user implements; the assistant owns the tests, fixture wiring and review.
 
 This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the later SDL2 frontend, whose scope is agreed separately. The core stays independent of SDL2.
 
@@ -8,7 +8,7 @@ This slice draws the DMG picture into an in-core framebuffer. It does not open a
 
 | Source | Use |
 | --- | --- |
-| [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) v1.0 (MIT), `dmg-acid2.gb` and `img/reference-dmg.png` | The visual fixture. "A simple line based renderer is sufficient"; it "does NOT perform register writes during the PPU's mode 3"; it writes registers on chosen rows from LY=LYC interrupts during mode 2. Its failure table covers every rule below. Reference shades are greyscale 00, 55, AA, FF. Provenance (asset hashes, tag commit, reference image revision, completion condition) is recorded before the fixture slice. |
+| [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) v1.0 (MIT), `dmg-acid2.gb` and `img/reference-dmg.png` | The visual fixture. "A simple line based renderer is sufficient"; it "does NOT perform register writes during the PPU's mode 3"; it writes registers on chosen rows from LY=LYC interrupts during mode 2. Its failure table covers every rule below. Reference shades are greyscale 00, 55, AA, FF. Provenance, hashes and the completion condition are pinned in [dmg-acid2.json](../../tests/fixtures/dmg-acid2.json). |
 | [Pan Docs](https://gbdev.io/pandocs/) (Rendering, Tile Data, Tile Maps, OAM, LCDC, Palettes) | Rule text for the cases below. |
 
 ## Rules
@@ -65,7 +65,7 @@ Each slice is a separate issue with tests written first.
 | R1 [#81](https://github.com/Lorithan/gameboy-emu/issues/81), complete 2026-11-22 | `Frame`, publication at VBlank, LCD-off behaviour, System accessors; background only (rules 1, 2, 7) | Local tests against an independent model: tile data modes, both maps, SCX/SCY wrap, BGP, LCDC bit 0; publication timing and counter; the 42 existing fixtures keep their counts |
 | R2 [#82](https://github.com/Lorithan/gameboy-emu/issues/82), complete 2026-11-22 | Window (rule 3) | 10 tests in `src/system/tests/rendering.rs`: WX 1-8, 50, 159, 165 and 167+, WY 1, 77, 143 and 144+; both window maps with both tile data modes under scroll; bit 5 and bit 0 hiding; the counter paused by bit 5 and by WX; the Y condition latching, set while disabled, and restarting each frame. Validated against a throwaway reference: 11 mutants killed; mid-frame LYC/STAT and LCD-restart tests added in review. The 42 fixtures keep their counts |
 | R3 [#83](https://github.com/Lorithan/gameboy-emu/issues/83), complete 2026-11-22 | Objects (rules 4-6) | 8 tests in `src/system/tests/rendering.rs`: edge positions in X and Y for both sizes; every flip and palette combination with odd 8×16 tiles and CGB bits set; the 10-object limit with off-screen objects counting and OAM order deciding; X then OAM-index priority with show-through; BG priority over background and window, masking, and LCDC bit 0 clear; dense random OAM (4 seeds × 5 LCDC settings); LCDC bit 1 clear; LCDC bits 1-2 and OBP splits in HBlank. Validated against a throwaway reference: 18 mutants killed |
-| R4 [#84](https://github.com/Lorithan/gameboy-emu/issues/84) | dmg-acid2 fixture | Provenance recorded first; the frame matches `reference-dmg.png` exactly; how the reference is compared without adding a dependency is decided then |
+| R4 [#84](https://github.com/Lorithan/gameboy-emu/issues/84), complete 2026-11-22 | dmg-acid2 fixture | The frame at the ROM's `ld b, b` breakpoint matches `reference-dmg.png` at all 23,040 pixels. The PNG is decoded by the checksum-gated script with .NET into a pinned shade text file, so no dependency is added. Five of six renderer mutants fail it; BG-priority masking is covered only by the local test |
 
 ## Not in scope
 

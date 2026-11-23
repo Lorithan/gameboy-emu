@@ -1,0 +1,24 @@
+{
+    "suite": "mattcurrie/dmg-acid2",
+    "version": "v1.0",
+    "license": "MIT (Copyright (c) 2020 Matt Currie); LICENSE sha256 2b5ed6f8abbded3913a08ebe8f4eedb340735efc3b024570244d6efa73418044, git blob 77b34a180b3fd2fba8c083bbc5ebbe04fbafb4a5. Not redistributed: the ROM, the image and derived files stay under target/test-roms.",
+    "tag_commit": "dc2295408f881637ff69f784d8d93f3d2db30181",
+    "verification": "Release v1.0 (published 2020-04-18) targets master at tag commit dc22954; the reference image and LICENSE match the git blobs in that commit's tree; the ROM header is ROM-only (0147 = 00), 32 KiB (checked 2026-11-22). The release asset is the author's prebuilt ROM; it is not rebuilt from source here.",
+    "rom": {
+        "file": "dmg-acid2.gb",
+        "url": "https://github.com/mattcurrie/dmg-acid2/releases/download/v1.0/dmg-acid2.gb",
+        "sha256": "464E14B7D42E7FEEA0B7EDE42BE7071DC88913F75B9FFA444299424B63D1DFF1"
+    },
+    "reference": {
+        "file": "reference-dmg.png",
+        "url": "https://raw.githubusercontent.com/mattcurrie/dmg-acid2/dc2295408f881637ff69f784d8d93f3d2db30181/img/reference-dmg.png",
+        "git_blob_sha": "345a6c496a8fef8501c4e1f508a64edb3076a703",
+        "sha256": "CA966D50895C7EFEF05838590D148C2CBFD7FBA57DAB986F25B35B4DA71ABB57",
+        "format": "160x144, exactly four colours: FFFFFF 12849, AAAAAA 6254, 555555 188, 000000 3749 pixels (README: DMG greyscale 00, 55, AA, FF)",
+        "shades_file": "reference-dmg.shades, written by run-dmg-acid2.ps1: 144 lines of 160 digits, FF/AA/55/00 as 0-3 (White to Black), LF line endings",
+        "shades_sha256": "36EC60B412C719723D6204E8BCD552182695AC20D7741A89EB780A18B9EE41CE"
+    },
+    "completion": "src/dmg-acid2.asm at the tag: the LY=0x90 handler decrements a frame counter initialised to 10 and executes `ld b, b` (opcode 40) when it reaches zero, commented as the time to compare with the reference. The test stops with PC at that opcode and compares System::frame(), which was published at the same line-144 entry.",
+    "requirements": "README at the tag: a line-based renderer is sufficient; no register writes during mode 3; writes happen from LY=LYC interrupts during mode 2.",
+    "limits": "1,000,000 M-cycles and 10 host seconds (ten frames are about 175,560 M-cycles)."
+}

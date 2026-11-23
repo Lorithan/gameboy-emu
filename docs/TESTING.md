@@ -1,6 +1,29 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #83 rendering R3 on 2026-11-22: **610 passed, zero failed**, with `--include-ignored` (446 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
+
+## Rendering R4: dmg-acid2 (#84)
+
+Contract: [rendering](tasks/RENDERING.md); provenance in [dmg-acid2.json](../tests/fixtures/dmg-acid2.json). Latest fixture-inclusive regression, 2026-11-22: **611 passed, zero failed** (446 unit, 165 integration), including 43 hash-verified gated fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all seven fixture scripts pass.
+
+- **Fixture:** dmg-acid2 v1.0 (MIT), the author's release ROM, with `img/reference-dmg.png` and LICENSE from the tag commit `dc22954`. The image and LICENSE match that commit's git blobs. Nothing is committed: the files stay under `target/test-roms/dmg-acid2`.
+- **Comparison without a dependency:** `run-dmg-acid2.ps1` checks the ROM and PNG hashes, decodes the PNG with .NET `System.Drawing` (160×144, exactly the four greys FF/AA/55/00), and writes `reference-dmg.shades`: 144 lines of 160 digits, 0 White to 3 Black. The digit counts equal the PNG's colour counts, and the file's hash is pinned too. `tests/dmg_acid2.rs` reads it.
+- **Completion:** the ROM executes `ld b, b` from its LY=0x90 handler after counting ten frames (source at the tag). The test stops with PC at that opcode, 02D7. The bytes there match the handler's `dec b; jr nz; ld b, b`. It then compares `System::frame()` pixel by pixel; on failure it reports the count, first mismatch and rows, and writes `actual-dmg.shades`.
+- **Result:** all 23,040 pixels match, at 324,819 M-cycles with 12 frames completed.
+- **Not vacuous:**
+  - a one-pixel change to the reference fails with exactly that pixel;
+  - in a scratch worktree, renderer bugs fail by these pixel counts:
+
+    | Bug | Pixels wrong |
+    | --- | --- |
+    | window row from LY − WY | 818 |
+    | no 10-object limit | 28 |
+    | 8×16 tile bit 0 kept | 256 |
+    | OAM-order priority | 12 |
+    | no rendering | 10,191 |
+
+  - removing BG-priority masking still passes, because dmg-acid2 never puts a BG-priority object over another object; `bg_priority_hides_the_winner_over_colours_1_to_3_and_masks_lower_objects` covers it.
+- **What this proves:** the scanline renderer reproduces a hardware-verified reference frame for every case in dmg-acid2's failure table. Its writes from LY=LYC interrupts during mode 2 land before dot 80 in this model. It is not evidence for mid-mode-3 effects, which dmg-acid2 avoids.
 
 ## Rendering R3: objects (#83)
 
@@ -171,7 +194,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-An ordinary fixture-free checkout explicitly ignores 43 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
+An ordinary fixture-free checkout explicitly ignores 44 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-reg-f.ps1
@@ -180,6 +203,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-ti
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-ppu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-interrupts.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-oam-dma.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-dmg-acid2.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:

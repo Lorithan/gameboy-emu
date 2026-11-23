@@ -113,7 +113,7 @@ Accesses see the position after their M-cycle's ticks. VBlank-line transitions, 
 
 ## Frame output and background
 
-[#81](https://github.com/Lorithan/gameboy-emu/issues/81) (rendering R1) [#82](https://github.com/Lorithan/gameboy-emu/issues/82) (R2) and [#83](https://github.com/Lorithan/gameboy-emu/issues/83) (R3) draw the background, window and objects into an in-core framebuffer ([contract](tasks/RENDERING.md)). No colour mapping or frontend exists yet.
+[#81](https://github.com/Lorithan/gameboy-emu/issues/81) (rendering R1) [#82](https://github.com/Lorithan/gameboy-emu/issues/82) (R2) and [#83](https://github.com/Lorithan/gameboy-emu/issues/83) (R3) draw the background, window and objects into an in-core framebuffer ([contract](tasks/RENDERING.md)). [#84](https://github.com/Lorithan/gameboy-emu/issues/84) checks the result against dmg-acid2's reference image. No colour mapping or frontend exists yet.
 
 - **Types:** the public `video` module holds `Shade` (`White`, `LightGray`, `DarkGray`, `Black`; the crate-internal `Shade::from_bits` uses the low two bits) and `Frame` (160×144 shades, row-major; `pixel` panics out of range). Ppu owns two frames and the completed-frame count; System exposes `frame()` and `frames_completed()` read-only through Bus.
 - **Rendering:** each line 0-143 is drawn in one step when timing reaches dot 80 (start of Drawing), from VRAM and the registers at that moment, into the back frame. Mode 3 keeps its fixed length, so writes during Drawing apply from the next line.
