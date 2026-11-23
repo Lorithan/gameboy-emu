@@ -2,6 +2,16 @@
 
 Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
 
+## Frontend F2: SDL3 window and timer pacing (#86)
+
+Contract and checklist results: [frontend](tasks/FRONTEND.md#f2-result-complete-2026-11-22). On 2026-11-22, `cargo test --workspace -- --include-ignored` passes **626, zero failed** (611 core, 15 frontend), and fmt and workspace-wide strict Clippy pass.
+
+- **Frontend unit tests (15),** in `frontends/sdl/src/display/tests.rs` (8) and `pacing/tests.rs` (7), as described in the contract.
+- **Before implementation:** against stubs in a scratch worktree 14 failed. A throwaway reference passed all 15, and each of 16 deliberate breaks failed at least one. Two of the tests' own expected values were corrected against the reference first.
+- **During implementation,** the tests caught a row divisor of `HEIGHT` and an off-centre viewport in `display`, and a first frame one period late, a count that never advanced, the frame index returned as the count, and a cap that could never resynchronise in `Pacer`.
+- **Manual checklist:** all eight items pass: usage and errors, dmg-acid2 shown, resizing, closing, 59.73 frames per second measured over 60 s, 20% of one core, and a statically linked release build.
+- **What this proves:** the frontend shows the core's frames correctly scaled and at the right long-run rate. Frame-to-frame timing jitter and input are not covered yet.
+
 ## Frontend F1: workspace split (#85)
 
 Contract: [frontend](tasks/FRONTEND.md). The root package stays the core library (`src/main.rs` removed); `[workspace]` adds `frontends/sdl` (`gameboy-sdl`, a placeholder binary depending on the core by path). On 2026-11-22, `cargo build --workspace` passes, `cargo fmt --all --check` and the workspace-wide strict Clippy pass, and `cargo test --workspace -- --include-ignored` passes **611, zero failed** (446 unit, 165 integration; the frontend has no tests yet). The core still has no dependencies. All seven fixture scripts pass unchanged from the root. Every per-ROM M-cycle count, and dmg-acid2's breakpoint PC, M-cycles and frame count, is identical to `b446039`, compared ROM by ROM (43 fixtures). Cargo warns that `gameboy-sdl` does not use `gameboy-emu` yet; that warning goes away in F2.

@@ -48,7 +48,7 @@ Each is a separate issue with acceptance criteria written first.
 | Slice | Scope | Evidence |
 | --- | --- | --- |
 | F1 [#85](https://github.com/Lorithan/gameboy-emu/issues/85), complete 2026-11-22 | Workspace split, core library-only, empty `gameboy-sdl` binary | `cargo build --workspace`; full suite, fmt, strict Clippy across the workspace; all seven fixture scripts pass with identical counts |
-| F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86) | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
+| F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86), complete 2026-11-22 | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
 | F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87) | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
 | F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88) | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
 
@@ -109,3 +109,22 @@ impl Pacer {
 6. **Speed:** on exit, the frontend prints frames run and elapsed time. After about 60 s the rate is 59.73 ± 0.1 frames per second.
 7. **CPU:** the process sleeps between frames rather than spinning.
 8. **Static linking:** the release `gameboy-sdl.exe` has no `SDL3.dll` dependency (`dumpbin /dependents`). Record whether `SDL3_DYNAMIC_API` can still override SDL.
+
+## F2 result (complete 2026-11-22)
+
+The user implemented `display`, `pacing` and the SDL loop in `main.rs` against the contract above. All 15 unit tests pass; the workspace has 626 tests (611 core, 15 frontend) passing with `--include-ignored`, and fmt and strict Clippy pass. The checklist:
+
+| Item | Result | Checked by |
+| --- | --- | --- |
+| 1. No argument | Usage on stderr, exit code 2 | assistant |
+| 2. Missing file / not a ROM | `could not read cartridge at does-not-exist.gb` / `expected header minimum: 336 bytes, actual size: 132 bytes`, exit code 1 | assistant |
+| 3. dmg-acid2 | Sharp picture matching the reference at 640×576 | user |
+| 4. Resizing | Whole-number scale, centred and sharp, with black borders, including below 1x | user |
+| 5. Closing the window | Exit code 0, with the frame count printed | assistant |
+| 6. Speed | `frames 3559 in 59.59 s (59.73/s)` with dmg-acid2 in release | assistant |
+| 7. CPU | 12.0 s of CPU in 60.0 s wall, 20% of one core: sleeps, does not spin | assistant |
+| 8. Static linking | `dumpbin /dependents` lists no `SDL3.dll`, only Windows system libraries and the MSVC C runtime (`VCRUNTIME140.dll`); the `SDL3_DYNAMIC_API` hook is compiled in, but an override was not exercised | assistant |
+
+**Notes:**
+- **CPU use is higher than emulation needs.** The core runs about 30 times real time in release, so emulation accounts for about 3% of a core; the rest is probably rendering and presenting, or per-cycle overhead. It is not a failure; profiling would be a separate issue if needed.
+- **Build time.** SDL3 builds from source in about 41 s (debug) or 50 s (release) the first time, and is cached afterwards.
