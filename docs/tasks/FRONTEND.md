@@ -26,7 +26,7 @@ M4's gate needs "desktop input … and an agreed ROM-only interactive demo". The
 | Window | 160×144 at integer scale 4 by default (640×576), resizable. The picture keeps integer scaling, centred, with nearest-neighbour filtering. |
 | Colours | Greyscale FF, AA, 55, 00 for shades 0-3, the values dmg-acid2 uses, so screenshots compare directly. Other palettes can come later. |
 | Presenting | Present whenever `frames_completed()` changes; between frames the window keeps the last image. While the LCD is off, the blank frame the core published is shown. |
-| Pacing | By emulated time: 70,224 dots per frame at 4,194,304 Hz is about 59.73 frames per second. The loop runs the core for the elapsed real time, up to a cap so a stall does not cause a burst of catch-up, then sleeps. Vsync stays off, because a 60 Hz display would otherwise run the game about 0.5% fast and drift against the M6 audio clock. |
+| Pacing | Vsync off, in two phases behind one small pacing boundary, such as a `Pacer` that answers whether another frame may run. **Until M6, a timer:** 70,224 dots per frame at 4,194,304 Hz is about 59.73 frames per second; the loop runs the core for the elapsed real time, capped so a stall does not cause a burst of catch-up, then sleeps. **From M6, the audio queue** (the user's suggestion): samples generated from emulated time go into an `SDL_AudioStream`, and the core runs only while the queue holds less than a target of about 2-3 frames of audio. Audio is then the master clock, so sound never stutters. The timer stays as the fallback with no audio device. A 60 Hz vsync would run about 0.5% fast and drift against audio. |
 | Keys | Arrows: D-pad. X: A. Z: B. Enter: Start. Right Shift or Backspace: Select. Esc or closing the window: quit. Key repeat is ignored; each key sends one press and one release to `set_button`. |
 | Not included | Audio (M6), save states, rebinding, gamepads, debug views, fast-forward. |
 
@@ -38,7 +38,7 @@ M4's gate needs "desktop input … and an agreed ROM-only interactive demo". The
 
 ### Open questions
 
-1. **How SDL3 is built and linked on Windows:** the crate can build SDL from source (needs CMake and a C compiler) or use a prebuilt SDL3 library. Decide at F2 by trying it on this machine.
+1. **How SDL3 is built and linked on Windows.** Proposed: build from source and **link statically**, through the `sdl3` crate's features. That gives one executable with no `SDL3.dll` to place next to it, and the SDL version is pinned by `Cargo.lock`. SDL's zlib licence allows static linking, and SDL's dynamic API override (`SDL3_DYNAMIC_API`) can still swap the library at run time; confirm at F2 that the static build keeps it. Costs: about one to two minutes of CMake on the first build (cached afterwards), and a few MB of executable. This machine has Visual Studio 2022 Community with the C++ tools (checked 2026-11-22); CMake still needs installing. The exact crate features are confirmed at F2.
 2. **The demo ROM:** it must be ROM-only, interactive, freely licensed, and runnable from local fixtures without being committed. Candidates still need to be found and their licences checked. dmg-acid2 shows a correct still picture but takes no input.
 
 ## Slices
