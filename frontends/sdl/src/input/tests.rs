@@ -5,7 +5,7 @@
 use gameboy_emu::memory::Button;
 use sdl3::keyboard::Scancode;
 
-use super::{DEFAULT_BINDINGS, Input};
+use super::{DEFAULT_BINDINGS, Input, InputEvent};
 
 const ALL: [Button; 8] = [
     Button::Right,
@@ -35,7 +35,26 @@ const BINDINGS: [(char, Button); 12] = [
 ];
 
 fn input() -> Input<char> {
-    Input::new(&BINDINGS)
+    Input::new(BINDINGS)
+}
+
+/// The changes in one event in the order the loop applies them: the release,
+/// then the press.
+fn changes(event: InputEvent) -> Vec<(Button, bool)> {
+    event
+        .released
+        .map(release)
+        .into_iter()
+        .chain(event.pressed.map(press))
+        .collect()
+}
+
+fn down(input: &mut Input<char>, key: char) -> Vec<(Button, bool)> {
+    changes(input.key_down(key))
+}
+
+fn up(input: &mut Input<char>, key: char) -> Vec<(Button, bool)> {
+    changes(input.key_up(key))
 }
 
 fn press(button: Button) -> (Button, bool) {
@@ -91,104 +110,108 @@ fn the_default_table_maps_wasd_arrows_and_the_action_keys() {
 #[test]
 #[should_panic]
 fn a_key_bound_twice_is_rejected() {
-    let _ = Input::new(&[('k', Button::A), ('k', Button::B)]);
+    let _ = Input::new([('k', Button::A), ('k', Button::B)]);
 }
 
 #[test]
 fn a_key_press_and_release_report_one_change_each() {
     let mut input = input();
-    assert_eq!(input.key_down('k'), [press(Button::A)]);
-    assert_eq!(input.key_up('k'), [release(Button::A)]);
-    assert_eq!(input.key_down('\n'), [press(Button::Start)]);
-    assert_eq!(input.key_up('\n'), [release(Button::Start)]);
+    assert_eq!(down(&mut input, 'k'), [press(Button::A)]);
+    assert_eq!(up(&mut input, 'k'), [release(Button::A)]);
+    assert_eq!(down(&mut input, '\n'), [press(Button::Start)]);
+    assert_eq!(up(&mut input, '\n'), [release(Button::Start)]);
 }
 
 #[test]
 fn unbound_keys_and_repeats_change_nothing() {
     let mut input = input();
-    assert!(input.key_down('q').is_empty(), "unbound down");
-    assert!(input.key_up('q').is_empty(), "unbound up");
+    assert!(down(&mut input, 'q').is_empty(), "unbound down");
+    assert!(up(&mut input, 'q').is_empty(), "unbound up");
     assert!(
-        input.key_up('k').is_empty(),
+        up(&mut input, 'k').is_empty(),
         "release of a key never pressed"
     );
-    assert_eq!(input.key_down('k'), [press(Button::A)]);
+    assert_eq!(down(&mut input, 'k'), [press(Button::A)]);
     // SDL key repeat arrives as more key-downs of a held key.
     for _ in 0..5 {
-        assert!(input.key_down('k').is_empty(), "repeat");
+        assert!(down(&mut input, 'k').is_empty(), "repeat");
     }
-    assert_eq!(input.key_up('k'), [release(Button::A)]);
-    assert!(input.key_up('k').is_empty(), "second release");
+    assert_eq!(up(&mut input, 'k'), [release(Button::A)]);
+    assert!(up(&mut input, 'k').is_empty(), "second release");
 }
 
 #[test]
 fn a_button_stays_held_while_any_of_its_keys_is_held() {
     let mut input = input();
-    assert_eq!(input.key_down('k'), [press(Button::A)]);
-    assert!(input.key_down('x').is_empty(), "second key for A");
-    assert!(input.key_up('k').is_empty(), "x still holds A");
-    assert_eq!(input.key_up('x'), [release(Button::A)]);
+    assert_eq!(down(&mut input, 'k'), [press(Button::A)]);
+    assert!(down(&mut input, 'x').is_empty(), "second key for A");
+    assert!(up(&mut input, 'k').is_empty(), "x still holds A");
+    assert_eq!(up(&mut input, 'x'), [release(Button::A)]);
     // The same through the D-pad, with the keys released in press order.
-    assert_eq!(input.key_down('w'), [press(Button::Up)]);
-    assert!(input.key_down('^').is_empty());
-    assert!(input.key_up('w').is_empty());
-    assert_eq!(input.key_up('^'), [release(Button::Up)]);
+    assert_eq!(down(&mut input, 'w'), [press(Button::Up)]);
+    assert!(down(&mut input, '^').is_empty());
+    assert!(up(&mut input, 'w').is_empty());
+    assert_eq!(up(&mut input, '^'), [release(Button::Up)]);
 }
 
 #[test]
 fn the_last_pressed_direction_wins_on_each_axis() {
     let mut input = input();
-    assert_eq!(input.key_down('a'), [press(Button::Left)]);
+    assert_eq!(down(&mut input, 'a'), [press(Button::Left)]);
     // Right while Left is held: Left is released, then Right pressed.
     assert_eq!(
-        input.key_down('d'),
+        down(&mut input, 'd'),
         [release(Button::Left), press(Button::Right)]
     );
     // Releasing the winner hands the axis back to the still-held key.
     assert_eq!(
-        input.key_up('d'),
+        up(&mut input, 'd'),
         [release(Button::Right), press(Button::Left)]
     );
-    assert_eq!(input.key_up('a'), [release(Button::Left)]);
+    assert_eq!(up(&mut input, 'a'), [release(Button::Left)]);
 
     // Releasing the losing direction changes nothing.
-    assert_eq!(input.key_down('s'), [press(Button::Down)]);
+    assert_eq!(down(&mut input, 's'), [press(Button::Down)]);
     assert_eq!(
-        input.key_down('w'),
+        down(&mut input, 'w'),
         [release(Button::Down), press(Button::Up)]
     );
-    assert!(input.key_up('s').is_empty(), "Down was not active");
-    assert_eq!(input.key_up('w'), [release(Button::Up)]);
+    assert!(up(&mut input, 's').is_empty(), "Down was not active");
+    assert_eq!(up(&mut input, 'w'), [release(Button::Up)]);
 }
 
 #[test]
 fn the_two_axes_and_the_action_buttons_are_independent() {
     let mut input = input();
-    assert_eq!(input.key_down('a'), [press(Button::Left)]);
-    assert_eq!(input.key_down('w'), [press(Button::Up)], "diagonal");
-    assert_eq!(input.key_down('k'), [press(Button::A)]);
-    assert_eq!(input.key_down('j'), [press(Button::B)], "A and B together");
+    assert_eq!(down(&mut input, 'a'), [press(Button::Left)]);
+    assert_eq!(down(&mut input, 'w'), [press(Button::Up)], "diagonal");
+    assert_eq!(down(&mut input, 'k'), [press(Button::A)]);
     assert_eq!(
-        input.key_down('>'),
+        down(&mut input, 'j'),
+        [press(Button::B)],
+        "A and B together"
+    );
+    assert_eq!(
+        down(&mut input, '>'),
         [release(Button::Left), press(Button::Right)],
         "only the horizontal axis changes"
     );
-    assert_eq!(input.key_up('k'), [release(Button::A)]);
+    assert_eq!(up(&mut input, 'k'), [release(Button::A)]);
 }
 
 #[test]
 fn recency_follows_the_button_not_the_key() {
     // A second key for an already-held direction does not make it newer.
     let mut input = input();
-    assert_eq!(input.key_down('a'), [press(Button::Left)]);
+    assert_eq!(down(&mut input, 'a'), [press(Button::Left)]);
     assert_eq!(
-        input.key_down('d'),
+        down(&mut input, 'd'),
         [release(Button::Left), press(Button::Right)]
     );
-    assert!(input.key_down('<').is_empty(), "Left was already held");
-    assert!(input.key_up('a').is_empty(), "'<' still holds Left");
+    assert!(down(&mut input, '<').is_empty(), "Left was already held");
+    assert!(up(&mut input, 'a').is_empty(), "'<' still holds Left");
     assert_eq!(
-        input.key_up('d'),
+        up(&mut input, 'd'),
         [release(Button::Right), press(Button::Left)]
     );
 }
@@ -198,24 +221,17 @@ fn release_all_releases_every_active_button_and_forgets_held_keys() {
     // For focus loss, when SDL may never deliver the key-ups.
     let mut input = input();
     assert!(input.release_all().is_empty(), "nothing held");
-    input.key_down('a');
-    input.key_down('d');
-    input.key_down('w');
-    input.key_down('x');
+    down(&mut input, 'a');
+    down(&mut input, 'd');
+    down(&mut input, 'w');
+    down(&mut input, 'x');
     let mut released = input.release_all();
-    released.sort_by_key(|&(button, _)| ALL.iter().position(|&b| b == button));
-    assert_eq!(
-        released,
-        [
-            release(Button::Right),
-            release(Button::Up),
-            release(Button::A)
-        ]
-    );
+    released.sort_by_key(|&button| ALL.iter().position(|&b| b == button));
+    assert_eq!(released, [Button::Right, Button::Up, Button::A]);
     for key in ['a', 'd', 'w', 'x'] {
-        assert!(input.key_up(key).is_empty(), "{key:?} was forgotten");
+        assert!(up(&mut input, key).is_empty(), "{key:?} was forgotten");
     }
-    assert_eq!(input.key_down('a'), [press(Button::Left)], "fresh start");
+    assert_eq!(down(&mut input, 'a'), [press(Button::Left)], "fresh start");
 }
 
 /// Independent model of the rules for the random sequences below.
@@ -302,15 +318,15 @@ fn random_key_sequences_report_exactly_the_effective_changes() {
         let mut reported = [false; 8];
         for step in 0..2_000 {
             let key = keys[next() as usize % keys.len()];
-            let down = next() % 2 == 0;
-            let changes = if down {
+            let is_down = next() % 2 == 0;
+            let changes = if is_down {
                 model.down(key);
-                input.key_down(key)
+                down(&mut input, key)
             } else {
                 model.up(key);
-                input.key_up(key)
+                up(&mut input, key)
             };
-            let context = format!("seed {seed}, step {step}, {key:?} down {down}");
+            let context = format!("seed {seed}, step {step}, {key:?} down {is_down}");
             // Releases come before presses, each button at most once, and
             // each change really changes the reported state.
             let first_press = changes
@@ -332,9 +348,7 @@ fn random_key_sequences_report_exactly_the_effective_changes() {
             }
             assert_eq!(reported, model.state(), "{context}");
             if step % 500 == 499 {
-                let released = input.release_all();
-                assert!(released.iter().all(|&(_, p)| !p), "{context}: release_all");
-                for (button, _) in released {
+                for button in input.release_all() {
                     reported[Model::index(button)] = false;
                 }
                 model.held.clear();

@@ -135,7 +135,7 @@ The user implemented `display`, `pacing` and the SDL loop in `main.rs` against t
 - **Two key sets, both active.** WASD and the arrow keys for the D-pad; J/K and Z/X for B/A (B left of A, as on the Game Boy); Enter for Start; Right Shift or Backspace for Select. Esc stays free for quitting.
 - **Physical keys.** Bindings use SDL scancodes, so WASD keeps its physical position on any keyboard layout.
 - **A binding table, not a `match`.** Rebinding can later replace the table without touching the event loop. Rebinding itself is out of scope.
-- **Last press wins on each D-pad axis.** With both Left and Right (or Up and Down) held, the one pressed most recently is active; releasing it hands the axis back to the other if that is still held.
+- **Last press wins on each D-pad axis.** With both Left and Right (or Up and Down) held, the one pressed most recently is active; releasing it hands the axis back to the other if that is still held. Remembering the last direction pressed on each axis is enough.
 
 **Later: controllers** (not in scope; noted 2026-11-22).
 - **One input for all devices.** Gamepads reuse `Input` through an enum key type, such as `Source::Key(Scancode)` or `Source::Pad(GamepadButton)`, with **one** `Input` for every device. Then holds and last-press-wins work across devices, and one device's release cannot cancel another's hold. Separate `Input`s per device would have exactly that bug.
@@ -148,20 +148,21 @@ The user implemented `display`, `pacing` and the SDL loop in `main.rs` against t
 
 ```rust
 // frontends/sdl/src/input.rs
-pub const DEFAULT_BINDINGS: &[(Scancode, Button)];           // the 15 bindings above
+pub const DEFAULT_BINDINGS: [(Scancode, Button); 15];       // the 15 bindings above
+pub struct InputEvent { pub pressed: Option<Button>, pub released: Option<Button> } // Debug, PartialEq, Eq
 pub struct Input<K>;
-impl<K: Copy + Eq> Input<K> {
-    pub fn new(bindings: &[(K, Button)]) -> Self;            // panics if a key is bound twice
-    pub fn key_down(&mut self, key: K) -> Vec<(Button, bool)>;
-    pub fn key_up(&mut self, key: K) -> Vec<(Button, bool)>;
-    pub fn release_all(&mut self) -> Vec<(Button, bool)>;    // focus loss: forget every held key
+impl<K: Copy + Eq + Hash> Input<K> {
+    pub fn new(bindings: impl IntoIterator<Item = (K, Button)>) -> Self; // panics if a key is bound twice
+    pub fn key_down(&mut self, key: K) -> InputEvent;
+    pub fn key_up(&mut self, key: K) -> InputEvent;
+    pub fn release_all(&mut self) -> Vec<Button>;            // focus loss: forget every held key
 }
 ```
 
 **Rules.**
 - **Held buttons.** A button is held while any key bound to it is held. Unbound keys, a key-down for a key already held (SDL key repeat), and a key-up for a key not held change nothing.
 - **Recency.** For the last-press-wins rule it follows the button, not the key: it updates only when a direction goes from no keys held to at least one.
-- **Reported changes.** Each call returns exactly the buttons whose effective state changed: releases first, then presses, each button at most once. The loop passes each to `System::set_button`.
+- **Reported changes.** Each call reports exactly the buttons whose effective state changed. One key event changes at most one release and one press, so `InputEvent` holds one of each; the loop applies `released` before `pressed` through `System::set_button`. `release_all` returns every button it released. (Revised 2026-11-23 from a `Vec<(Button, bool)>` to the user's `InputEvent`.)
 - **Focus loss.** On `WindowFocusLost`, the loop calls `release_all`, because SDL may never deliver the key-ups.
 
 **Unit tests** (assistant, 2026-11-22): `frontends/sdl/src/input/tests.rs` (10), wired by `#[cfg(test)] mod tests;`.
