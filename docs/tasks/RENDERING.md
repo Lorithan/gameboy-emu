@@ -2,7 +2,7 @@
 
 Proposed and agreed 2026-11-21 for M4 (decisions and host interface below). All four slices are complete (2026-11-22); see testing for [R1](../TESTING.md#rendering-r1-frame-publication-and-background-81), [R2](../TESTING.md#rendering-r2-the-window-82), [R3](../TESTING.md#rendering-r3-objects-83) and [R4](../TESTING.md#rendering-r4-dmg-acid2-84). The user implements; the assistant owns the tests, fixture wiring and review.
 
-This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the later SDL2 frontend, whose scope is agreed separately. The core stays independent of SDL2.
+This slice draws the DMG picture into an in-core framebuffer. It does not open a window, map shades to colours or pace frames; that is the [desktop frontend](FRONTEND.md) (SDL3, in its own workspace crate). The core stays independent of SDL3.
 
 ## Sources
 
