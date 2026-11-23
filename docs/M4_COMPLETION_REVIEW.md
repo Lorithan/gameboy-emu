@@ -1,6 +1,6 @@
 # M4 completion review
 
-**Proposed 2026-11-23 at [7b10751](https://github.com/Lorithan/gameboy-emu/commit/7b10751), for the user's decision.** M4 meets its declared gate: "visual fixtures, PPU/DMA/input checks and an agreed ROM-only interactive demo" ([plan](PROJECT_PLAN.md)). Every M4 issue except [#78](https://github.com/Lorithan/gameboy-emu/issues/78) is closed. #78 states that it is not required for the M4 gate unless a compatibility case needs it, and none has appeared. The proposal is to close [milestone M4](https://github.com/Lorithan/gameboy-emu/milestone/5) and carry #78 forward as a documented limit.
+**Proposed 2026-11-23 at [7b10751](https://github.com/Lorithan/gameboy-emu/commit/7b10751). The user agreed to defer #78 and added F5 ([#89](https://github.com/Lorithan/gameboy-emu/issues/89), opening a ROM from the window) to M4, so M4 closes after F5 and this review is updated then.** M4 meets its declared gate: "visual fixtures, PPU/DMA/input checks and an agreed ROM-only interactive demo" ([plan](PROJECT_PLAN.md)). Every M4 issue except [#78](https://github.com/Lorithan/gameboy-emu/issues/78) is closed. #78 states that it is not required for the M4 gate unless a compatibility case needs it, and none has appeared. The proposal is to close [milestone M4](https://github.com/Lorithan/gameboy-emu/milestone/5) and carry #78 forward as a documented limit.
 
 ## Gate evidence
 

@@ -51,6 +51,7 @@ Each is a separate issue with acceptance criteria written first.
 | F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86), complete 2026-11-22 | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
 | F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87), complete 2026-11-23 | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
 | F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88), complete 2026-11-23 | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
+| F5 [#89](https://github.com/Lorithan/gameboy-emu/issues/89) | Open a ROM from the window: picker screen, native file dialog, drag-and-drop, Ctrl+O, errors in the window, no console in release | Unit tests for pure layout and hit-test functions; the F5 checklist run and recorded |
 
 ## F2 contract (agreed 2026-11-22, [#86](https://github.com/Lorithan/gameboy-emu/issues/86))
 
@@ -197,3 +198,39 @@ The user played MaxPirate v1.0 and GB Snake in the release frontend and reported
 | 5. Quitting | Esc quits |
 
 Automated evidence: 10 input unit tests, plus 2 headless demo smoke tests that fail with the button presses disabled. MaxPirate is the agreed ROM-only interactive demo for the M4 gate.
+
+## F5 contract: open a ROM from the window (agreed 2026-11-23, [#89](https://github.com/Lorithan/gameboy-emu/issues/89))
+
+Proposed by the user so the emulator can be launched from Explorer without a terminal. It is in M4 because it completes the demo as a launchable program. No new dependencies are needed.
+
+**Design (agreed).**
+- **`App`** owns everything SDL: context, canvas, texture, event pump, input and the RGBA buffer. It also holds a `Screen`: either `Picker { error: Option<String> }` or `Running(Session)`.
+- **`Session`** is one loaded game: the `System`, a fresh `Pacer`, the last published frame count, the frame statistics and the ROM name. Loading a ROM replaces it.
+- **Starting.** `App::new()` sets up SDL; `app.run(rom: Option<PathBuf>)` starts the game if a path was given, otherwise shows the picker. The command-line argument stays, because Explorer passes the file path that way for "Open with", file associations and dropping a file onto the `.exe`. Automated checks also use it.
+- **One load path.** `App::load(path)` serves the argument, the dialog and drag-and-drop:
+  - **On success:** it builds a new `Session` and releases every held key (`Input::release_all`), so nothing carries over between games. The window title shows the ROM name.
+  - **On failure:** it returns to the picker and shows the error in the window. Nothing is printed to the console and nothing exits.
+- **The dialog.** `sdl3::dialog::show_open_file_dialog` uses a `.gb`/`.gbc` filter. Its callback may run on another thread and must be `Send`, so it sends the chosen path through a `std::sync::mpsc` channel. The main loop drains that channel each iteration. Cancelling the dialog changes nothing.
+- **Picker screen.** A centred "Open ROM" button and a hint to drop a file, drawn with `draw_debug_text` (SDL's built-in 8×8 font), plus the last error if there is one.
+- **Controls:**
+  - in the picker: click the button, or press Enter or O, to open the dialog;
+  - anywhere: drop a file onto the window to load it, or press Ctrl+O to open the dialog;
+  - Esc and closing the window quit.
+- **Coordinate spaces.** Mouse positions arrive in window coordinates, while `output_size()` is in pixels. On a high-DPI display the two differ, so the button's hit test and its drawing must use the same space. Either convert the mouse position, or lay out in window coordinates with `window.size()`.
+- **Release builds have no console.** `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` removes the console window when launched from Explorer. Errors therefore go to the screen. The frame-rate line stays on stderr and is visible only in debug builds or a terminal.
+- **Future: a config file.** Settings such as bindings, scale, palette and the last folder are gathered in one `Settings` value with defaults. Reading them from a file is later work and needs a parser dependency decision then.
+
+**Testable parts.** If the user keeps them as small pure functions in the frontend:
+- the button's rectangle for a given window size: centred, and fitting small windows;
+- the hit test, including its edges.
+
+The names are agreed when the module exists.
+
+**Manual checklist:**
+1. **Launching from Explorer:** double-clicking the release `gameboy-sdl.exe` opens the picker with no console window.
+2. **The button:** clicking it, or pressing Enter or O, opens the file dialog filtered to `.gb`/`.gbc`. Choosing MaxPirate starts it; cancelling leaves the picker unchanged.
+3. **Errors:** choosing a non-ROM file shows the error in the window, and the picker still works afterwards.
+4. **Drag and drop:** dropping a ROM onto the picker starts it; dropping one onto a running game switches to it.
+5. **Switching games:** Ctrl+O while playing opens the dialog and switches games, at full speed from the first frame, with no stuck keys.
+6. **The argument:** `gameboy-sdl <rom>` and dropping a ROM onto the `.exe` both start that game directly.
+7. **Earlier checks:** the F2 and F3 checklist items still pass: speed, scaling, keys, Esc and closing.
