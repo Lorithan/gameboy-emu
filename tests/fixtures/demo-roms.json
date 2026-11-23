@@ -1,0 +1,44 @@
+{
+    "purpose": "#88 F4: the agreed ROM-only interactive demo for the M4 gate, and the button-driven ROMs for the F3 manual checklist. Not redistributed: the ROMs and licence files stay under target/test-roms.",
+    "selection": "Homebrew Hub (hh3.gbdev.io API, gbdev/database) searched 2026-11-23: 657 GB game entries, 43 with a declared licence. Headers of the permissive ones were read; only four are ROM-only (0147 = 00, 0148 = 00): MaxPirate, GB Snake, madpew's Battlegrounds (no licence file in its repository) and PlantBoy (source repository deleted). The first two are pinned.",
+    "roms": [
+        {
+            "id": "maxpirate",
+            "role": "M4 demo (D-pad, A, B, Start)",
+            "title": "Max Pirate v1.0 by Marcel Wehrstedt (2024), GBDK-2020 4.0.5",
+            "repository": "https://github.com/MWehrstedt/MaxPirate",
+            "tag": "v1.0",
+            "tag_commit": "2978cf7ce688e407e0e08490911b3055327178b8",
+            "file": "maxpirate/maxpirate.gb",
+            "url": "https://github.com/MWehrstedt/MaxPirate/releases/download/v1.0/maxpirate.gb",
+            "sha256": "ADE748A976CC87D382CF538DAF441A3545C324C81D5FCDA1F89EC0511B227D7A",
+            "header": "CGB flag 00, cartridge type 00, ROM size 00 (32 KiB), RAM size 00",
+            "license": "MIT, LICENSE in the repository at the tag (git blob ea69a63b84887a435226f109d94cf6a4a54fcc18)",
+            "license_file": "maxpirate/LICENSE",
+            "license_url": "https://raw.githubusercontent.com/MWehrstedt/MaxPirate/2978cf7ce688e407e0e08490911b3055327178b8/LICENSE",
+            "license_sha256": "B99A54EC42DD687DFBABF2B948FB93A98DAB952DBFB12A3ED3AFBDC5AF28930E",
+            "credits": "README: graphics by and based on the GB Oracles assets by GibbonGL; SFX and BGM by beatscribe; hUGEDriver and CBT-FX. The asset licences are not stated in the repository.",
+            "verification": "The release asset is byte-identical to Homebrew Hub's copy (entries/maxpirate/maxpirate.gb). Checked 2026-11-23."
+        },
+        {
+            "id": "gbsnake",
+            "role": "F3 checklist: Select and the other buttons",
+            "title": "GB Snake by Yvar de Goffau (2017)",
+            "repository": "https://github.com/Yvar-deGoffau/GBSnake",
+            "commit": "fe0340b28d411cc4fa30b6bec2a78bd9166ddd58",
+            "file": "gbsnake/snake.gb",
+            "url": "https://raw.githubusercontent.com/Yvar-deGoffau/GBSnake/fe0340b28d411cc4fa30b6bec2a78bd9166ddd58/snake.gb",
+            "git_blob_sha": "82648a590ab9ab3998b614e652d95ffe8f1c666a",
+            "sha256": "EDA9A5A9455ED13E496ABCA8FFF765122C0F79B624FAB736B407FD68C29ADF7E",
+            "header": "CGB flag 80 (also runs on DMG), cartridge type 00, ROM size 00 (32 KiB), RAM size 00",
+            "license": "WTFPL 2.0, licence.txt in the repository at the commit (git blob ed4244ff5432b36bc89c5f809cdc6988f14fbed7)",
+            "license_file": "gbsnake/licence.txt",
+            "license_url": "https://raw.githubusercontent.com/Yvar-deGoffau/GBSnake/fe0340b28d411cc4fa30b6bec2a78bd9166ddd58/licence.txt",
+            "license_sha256": "0C425AF4AFD0E9DF0A8609B7AD3BF69F684332A38FFA322E3CCD1E84B5AF7115",
+            "verification": "The ROM and licence match the git blobs at the pinned commit. The repository has no releases. Checked 2026-11-23."
+        }
+    ],
+    "smoke": "tests/demo_roms.rs runs each ROM headless like the frontend (17,556 M-cycles per frame), with no core error or STOP allowed. Both ROMs draw, then show new pictures after button presses. With the presses disabled both fail, so the check depends on input.",
+    "observed_2026_11_23": "MaxPirate: splash to about frame 245; LCD off while loading until about frame 310; title animation; Start switches to play. Snake: one still picture until an arrow press, then 159 distinct pictures over the run.",
+    "m5_candidates": "Small MBC1 games found in the same scan, for M5: Porklike (MIT), PostBot (MIT), JP (MIT), Domination (MIT); Tobu Tobu Girl (MIT code, CC BY 4.0 assets) is MBC1 with RAM and battery."
+}

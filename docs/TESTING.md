@@ -2,6 +2,17 @@
 
 Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
 
+## Frontend F4: demo ROMs (#88, in progress)
+
+Manifest: [demo-roms.json](../tests/fixtures/demo-roms.json). On 2026-11-23, `cargo test --workspace -- --include-ignored` passes **638, zero failed** (613 core, 25 frontend). fmt and workspace-wide strict Clippy pass.
+
+- **Selection:** Homebrew Hub's 657 Game Boy entries were filtered to the 43 with a declared licence, and the permissive ones' headers were read. Of the four that are ROM-only, MaxPirate v1.0 (MIT, official release asset) and GB Snake (WTFPL, pinned commit) are pinned. The other two were rejected: one has no licence file in its repository, and the other's repository was deleted.
+- **Pinning:** `run-demo-roms.ps1` checks the SHA-256 of both ROMs and both licence files before running Cargo. Nothing is committed: the files stay under `target/test-roms`.
+- **Smoke tests (2),** `tests/demo_roms.rs`: each ROM runs headless like the frontend, with no core error or STOP. After button presses, Snake goes from 1 to 159 distinct pictures and MaxPirate from 3 to 20. With the presses disabled both fail, so the check depends on input reaching the game.
+- **APU:** neither game hangs without sound hardware. MaxPirate's hUGEDriver music runs against the unimplemented sound registers.
+- **Not yet done:** the manual play-through in the window, and the F3 key checklist.
+- **What this proves:** both games boot, draw, keep running and react to buttons through the core. It does not show that they play correctly; the play-through checks that.
+
 ## Frontend F2: SDL3 window and timer pacing (#86)
 
 Contract and checklist results: [frontend](tasks/FRONTEND.md#f2-result-complete-2026-11-22). On 2026-11-22, `cargo test --workspace -- --include-ignored` passes **626, zero failed** (611 core, 15 frontend), and fmt and workspace-wide strict Clippy pass.
@@ -208,7 +219,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-An ordinary fixture-free checkout explicitly ignores 44 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
+An ordinary fixture-free checkout explicitly ignores 46 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-reg-f.ps1
@@ -218,6 +229,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-pp
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-cpu-interrupts.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-mooneye-oam-dma.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-dmg-acid2.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-demo-roms.ps1
 ```
 
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:

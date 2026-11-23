@@ -39,7 +39,7 @@ M4's gate needs "desktop input … and an agreed ROM-only interactive demo". The
 ### Remaining questions
 
 1. **How SDL3 is built and linked on Windows.** Agreed: build from source and **link statically**, through the `sdl3` crate's features. That gives one executable with no `SDL3.dll` to place next to it, and the SDL version is pinned by `Cargo.lock`. SDL's zlib licence allows static linking, and SDL's dynamic API override (`SDL3_DYNAMIC_API`) can still swap the library at run time; confirm at F2 that the static build keeps it. Costs: about one to two minutes of CMake on the first build (cached afterwards), and a few MB of executable. This machine has Visual Studio 2022 Community with the C++ tools (checked 2026-11-22); CMake still needs installing. The exact crate features are confirmed at F2.
-2. **The demo ROM:** it must be ROM-only, interactive, freely licensed, and runnable from local fixtures without being committed. Candidates still need to be found and their licences checked. dmg-acid2 shows a correct still picture but takes no input.
+2. **The demo ROM:** chosen 2026-11-23. MaxPirate v1.0 (MIT) is the demo, and GB Snake (WTFPL) covers Select for the F3 checklist. Both are pinned in [demo-roms.json](../../tests/fixtures/demo-roms.json).
 
 ## Slices
 
