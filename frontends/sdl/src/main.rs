@@ -14,10 +14,12 @@ use sdl3::{
 
 use crate::{
     display::{RGBA_LEN, integer_viewport, write_rgba32},
+    input::Input,
     pacing::{MCYCLES_PER_FRAME, Pacer},
 };
 
 mod display;
+mod input;
 mod pacing;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -38,6 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut system = System::new(cartridge);
+    let mut input = Input::new(crate::input::DEFAULT_BINDINGS);
 
     let sdl_context = sdl3::init()?;
     let video_subsystem = sdl_context.video()?;
@@ -71,6 +74,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown {
+                    scancode: Some(key),
+                    ..
+                } => {
+                    input.key_down(key).apply(&mut system);
+                }
+                Event::KeyUp {
+                    scancode: Some(key),
+                    ..
+                } => {
+                    input.key_up(key).apply(&mut system);
+                }
+                Event::Window {
+                    win_event: sdl3::event::WindowEvent::FocusLost,
+                    ..
+                } => {
+                    for button in input.release_all() {
+                        system.set_button(button, false);
+                    }
+                }
                 _ => {}
             }
         }

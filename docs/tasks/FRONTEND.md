@@ -149,7 +149,8 @@ The user implemented `display`, `pacing` and the SDL loop in `main.rs` against t
 ```rust
 // frontends/sdl/src/input.rs
 pub const DEFAULT_BINDINGS: [(Scancode, Button); 15];       // the 15 bindings above
-pub struct InputEvent { pub pressed: Option<Button>, pub released: Option<Button> } // Debug, PartialEq, Eq
+pub struct InputEvent { pressed: Option<Button>, released: Option<Button> } // Debug, PartialEq, Eq
+impl InputEvent { pub fn apply(self, system: &mut System); } // the release, then the press
 pub struct Input<K>;
 impl<K: Copy + Eq + Hash> Input<K> {
     pub fn new(bindings: impl IntoIterator<Item = (K, Button)>) -> Self; // panics if a key is bound twice
@@ -162,7 +163,7 @@ impl<K: Copy + Eq + Hash> Input<K> {
 **Rules.**
 - **Held buttons.** A button is held while any key bound to it is held. Unbound keys, a key-down for a key already held (SDL key repeat), and a key-up for a key not held change nothing.
 - **Recency.** For the last-press-wins rule it follows the button, not the key: it updates only when a direction goes from no keys held to at least one.
-- **Reported changes.** Each call reports exactly the buttons whose effective state changed. One key event changes at most one release and one press, so `InputEvent` holds one of each; the loop applies `released` before `pressed` through `System::set_button`. `release_all` returns every button it released. (Revised 2026-11-23 from a `Vec<(Button, bool)>` to the user's `InputEvent`.)
+- **Reported changes.** Each call reports exactly the buttons whose effective state changed. One key event changes at most one release and one press, so `InputEvent` holds one of each; `InputEvent::apply` passes `released` and then `pressed` to `System::set_button`. The fields are private, so nothing else can apply them in the wrong order. `release_all` returns every button it released. (Revised 2026-11-23 from a `Vec<(Button, bool)>` to the user's `InputEvent`.)
 - **Focus loss.** On `WindowFocusLost`, the loop calls `release_all`, because SDL may never deliver the key-ups.
 
 **Unit tests** (assistant, 2026-11-22): `frontends/sdl/src/input/tests.rs` (10), wired by `#[cfg(test)] mod tests;`.
