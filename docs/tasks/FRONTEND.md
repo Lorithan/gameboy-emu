@@ -51,3 +51,61 @@ Each is a separate issue with acceptance criteria written first.
 | F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86) | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
 | F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87) | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
 | F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88) | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
+
+## F2 contract (agreed 2026-11-22, [#86](https://github.com/Lorithan/gameboy-emu/issues/86))
+
+**Dependency:** `sdl3 = { version = "=0.22.1", features = ["build-from-source-static"] }`. It pins `sdl3-sys` 0.7.3, which bundles SDL 3.4.20. CMake 4.5.1 is installed; VS Code and terminals need a restart to see it on PATH.
+
+**Loop.** Run by emulated time, not by published frames. While the LCD is off the core publishes nothing, so waiting for a frame would hang.
+- **Each due frame runs exactly 17,556 M-cycles.** That is 70,224 dots, one LCD frame.
+- **Present** whenever `frames_completed()` has changed.
+- **STOP:** a `Stopped` step ends that frame's work early, without spinning.
+- **Core error:** print it and exit non-zero.
+
+**Testable interface** (pure, no SDL). The names are the tests' contract; internals are the user's choice.
+
+```rust
+// frontends/sdl/src/display.rs
+pub const RGBA_LEN: usize = Frame::WIDTH * Frame::HEIGHT * 4;
+pub fn shade_rgba(shade: Shade) -> [u8; 4];                  // FF/AA/55/00 grey, alpha FF
+pub fn write_rgba32(frame: &Frame, out: &mut [u8; RGBA_LEN]); // row-major R, G, B, A; pitch WIDTH * 4
+pub fn integer_viewport(window_w: u32, window_h: u32) -> (i32, i32, u32, u32);
+
+// frontends/sdl/src/pacing.rs
+pub const MCYCLES_PER_FRAME: u32 = 17_556;
+pub const MAX_CATCH_UP: u32;                                 // user's choice, at least 1 (3 suggested)
+pub struct Pacer;
+impl Pacer {
+    pub fn new(start: Instant) -> Self;
+    pub fn frames_due(&mut self, now: Instant) -> u32;
+    pub fn next_due(&self) -> Instant;
+}
+```
+
+- **`integer_viewport`** returns `(x, y, width, height)`. The scale is the largest whole number of at least 1 that fits, `min(w / 160, h / 144)`. The picture is centred by Rust's truncating division, so a window smaller than 1x gets negative offsets.
+- **Frame deadlines.** Frame n (n = 0, 1, ...) is due at `start + floor(n * 70,224 * 10^9 / 4,194,304)` ns. Each deadline is computed from the start, never accumulated, because one frame is 16,742,706.298828125 ns. Frame 0 is due at the start.
+- **Return values.** `frames_due` returns how many due frames have not been returned yet. `next_due` is the deadline of the next one.
+- **Catch-up.** With more than `MAX_CATCH_UP` frames due, `frames_due` returns `MAX_CATCH_UP` and drops the rest. It then counts the schedule again from `now`, so the next frame is due at `now + deadline(1)`.
+
+**Unit tests** (assistant, written 2026-11-22):
+- **Files.** `frontends/sdl/src/display/tests.rs` (8) and `pacing/tests.rs` (7), wired by `#[cfg(test)] mod tests;` in each module.
+- **Display: shades and layout.** Exact greys; a blank frame overwriting a sentinel buffer; every pixel in row-major order from a frame rendered by a small hand-assembled ROM. The test first checks that frame has all four shades and no simple symmetry.
+- **Display: viewport.** Explicit window sizes, windows below 1x, and a sweep over sizes up to 2000×2000 checking maximal scale and centring.
+- **Pacing.** The M-cycle constant; the first frame at the start; each of 600 frames due exactly at its deadline and not 1 ns before; an hour polled every 5 ms giving exactly 215,020 frames with no drift; stalls within and beyond the cap, including the resynchronisation.
+- **Validation.** In a scratch worktree, against stubs 14 of 15 fail (the buffer-length test passes on the stub's constant). A reference implementation passes all 15, and each of 16 deliberate breaks fails at least one:
+  - zero alpha; swapped greys; reversed pixel order; white pixels skipped;
+  - no minimum scale; `max` instead of `min`; not centred; floor offsets;
+  - an accumulated rounded duration; rounded-up deadlines; first frame late; no cap;
+  - dropping the backlog without resynchronising; resynchronising with the next frame due immediately;
+  - 17,557 M-cycles; a cap of 0.
+- **Expected-value fixes.** Against the reference, two of the tests' own expected values were wrong and were corrected: the 1920×1080 and 500×2000 viewports, and the hour's frame count, 215,020 rather than 215,019.
+
+**Manual checklist** (run and recorded by the assistant when the window works):
+1. **No ROM argument:** prints usage and exits non-zero.
+2. **Missing file, or a file that is not a ROM:** prints the core's error and exits non-zero.
+3. **dmg-acid2:** a 640×576 window shows a crisp picture matching `reference-dmg.png`.
+4. **Resizing:** the picture keeps a whole-number scale, centred and sharp; smaller than 1x it stays 160×144, centred.
+5. **Closing the window:** exits with status 0.
+6. **Speed:** on exit, the frontend prints frames run and elapsed time. After about 60 s the rate is 59.73 ± 0.1 frames per second.
+7. **CPU:** the process sleeps between frames rather than spinning.
+8. **Static linking:** the release `gameboy-sdl.exe` has no `SDL3.dll` dependency (`dumpbin /dependents`). Record whether `SDL3_DYNAMIC_API` can still override SDL.
