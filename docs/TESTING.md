@@ -2,6 +2,10 @@
 
 Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
 
+## Frontend F1: workspace split (#85)
+
+Contract: [frontend](tasks/FRONTEND.md). The root package stays the core library (`src/main.rs` removed); `[workspace]` adds `frontends/sdl` (`gameboy-sdl`, a placeholder binary depending on the core by path). On 2026-11-22, `cargo build --workspace` passes, `cargo fmt --all --check` and the workspace-wide strict Clippy pass, and `cargo test --workspace -- --include-ignored` passes **611, zero failed** (446 unit, 165 integration; the frontend has no tests yet). The core still has no dependencies. All seven fixture scripts pass unchanged from the root. Every per-ROM M-cycle count, and dmg-acid2's breakpoint PC, M-cycles and frame count, is identical to `b446039`, compared ROM by ROM (43 fixtures). Cargo warns that `gameboy-sdl` does not use `gameboy-emu` yet; that warning goes away in F2.
+
 ## Rendering R4: dmg-acid2 (#84)
 
 Contract: [rendering](tasks/RENDERING.md); provenance in [dmg-acid2.json](../tests/fixtures/dmg-acid2.json). Latest fixture-inclusive regression, 2026-11-22: **611 passed, zero failed** (446 unit, 165 integration), including 43 hash-verified gated fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all seven fixture scripts pass.
@@ -189,9 +193,9 @@ Four existing tests migrated FF40 from fallback to LCDC (startup 91). Tests veri
 ## Commands
 
 ```powershell
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 ```
 
 An ordinary fixture-free checkout explicitly ignores 44 external tests; ignored is not passed. With locally supplied pinned fixtures, run checksum-gated scripts:
@@ -209,7 +213,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/run-dmg-acid2.
 The execution-policy flag applies only to that process. Scripts reject missing/mismatched hashes before Cargo. After fixture verification, run the full suite including ignored tests:
 
 ```powershell
-cargo test --all-features --no-fail-fast --quiet -- --include-ignored
+cargo test --workspace --all-features --no-fail-fast --quiet -- --include-ignored
 ```
 
 The timer script and fixture-inclusive suite now pass rapid_toggle without changing its source expectation or budget. A negative invalid-byte probe previously verified that the timer script rejects a hash mismatch before Cargo starts. `cargo test --test cpu_rom_runner` runs synthetic runner acceptance and leaves external fixtures ignored. Unit/ignored/empty runs are not external passes.
