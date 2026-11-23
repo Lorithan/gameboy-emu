@@ -1,6 +1,6 @@
-//! #81 rendering R1: frame publication and the background, and #82 R2: the
-//! window (docs/tasks/RENDERING.md, rules 1-3 and 7, decisions 1-3). Written
-//! ahead of implementation. Expected frames come from the independent model
+//! #81 rendering R1: frame publication and the background, #82 R2: the
+//! window, and #83 R3: objects (docs/tasks/RENDERING.md, rules 1-7,
+//! decisions 1-3). Written ahead of implementation. Expected frames come from the independent model
 //! below, never from production code.
 //!
 //! The CPU spins on `JR -2` in ROM with IME 0, so it never touches video
@@ -31,6 +31,9 @@ const SCX: u16 = 0xFF43;
 const LY: u16 = 0xFF44;
 const LYC: u16 = 0xFF45;
 const BGP: u16 = 0xFF47;
+const OBP0: u16 = 0xFF48;
+const OBP1: u16 = 0xFF49;
+const OAM: u16 = 0xFE00;
 const WY: u16 = 0xFF4A;
 const WX: u16 = 0xFF4B;
 const IF: u16 = 0xFF0F;
@@ -55,17 +58,23 @@ fn vram(addr: u16) -> u8 {
 
 #[derive(Debug, Clone, Copy)]
 struct Scene {
-    /// LCDC without bit 7: bits 0, 3 and 4 (R1) and 5 and 6 (R2).
+    /// LCDC without bit 7: bits 0, 3 and 4 (R1), 5 and 6 (R2), 1 and 2 (R3).
     lcdc: u8,
     scx: u8,
     scy: u8,
     bgp: u8,
     wy: u8,
     wx: u8,
+    obp0: u8,
+    obp1: u8,
+    /// 40 objects of Y, X, tile, attributes.
+    oam: [u8; 160],
 }
 
-/// Window disabled (LCDC bit 5 clear); WX 7 and WY 0 would cover the
-/// whole screen once it is enabled.
+/// Window and objects disabled (LCDC bits 5 and 1 clear); WX 7 and WY 0
+/// would cover the whole screen once the window is enabled. OAM is all
+/// Y 0, which hides every object. Both OBPs have non-zero low bits, which
+/// must be ignored because object colour 0 is transparent.
 const BASE: Scene = Scene {
     lcdc: 0x11,
     scx: 0,
@@ -73,7 +82,53 @@ const BASE: Scene = Scene {
     bgp: 0xE4,
     wy: 0,
     wx: 7,
+    obp0: 0x1E,
+    obp1: 0xB7,
+    oam: [0; 160],
 };
+
+fn object_height(lcdc: u8) -> usize {
+    if lcdc & 0x04 != 0 { 16 } else { 8 }
+}
+
+/// Rule 4: the OAM indices selected for line `ly`, in OAM order. Only Y
+/// is checked, so objects off-screen in X still count toward the 10.
+fn selected_objects(scene: &Scene, ly: usize) -> Vec<usize> {
+    let height = object_height(scene.lcdc);
+    (0..40)
+        .filter(|&i| {
+            let y = usize::from(scene.oam[4 * i]);
+            ly + 16 >= y && ly + 16 < y + height
+        })
+        .take(10)
+        .collect()
+}
+
+/// Rules 5 and 6: the colour index and attributes of the highest-priority
+/// opaque object pixel at `x`, ignoring BG priority. Smaller X wins; the
+/// stable sort keeps OAM order for equal X.
+fn object_pixel(scene: &Scene, ly: usize, x: usize, selected: &[usize]) -> Option<(u8, u8)> {
+    let height = object_height(scene.lcdc);
+    let mut order = selected.to_vec();
+    order.sort_by_key(|&i| scene.oam[4 * i + 1]);
+    order.into_iter().find_map(|i| {
+        let [y, ox, tile, attr] = [0, 1, 2, 3].map(|b| scene.oam[4 * i + b]);
+        let col = (x + 8).checked_sub(usize::from(ox)).filter(|&c| c < 8)?;
+        let mut row = ly + 16 - usize::from(y);
+        if attr & 0x40 != 0 {
+            row = height - 1 - row;
+        }
+        let tile = if height == 16 {
+            tile & 0xFE | (row / 8) as u8
+        } else {
+            tile
+        };
+        let addr = 0x8000 + u16::from(tile) * 16 + (row % 8 * 2) as u16;
+        let bit = if attr & 0x20 != 0 { col } else { 7 - col };
+        let index = (vram(addr + 1) >> bit & 1) << 1 | vram(addr) >> bit & 1;
+        (index != 0).then_some((index, attr))
+    })
+}
 
 /// Colour index at `(px, py)` of the 256x256 layer whose tile map is `map`,
 /// with LCDC bit 4 selecting the tile data.
@@ -91,7 +146,7 @@ fn layer_index(lcdc: u8, map: u16, px: usize, py: usize) -> u8 {
     high << 1 | low
 }
 
-/// Rules 1-3 for one line. `window_row` is the window's internal line
+/// Rules 1-6 for one line. `window_row` is the window's internal line
 /// counter when the window is drawn on this line.
 fn expected_line(scene: Scene, ly: usize, window_row: Option<usize>) -> Vec<Shade> {
     let bg_map = if scene.lcdc & 0x08 != 0 {
@@ -105,6 +160,11 @@ fn expected_line(scene: Scene, ly: usize, window_row: Option<usize>) -> Vec<Shad
         0x9800
     };
     let wx = usize::from(scene.wx);
+    let selected = if scene.lcdc & 0x02 != 0 {
+        selected_objects(&scene, ly)
+    } else {
+        Vec::new()
+    };
     (0..W)
         .map(|x| {
             let index = if scene.lcdc & 0x01 == 0 {
@@ -122,7 +182,19 @@ fn expected_line(scene: Scene, ly: usize, window_row: Option<usize>) -> Vec<Shad
                     ),
                 }
             };
-            SHADES[usize::from(scene.bgp >> (2 * index) & 3)]
+            // BG priority hides the winning object over background or
+            // window colours 1-3, and lower objects do not show instead.
+            match object_pixel(&scene, ly, x, &selected) {
+                Some((object, attr)) if attr & 0x80 == 0 || index == 0 => {
+                    let obp = if attr & 0x10 != 0 {
+                        scene.obp1
+                    } else {
+                        scene.obp0
+                    };
+                    SHADES[usize::from(obp >> (2 * object) & 3)]
+                }
+                _ => SHADES[usize::from(scene.bgp >> (2 * index) & 3)],
+            }
         })
         .collect()
 }
@@ -172,15 +244,20 @@ fn write_registers(system: &mut System, bg: Scene) {
     system.memory.write(BGP, bg.bgp);
     system.memory.write(WY, bg.wy);
     system.memory.write(WX, bg.wx);
+    system.memory.write(OBP0, bg.obp0);
+    system.memory.write(OBP1, bg.obp1);
 }
 
-/// Turn the LCD off (publishing the blank frame), fill VRAM, set the
-/// registers, and turn it back on with `bg.lcdc`.
+/// Turn the LCD off (publishing the blank frame), fill VRAM and OAM, set
+/// the registers, and turn it back on with `bg.lcdc`.
 fn enabled_with(bg: Scene) -> System {
     let mut system = machine();
     system.memory.write(LCDC, 0x00);
     for addr in 0x8000..=0x9FFF {
         system.memory.write(addr, vram(addr));
+    }
+    for (i, &byte) in bg.oam.iter().enumerate() {
+        system.memory.write(OAM + i as u16, byte);
     }
     write_registers(&mut system, bg);
     system.memory.write(LCDC, 0x80 | bg.lcdc);
@@ -649,4 +726,240 @@ fn an_lcd_restart_mid_window_starts_the_next_frame_fresh() {
     system.memory.write(LCDC, 0x80 | window.lcdc);
     run_to_publication(&mut system);
     assert_frame(&system, &expected_frame(later), "first frame after enable");
+}
+
+// R3 (#83): objects, rules 4-6. Pan Docs (OAM, Palettes, LCDC) is the
+// source. Objects use the patterned 8000-8FFF tiles, so every tile has
+// transparent and opaque pixels.
+
+/// OAM holding `objects` (Y, X, tile, attributes) from index 0; the rest
+/// have Y 0 and are hidden.
+fn oam_with(objects: &[[u8; 4]]) -> [u8; 160] {
+    let mut oam = [0; 160];
+    for (i, object) in objects.iter().enumerate() {
+        oam[4 * i..4 * i + 4].copy_from_slice(object);
+    }
+    oam
+}
+
+/// Deterministic pseudo-random OAM (xorshift32): Y in `16..16 + y_span`,
+/// X in 0-179, any tile and any attributes, including bits 0-3.
+fn random_oam(seed: u32, y_span: u32) -> [u8; 160] {
+    let mut state = seed.wrapping_mul(0x9E37_79B9) | 1;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        state
+    };
+    let mut oam = [0; 160];
+    for object in oam.chunks_mut(4) {
+        object[0] = (16 + next() % y_span) as u8;
+        object[1] = (next() % 180) as u8;
+        object[2] = next() as u8;
+        object[3] = next() as u8;
+    }
+    oam
+}
+
+fn assert_objects(lcdc: u8, oam: [u8; 160], context: &str) {
+    let scene = Scene {
+        lcdc,
+        oam,
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    run_to_publication(&mut system);
+    assert_frame(
+        &system,
+        &expected_frame(scene),
+        &format!("{context}, LCDC {lcdc:02X}"),
+    );
+}
+
+#[test]
+fn objects_are_placed_at_x_minus_8_and_y_minus_16_and_clipped_at_the_edges() {
+    // Y 0, 1 and 160+ hide an object; Y 2-8 show only the bottom rows of an
+    // 8x16 object; X 0 and 168+ hide it; X 1-7 clip the left edge and
+    // 161-167 the right.
+    let mut objects = Vec::new();
+    for (i, y) in [0u8, 1, 2, 8, 9, 15, 16, 17, 100, 152, 153, 159, 160, 200]
+        .into_iter()
+        .enumerate()
+    {
+        objects.push([y, 12 + 11 * i as u8, 3 * i as u8, 0]);
+    }
+    for (i, x) in [0u8, 1, 4, 7, 8, 9, 80, 152, 159, 160, 161, 167, 168, 255]
+        .into_iter()
+        .enumerate()
+    {
+        let y = if i < 7 { 60 } else { 90 };
+        objects.push([y, x, 5 * i as u8 + 1, 0]);
+    }
+    for lcdc in [0x13, 0x17, 0x03] {
+        assert_objects(lcdc, oam_with(&objects), "positions");
+    }
+}
+
+#[test]
+fn flips_palettes_and_8x16_tiles_follow_the_attributes() {
+    // Every combination of Y flip, X flip and palette, with odd tile numbers
+    // (bit 0 is ignored in 8x16 mode) and with the CGB-only bits 0-3 both
+    // clear and set.
+    let objects: Vec<[u8; 4]> = (0..16u8)
+        .map(|i| {
+            let attr = (i & 7) << 4 | if i >= 8 { 0x0F } else { 0 };
+            [40 + 30 * (i / 8), 16 + 18 * (i % 8), 2 * i + 1, attr]
+        })
+        .collect();
+    for lcdc in [0x13, 0x17] {
+        assert_objects(lcdc, oam_with(&objects), "attributes");
+    }
+}
+
+#[test]
+fn each_line_selects_the_first_10_objects_in_oam_order_whatever_their_x() {
+    // Group 1: X 0 and 200 are off-screen but count, so only eight of the
+    // next ten show. Group 2: OAM order, not X, decides who is dropped.
+    let mut objects = vec![[50, 0, 1, 0], [50, 200, 2, 0]];
+    objects.extend((1..=10u8).map(|k| [50, 10 * k, 10 + k, 0]));
+    objects.extend((0..12u8).map(|k| [100, 150 - 10 * k, 30 + k, 0x10]));
+    // One object on other lines is selected independently.
+    objects.push([130, 40, 77, 0]);
+    for lcdc in [0x13, 0x17] {
+        assert_objects(lcdc, oam_with(&objects), "selection");
+    }
+}
+
+#[test]
+fn smaller_x_wins_then_lower_oam_index_and_transparent_pixels_show_through() {
+    let objects = [
+        [70, 52, 9, 0x00],
+        [70, 50, 10, 0x10],
+        [70, 50, 11, 0x00],
+        [70, 55, 12, 0x30],
+        [70, 50, 13, 0x40],
+        [70, 48, 14, 0x10],
+        [110, 100, 20, 0x00],
+        [110, 100, 21, 0x10],
+        [110, 101, 22, 0x60],
+    ];
+    for lcdc in [0x13, 0x17] {
+        assert_objects(lcdc, oam_with(&objects), "object priority");
+    }
+}
+
+#[test]
+fn bg_priority_hides_the_winner_over_colours_1_to_3_and_masks_lower_objects() {
+    // Object 0 has BG priority and wins over objects 1 and 2 by OAM order
+    // and X; where it is opaque over background colours 1-3 the background
+    // shows, not them. Object 3 (smaller X) wins over object 0. The window
+    // counts as background; with LCDC bit 0 clear the background is colour 0,
+    // so BG priority never hides anything.
+    let objects = [
+        [70, 60, 9, 0x80],
+        [70, 60, 10, 0x00],
+        [70, 64, 11, 0x10],
+        [70, 56, 12, 0x00],
+        [100, 90, 13, 0x90],
+        [100, 90, 14, 0x00],
+        [100, 30, 15, 0xC0],
+        [130, 120, 16, 0xA0],
+    ];
+    for lcdc in [0x13, 0x17, 0x12, 0x16] {
+        assert_objects(lcdc, oam_with(&objects), "BG priority");
+    }
+    let scene = Scene {
+        lcdc: 0x33,
+        wx: 80,
+        wy: 60,
+        oam: oam_with(&objects),
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    run_to_publication(&mut system);
+    assert_frame(
+        &system,
+        &expected_frame(scene),
+        "BG priority over the window",
+    );
+}
+
+#[test]
+fn dense_random_oam_matches_the_model() {
+    // 40 objects in a 60-line band, so most lines hit the limit and objects
+    // overlap, with random attributes.
+    for seed in 1..=4 {
+        let oam = random_oam(seed, 60);
+        for lcdc in [0x13, 0x17, 0x12, 0x03] {
+            assert_objects(lcdc, oam, &format!("seed {seed}"));
+        }
+        let scene = Scene {
+            lcdc: 0x37,
+            wx: 40,
+            wy: 20,
+            oam,
+            ..SCROLLED
+        };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        assert_frame(
+            &system,
+            &expected_frame(scene),
+            &format!("seed {seed} with the window"),
+        );
+    }
+}
+
+#[test]
+fn lcdc_bit_1_clear_hides_every_object() {
+    let oam = random_oam(9, 160);
+    for lcdc in [0x11, 0x15, 0x10] {
+        let scene = Scene {
+            lcdc,
+            oam,
+            ..SCROLLED
+        };
+        let mut system = enabled_with(scene);
+        run_to_publication(&mut system);
+        let no_objects = Scene {
+            oam: [0; 160],
+            ..scene
+        };
+        assert_frame(
+            &system,
+            &expected_frame(no_objects),
+            &format!("LCDC {lcdc:02X}"),
+        );
+    }
+}
+
+#[test]
+fn object_registers_written_in_hblank_apply_from_the_next_line() {
+    // LCDC bits 1 and 2 and both OBPs, under the scanline model (decision 1).
+    let scene = Scene {
+        lcdc: 0x13,
+        oam: random_oam(5, 160),
+        ..SCROLLED
+    };
+    let mut system = enabled_with(scene);
+    run_to_hblank(&mut system, 40);
+    system.memory.write(LCDC, 0x80 | 0x11);
+    run_to_hblank(&mut system, 70);
+    system.memory.write(LCDC, 0x80 | 0x17);
+    run_to_hblank(&mut system, 100);
+    system.memory.write(OBP0, 0x93);
+    system.memory.write(OBP1, 0x4C);
+    run_to_publication(&mut system);
+    let expected = expected_frame_by_line(|ly| Scene {
+        lcdc: match ly {
+            0..=40 => 0x13,
+            41..=70 => 0x11,
+            _ => 0x17,
+        },
+        obp0: if ly > 100 { 0x93 } else { scene.obp0 },
+        obp1: if ly > 100 { 0x4C } else { scene.obp1 },
+        ..scene
+    });
+    assert_frame(&system, &expected, "object register splits");
 }

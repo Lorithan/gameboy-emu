@@ -1,9 +1,10 @@
 use crate::{
-    memory::ppu::{lcd::LcdRegisters, timing::PpuTiming},
+    memory::ppu::{lcd::LcdRegisters, object::Object, timing::PpuTiming},
     video::{Frame, Shade},
 };
 
 mod lcd;
+mod object;
 mod timing;
 
 #[cfg(test)]
@@ -308,15 +309,33 @@ impl Ppu {
             self.window_y_triggered = true;
         }
 
-        let bg_enabled = lcdc & (1 << 0) != 0;
+        let bg_window_enabled = lcdc & (1 << 0) != 0;
+        let sprites_enabled = lcdc & (1 << 1) != 0;
+        let sprite_height: usize = if lcdc & (1 << 2) != 0 { 16 } else { 8 };
         let map_start: usize = if lcdc & (1 << 3) != 0 { 0x1C00 } else { 0x1800 };
-        let window_map: usize = if lcdc & (1 << 6) != 0 { 0x1C00 } else { 0x1800 };
         let unsigned_tiles = lcdc & (1 << 4) != 0;
         let window_flag = lcdc & (1 << 5) != 0;
+        let window_map: usize = if lcdc & (1 << 6) != 0 { 0x1C00 } else { 0x1800 };
         let window_drawn = self.window_y_triggered && window_flag && wx <= 166;
 
+        let mut sprites = self
+            .oam
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(Object::from)
+            .filter(|object| {
+                sprites_enabled
+                    && object.y as usize <= ly as usize + 16
+                    && ly as usize + 16 < object.y as usize + sprite_height
+            })
+            .take(10)
+            .collect::<Vec<_>>();
+
+        sprites.sort_by_key(|obj| obj.x);
+
         for x in 0..Frame::WIDTH {
-            let index = if bg_enabled {
+            let bg_index = if bg_window_enabled {
                 let (px, py, map) = if window_drawn && x + 7 >= wx as usize {
                     // Calculate the window column
                     (x + 7 - wx as usize, self.window_line_counter, window_map)
@@ -348,8 +367,48 @@ impl Ppu {
                 0
             };
 
+            let sprite_pixel = sprites.iter().find_map(|sprite| {
+                // Column inside the sprite: screen x + 8 must be in [X, X + 8)
+                let col = (x + 8).checked_sub(sprite.x as usize).filter(|&c| c < 8)?;
+
+                // Row inside the sprite; the selection filter guarantees no underflow
+                let mut row = ly as usize + 16 - sprite.y as usize;
+                if sprite.y_flip() {
+                    row = sprite_height - 1 - row;
+                }
+
+                // 8x16 ignores tile bit 0: top half is tile & 0xFE, bottom is tile | 1
+                let tile = if sprite_height == 16 {
+                    (sprite.tile as usize & 0xFE) | (row / 8)
+                } else {
+                    sprite.tile as usize
+                };
+
+                // Sprites always use 0x8000 unsigned, so tile * 16 indexes vram directly
+                let row_start = tile * 16 + (row % 8) * 2;
+                let low = self.vram[row_start];
+                let high = self.vram[row_start + 1];
+
+                let bit = if sprite.x_flip() { col } else { 7 - col };
+                let color = (((high >> bit) & 1) << 1) | ((low >> bit) & 1);
+
+                (color != 0).then_some((color, *sprite))
+            });
+
             // Map the color index through BGP
-            let shade = Shade::from_bits(bgp >> (index * 2));
+            let shade = match sprite_pixel {
+                Some((color, sprite)) if !sprite.bg_priority() || bg_index == 0 => {
+                    let obp = if sprite.uses_obp1() {
+                        self.lcd_registers.obp1
+                    } else {
+                        self.lcd_registers.obp0
+                    };
+
+                    Shade::from_bits(obp >> (color * 2))
+                }
+
+                _ => Shade::from_bits(bgp >> (bg_index * 2)),
+            };
 
             self.back_frame.write_pixel(x, ly as usize, shade);
         }

@@ -113,13 +113,13 @@ Accesses see the position after their M-cycle's ticks. VBlank-line transitions, 
 
 ## Frame output and background
 
-[#81](https://github.com/Lorithan/gameboy-emu/issues/81) (rendering R1) and [#82](https://github.com/Lorithan/gameboy-emu/issues/82) (R2) draw the background and window into an in-core framebuffer ([contract](tasks/RENDERING.md)). No sprites, colour mapping or frontend exist yet.
+[#81](https://github.com/Lorithan/gameboy-emu/issues/81) (rendering R1) [#82](https://github.com/Lorithan/gameboy-emu/issues/82) (R2) and [#83](https://github.com/Lorithan/gameboy-emu/issues/83) (R3) draw the background, window and objects into an in-core framebuffer ([contract](tasks/RENDERING.md)). No colour mapping or frontend exists yet.
 
 - **Types:** the public `video` module holds `Shade` (`White`, `LightGray`, `DarkGray`, `Black`; the crate-internal `Shade::from_bits` uses the low two bits) and `Frame` (160×144 shades, row-major; `pixel` panics out of range). Ppu owns two frames and the completed-frame count; System exposes `frame()` and `frames_completed()` read-only through Bus.
 - **Rendering:** each line 0-143 is drawn in one step when timing reaches dot 80 (start of Drawing), from VRAM and the registers at that moment, into the back frame. Mode 3 keeps its fixed length, so writes during Drawing apply from the next line.
 - **Background:** SCX/SCY scroll with wrap at 256; map 9800 or 9C00 (LCDC bit 3); tile data 8000 unsigned or 9000 signed (LCDC bit 4); BGP maps colour indices to shades. With LCDC bit 0 clear, every pixel, window included, is index 0 through BGP.
 - **Window:** drawn when LCDC bits 0 and 5 are set, the Y condition is set and WX <= 166, over pixels with `x + 7 >= WX`; map 9800 or 9C00 (LCDC bit 6), the background's tile data, no scroll. Ppu holds the Y condition (set by a line with LY == WY, whatever bit 5 is) and an internal line counter that advances only after lines the window was drawn on. Both reset at publication and when the LCD is turned off. WX 0 and WX 166 quirks are not modelled.
-- **Publication:** at VBlank entry (line 144, the VBlank-request M-cycle) the frames are swapped and the count increments. Turning the LCD off publishes an all-White frame and increments the count once; nothing is published while it stays off.
+- **Objects:** with LCDC bit 1 set, each line selects the first 10 OAM entries (a small `Object` view of the 4 raw bytes; OAM stays bytes) whose rows cover it, 8 or 16 high from LCDC bit 2, ignoring X. They are sorted stably by X, so equal X keeps OAM order. Per pixel, the first selected object with an opaque pixel (8000 unsigned tiles, 8x16 ignoring tile bit 0, X and Y flip) wins; it shows through OBP0 or OBP1 unless its BG-priority bit is set and the background or window index is 1-3, in which case the background shows and no lower object does.- **Publication:** at VBlank entry (line 144, the VBlank-request M-cycle) the frames are swapped and the count increments. Turning the LCD off publishes an all-White frame and increments the count once; nothing is published while it stays off.
 
 ## Interrupt registers
 

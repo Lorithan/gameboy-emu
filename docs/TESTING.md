@@ -1,6 +1,16 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #82 rendering R2 on 2026-11-22: **602 passed, zero failed**, with `--include-ignored` (438 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #83 rendering R3 on 2026-11-22: **610 passed, zero failed**, with `--include-ignored` (446 unit, 164 integration), including 42 hash-verified gated external fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six checksum-gated fixture scripts pass.
+
+## Rendering R3: objects (#83)
+
+Contract: [rendering](tasks/RENDERING.md), rules 4-6 (checked against Pan Docs OAM, Palettes and LCDC). Latest fixture-inclusive regression after the user's R3 implementation, 2026-11-22: **610 passed, zero failed** (446 unit, 164 integration), including the 42 hash-verified gated fixtures and the PPU calibration probe. Formatting and strict Clippy pass; all six fixture scripts pass.
+
+- **System tests (8),** `system::tests::rendering`, against the independent model extended with objects (BG priority applied to the winning object only): edge positions (Y 0, 1, 2, 8, 9, 15-17, 100, 152, 153, 159, 160, 200; X 0, 1, 4, 7-9, 80, 152, 159-161, 167, 168, 255) in 8x8 and 8x16 and with signed background tile data; every Y flip, X flip and palette combination with odd 8x16 tile numbers and with CGB-only bits 0-3 set; the 10-object limit with off-screen X counting and OAM order (not X) deciding who is dropped; smaller X then lower OAM index winning, with transparent pixels showing through; BG priority over background colours 1-3, masking of lower objects, LCDC bit 0 clear and over the window; dense random OAM (4 seeds, 5 LCDC settings); LCDC bit 1 clear; and LCDC bits 1-2 and OBP0/OBP1 written in HBlank applying from the next line. Both OBPs have non-zero low bits, which must be ignored.
+- **Before implementation:** seven of the eight tests failed against the window renderer; the bit-1-clear test passed vacuously, as expected. A throwaway reference in a scratch worktree (never committed) passed all of them, and each of eighteen deliberate breaks failed at least one test: no 10-object limit, X counted for selection, OAM order only, ties to the higher index, no show-through, no masking, 8x16 Y flip per tile, 8x16 tile bit 0 kept, X flip ignored, palette from a CGB bit, colour 0 opaque (twice), BG priority ignored, BG priority always hiding, 8x16 selection height 8, Y and X off by one, LCDC bit 1 ignored.
+- **Review:** the first draft did not check LCDC bit 1 in selection; it was fixed before the tests were run.
+- **Fixtures:** all 42 gated counts are identical to #82, compared ROM by ROM against a single-threaded run of the previous commit.
+- **What this proves:** objects follow the sourced rules at every pixel of the tested configurations, including the masking quirk. Not modelled: mid-line LCDC and OAM effects. dmg-acid2 (#84) is the external check.
 
 ## Rendering R2: the window (#82)
 
