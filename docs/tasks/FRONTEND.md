@@ -215,7 +215,8 @@ Proposed by the user so the emulator can be launched from Explorer without a ter
 - **Controls:**
   - in the picker: click the button, or press Enter or O, to open the dialog;
   - anywhere: drop a file onto the window to load it, or press Ctrl+O to open the dialog;
-  - Esc and closing the window quit.
+  - Esc in a running game returns to the picker, ending that session and releasing held keys. Esc in the picker does nothing (agreed 2026-11-23);
+  - closing the window or Alt+F4 quits from either screen. An exit button on the picker is optional.
 - **Coordinate spaces.** Mouse positions arrive in window coordinates, while `output_size()` is in pixels. On a high-DPI display the two differ, so the button's hit test and its drawing must use the same space. Either convert the mouse position, or lay out in window coordinates with `window.size()`.
 - **Release builds have no console.** `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` removes the console window when launched from Explorer. Errors therefore go to the screen. The frame-rate line stays on stderr and is visible only in debug builds or a terminal.
 - **Future: a config file.** Settings such as bindings, scale, palette and the last folder are gathered in one `Settings` value with defaults. Reading them from a file is later work and needs a parser dependency decision then.
@@ -233,4 +234,5 @@ The names are agreed when the module exists.
 4. **Drag and drop:** dropping a ROM onto the picker starts it; dropping one onto a running game switches to it.
 5. **Switching games:** Ctrl+O while playing opens the dialog and switches games, at full speed from the first frame, with no stuck keys.
 6. **The argument:** `gameboy-sdl <rom>` and dropping a ROM onto the `.exe` both start that game directly.
-7. **Earlier checks:** the F2 and F3 checklist items still pass: speed, scaling, keys, Esc and closing.
+7. **Esc:** Esc while playing returns to the picker with no stuck keys. Loading a game afterwards starts it fresh. Esc in the picker does nothing.
+8. **Earlier checks:** the F2 and F3 checklist items still pass: speed, scaling, keys and closing the window. Esc no longer quits.
