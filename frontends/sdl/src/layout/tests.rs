@@ -2,6 +2,8 @@
 //! Sizes are in output pixels; the debug font is CELL x CELL per character.
 //! The PickerLayout tests follow once its placement API settles.
 
+use sdl3::pixels::Color;
+
 use super::{
     Area, CELL, LINE, Label, OPEN_LABEL, PAD_X, PAD_Y, PickerLayout, text_scale, text_size,
     wrap_text,
@@ -215,7 +217,7 @@ fn text_block(label: &Label) -> (f32, f32) {
 #[test]
 fn a_one_line_label_is_its_text_plus_padding() {
     for scale in [1.0, 2.0, 3.0] {
-        let label = Label::new(OPEN_LABEL, scale, 100);
+        let label = Label::new(OPEN_LABEL, scale, 100, Color::BLACK);
         assert_eq!(label.lines, [OPEN_LABEL]);
         assert_eq!(
             (label.area.w, label.area.h),
@@ -396,7 +398,7 @@ fn a_long_error_fits_above_the_button_in_every_window() {
 #[test]
 fn a_cut_error_keeps_its_first_lines_and_ends_with_dots() {
     let full = wrap_text(LONG_ERROR, 18);
-    let cut = Label::new(LONG_ERROR, 1.0, 18).limited_to(3);
+    let cut = Label::new(LONG_ERROR, 1.0, 18, Color::BLACK).limited_to(3);
     assert!(full.len() > 3, "{full:?}");
     assert_eq!(cut.lines.len(), 3);
     assert_eq!(cut.lines[0], full[0]);
@@ -419,10 +421,10 @@ fn a_cut_error_keeps_its_first_lines_and_ends_with_dots() {
 #[test]
 fn an_error_that_fits_is_not_cut() {
     for max_lines in [3, 4, 10] {
-        let label = Label::new("not a valid ROM file", 1.0, 10).limited_to(max_lines);
+        let label = Label::new("not a valid ROM file", 1.0, 10, Color::BLACK).limited_to(max_lines);
         assert_eq!(label.lines, ["not a", "valid ROM", "file"], "{max_lines}");
     }
-    let one = Label::new("Not a ROM", 2.0, 20).limited_to(1);
+    let one = Label::new("Not a ROM", 2.0, 20, Color::BLACK).limited_to(1);
     assert_eq!(one.lines, ["Not a ROM"]);
 }
 

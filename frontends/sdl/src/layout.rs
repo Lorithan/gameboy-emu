@@ -72,10 +72,15 @@ pub struct Label<'a> {
     pub area: Area,
     pub text_at: (f32, f32),
     pub scale: f32,
+
+    // colors
+    pub text_color: Color,
+    pub bg_color: Option<Color>,
+    pub border_color: Option<Color>,
 }
 
 impl<'a> Label<'a> {
-    pub fn new(text: &'a str, scale: f32, max_chars: usize) -> Self {
+    pub fn new(text: &'a str, scale: f32, max_chars: usize, text_color: Color) -> Self {
         let lines = wrap_text(text, max_chars)
             .into_iter()
             .map(Cow::Borrowed)
@@ -88,6 +93,9 @@ impl<'a> Label<'a> {
             area,
             text_at: (0.0, 0.0),
             scale,
+            text_color,
+            bg_color: None,
+            border_color: None,
         }
     }
 
@@ -117,8 +125,28 @@ impl<'a> Label<'a> {
         self
     }
 
+    pub fn with_background(mut self, bg_color: Color) -> Self {
+        self.bg_color = Some(bg_color);
+        self
+    }
+
+    pub fn with_border(mut self, border_color: Color) -> Self {
+        self.border_color = Some(border_color);
+        self
+    }
+
     pub fn draw(&self, canvas: &mut Canvas<Window>) -> Result<(), sdl3::Error> {
-        canvas.set_draw_color(Color::BLACK);
+        if let Some(color) = self.bg_color {
+            canvas.set_draw_color(color);
+            canvas.fill_rect(std::convert::Into::<FRect>::into(self.area))?;
+        }
+
+        if let Some(color) = self.border_color {
+            canvas.set_draw_color(color);
+            canvas.draw_rect(self.area)?;
+        }
+
+        canvas.set_draw_color(self.text_color);
 
         for (i, line) in self.lines.iter().enumerate() {
             let y = self.text_at.1 + (LINE * self.scale * i as f32);
@@ -143,9 +171,12 @@ impl<'a> PickerLayout<'a> {
         let center_x = width / 2.0;
         let gap = CELL * scale;
 
-        let button = Label::new(OPEN_LABEL, scale, max_chars).centered_on((center_x, height / 2.0));
+        let button = Label::new(OPEN_LABEL, scale, max_chars, Color::BLACK)
+            .with_background(Color::GRAY)
+            .with_border(Color::BLACK)
+            .centered_on((center_x, height / 2.0));
 
-        let hint = Label::new(FILE_HINT, scale, max_chars);
+        let hint = Label::new(FILE_HINT, scale, max_chars, Color::GRAY);
         let hint_y = button.area.y + button.area.h + gap + hint.area.h / 2.0;
         let hint = hint.centered_on((center_x, hint_y));
 
@@ -154,7 +185,7 @@ impl<'a> PickerLayout<'a> {
             let line = LINE * scale;
             let max_lines = (((available - PAD_Y * scale) / line).floor() as usize).max(1);
 
-            let label = Label::new(text, scale, max_chars).limited_to(max_lines);
+            let label = Label::new(text, scale, max_chars, Color::BLACK).limited_to(max_lines);
             let centre_y = button.area.y - gap - label.area.h / 2.0;
             label.centered_on((center_x, centre_y))
         });
@@ -167,8 +198,6 @@ impl<'a> PickerLayout<'a> {
     }
 
     pub fn draw(&self, canvas: &mut Canvas<Window>) -> Result<(), sdl3::Error> {
-        canvas.set_draw_color(Color::GREY);
-        canvas.draw_rect(self.button.area)?;
         self.button.draw(canvas)?;
 
         self.hint.draw(canvas)?;
