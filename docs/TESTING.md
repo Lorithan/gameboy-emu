@@ -1,6 +1,15 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #84 rendering R4 on 2026-11-22: **611 passed, zero failed**, with `--include-ignored` (446 unit, 165 integration), including 43 hash-verified gated external fixtures (dmg-acid2 among them) and the PPU calibration probe. Formatting and strict Clippy pass; all seven checksum-gated fixture scripts pass.
+Latest fixture-inclusive regression, #89 frontend F5 on 2026-11-26: **657 passed, zero failed, zero ignored**, with `--include-ignored` across the workspace (613 core, 44 frontend), including 43 hash-verified gated external fixtures (dmg-acid2 among them), the demo ROM smoke tests and the PPU calibration probe. Formatting and workspace-wide strict Clippy pass. The core is unchanged since the M4 checkpoint at 7b10751, where all eight checksum-gated fixture scripts passed.
+
+## Frontend F5: opening a ROM from the window (#89)
+
+Contract and results: [frontend](tasks/FRONTEND.md#f5-result-complete-2026-11-26). On 2026-11-26, `cargo test --workspace --all-features --no-fail-fast -- --include-ignored` passes **657, zero failed, zero ignored** (613 core, 44 frontend). fmt and workspace-wide strict Clippy pass. The core is unchanged by F5.
+
+- **Layout tests (19),** `frontends/sdl/src/layout/tests.rs`: text size by characters, hit-test edges, the text scale, word wrapping (with a random test of 2,000 texts), and the picker layout: centring, stack order and gap, a button that never moves, fitting windows down to 160×144, text centred at each label's scale, and long errors cut to fit.
+- **Validation:** checked against scratch references with SDL stubbed out; each of 27 deliberate breaks failed at least one test. During review the tests caught one wrapping bug and three layout bugs.
+- **Manual checklist:** all items pass, run by the user (dialog, errors, drag-and-drop, switching games, Explorer) and by the assistant (title, Esc, the argument, GUI subsystem, CPU use, 59.60 frames per second over 20 s).
+- **What this proves:** the picker's geometry and text handling, and that the window flows work by hand. The event loop, dialog and screen changes have no automated tests.
 
 ## Frontend F3 and F4: input and demo ROMs (#87, #88)
 

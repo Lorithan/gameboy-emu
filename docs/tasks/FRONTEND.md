@@ -51,7 +51,7 @@ Each is a separate issue with acceptance criteria written first.
 | F2 [#86](https://github.com/Lorithan/gameboy-emu/issues/86), complete 2026-11-22 | SDL3 window shows frames from a ROM given on the command line, with pacing | Unit tests for RGBA conversion and pacing; dmg-acid2 shown matching its reference; the checklist is run and recorded |
 | F3 [#87](https://github.com/Lorithan/gameboy-emu/issues/87), complete 2026-11-23 | Keyboard input | Unit tests for the key map; a manual check with a ROM that reacts to buttons |
 | F4 [#88](https://github.com/Lorithan/gameboy-emu/issues/88), complete 2026-11-23 | Demo ROM chosen, pinned and recorded | Provenance and licence recorded first; the demo is played through the checklist |
-| F5 [#89](https://github.com/Lorithan/gameboy-emu/issues/89) | Open a ROM from the window: picker screen, native file dialog, drag-and-drop, Ctrl+O, errors in the window, no console in release | Unit tests for pure layout and hit-test functions; the F5 checklist run and recorded |
+| F5 [#89](https://github.com/Lorithan/gameboy-emu/issues/89) | Open a ROM from the window: picker screen, native file dialog, drag-and-drop, Ctrl+O, errors in the window, no console in release | Unit tests for pure layout and hit-test functions; the F5 checklist run and recorded. **Complete 2026-11-26** ([result](#f5-result-complete-2026-11-26)) |
 
 ## F2 contract (agreed 2026-11-22, [#86](https://github.com/Lorithan/gameboy-emu/issues/86))
 
@@ -236,3 +236,17 @@ The names are agreed when the module exists.
 6. **The argument:** `gameboy-sdl <rom>` and dropping a ROM onto the `.exe` both start that game directly.
 7. **Esc:** Esc while playing returns to the picker with no stuck keys. Loading a game afterwards starts it fresh. Esc in the picker does nothing.
 8. **Earlier checks:** the F2 and F3 checklist items still pass: speed, scaling, keys and closing the window. Esc no longer quits.
+
+## F5 result (complete 2026-11-26)
+
+**As built.** The library target `gameboy_sdl` holds `Application`, which owns SDL and a `Screen` (`Picker { error }` or `Running(Box<Session>)`). `main.rs` only reads the optional argument with `args_os`. Changes from the agreed design, all agreed during review:
+- **One way to change screens.** Every screen change goes through `set_screen`, which releases held keys and sets the window title. Focus loss also passes the released buttons to the running game.
+- **Waiting.** `Screen::wake_at` decides how the loop waits. A running game sleeps until its next frame. The picker and a paused game block in `wait_event_timeout(50 ms)`, so dialog results still arrive.
+- **Pause.** Ctrl+P pauses and resumes; a resumed or new game gets a fresh `Pacer`. "PAUSED" is drawn in a box over the game. Opening the dialog pauses a running game, and cancelling resumes it only if the dialog caused the pause.
+- **Dialog.** Its outcome (`Chosen`, `Cancelled` or `Failed`) comes back through an `mpsc` channel. Only one dialog can be open at a time. The filters are "Game Boy ROM" (`gb;gbc`) and "All files".
+- **Layout.** `layout.rs` builds the picker in output pixels: `PickerLayout` stacks the error, the button and the hint one cell apart around the centred button, which never moves. Text uses an integer scale of half the game's scale, at least 1. Errors wrap at spaces, cut long words, and are cut to the lines that fit, ending in `...`. Mouse events are converted with `Event::convert_coords`, and the window has a minimum size of 160×144.
+- **Title.** The file stem, as in "maxpirate - gameboy-emu". Reading the header title waits for M5.
+
+**Automated evidence.** 19 layout tests in `frontends/sdl/src/layout/tests.rs`: text size, the hit test's edges, the text scale, word wrapping (including a random test of 2,000 texts), and the picker layout (centring, the stack order and gap, the button never moving, staying inside windows down to 160×144, text centred at each label's scale, and long errors cut to fit). The size, hit-test, centring, layout and cut-off tests were checked against references in a scratch crate (with SDL stubbed out) through the API's revisions: each of 27 deliberate breaks failed at least one test. The wrap tests were not mutation-checked separately. During review the tests caught one `wrap_text` bug (text exactly one line long was split) and three layout bugs (unscaled and doubled padding, the hint placed by its text height, and the error placed by a one-line height).
+
+**Manual checklist (2026-11-26).** The user ran items 1-7 by hand and reported that everything works: launching from Explorer without a console, the button, Enter and O, the dialog and cancelling, a non-ROM error, drag-and-drop onto the picker and onto a running game, switching games with Ctrl+O, dropping a ROM onto the `.exe`, and Esc. Measured by the assistant on the release build: the window title, Esc back to the picker, a non-ROM argument showing the picker instead of exiting, a GUI-subsystem release `.exe` (console in debug), CPU use of about 15% of one core while running, 4% paused and 6% on the picker, and 1,183 frames in 19.85 s (59.60 per second, the count including start-up) with a clean exit when the window was closed.
