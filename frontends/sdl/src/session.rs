@@ -41,7 +41,7 @@ impl Stopwatch {
         }
     }
 
-    fn elapsed(&mut self, now: Instant) -> Duration {
+    fn elapsed(&self, now: Instant) -> Duration {
         match self.running_since {
             Some(since) => self.total + (now - since),
             None => self.total,
