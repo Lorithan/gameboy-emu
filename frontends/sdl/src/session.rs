@@ -1,4 +1,7 @@
-use std::{error::Error, time::Instant};
+use std::{
+    error::Error,
+    time::{Duration, Instant},
+};
 
 use gameboy_emu::{
     memory::{Button, Cartridge},
@@ -15,13 +18,44 @@ use crate::{
     pacing::{MCYCLES_PER_FRAME, Pacer},
 };
 
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug)]
+struct Stopwatch {
+    total: Duration,                // time from finished running stretches
+    running_since: Option<Instant>, // Some while running
+}
+
+impl Stopwatch {
+    fn start(&mut self, now: Instant) {
+        if self.running_since.is_none() {
+            self.running_since = Some(now);
+        }
+    }
+
+    fn stop(&mut self, now: Instant) {
+        if let Some(since) = self.running_since {
+            self.total += now - since;
+            self.running_since = None;
+        }
+    }
+
+    fn elapsed(&mut self, now: Instant) -> Duration {
+        match self.running_since {
+            Some(since) => self.total + (now - since),
+            None => self.total,
+        }
+    }
+}
+
 pub struct Session {
     name: String,
     system: System,
     pacer: Pacer,
     last_frame: u64,
     paused: bool,
-    start_up: Instant,
+    stopwatch: Stopwatch,
     frame_count: u64,
 }
 
@@ -31,13 +65,18 @@ impl Session {
         let pacer = Pacer::new(Instant::now());
         let last_frame = u64::MAX;
 
+        let stopwatch = Stopwatch {
+            total: Duration::ZERO,
+            running_since: Some(Instant::now()),
+        };
+
         Session {
             name,
             system,
             pacer,
             last_frame,
             paused: false,
-            start_up: Instant::now(),
+            stopwatch,
             frame_count: 0,
         }
     }
@@ -48,11 +87,13 @@ impl Session {
 
     pub fn pause(&mut self) {
         self.paused = true;
+        self.stopwatch.stop(Instant::now());
     }
 
     pub fn unpause(&mut self) {
         if self.paused {
             self.paused = false;
+            self.stopwatch.start(Instant::now());
             self.pacer = Pacer::new(Instant::now());
         }
     }
@@ -138,7 +179,7 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let elapsed = self.start_up.elapsed();
+        let elapsed = self.stopwatch.elapsed(Instant::now());
         let secs = elapsed.as_secs_f64();
         eprintln!(
             "frames {} in {secs:.2} s ({:.2}/s)",
