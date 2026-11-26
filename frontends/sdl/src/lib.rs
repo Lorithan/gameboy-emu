@@ -370,12 +370,9 @@ impl Application {
                 if session.is_paused() {
                     const PAUSED: &str = "PAUSED";
                     let scale = text_scale(w, h);
-                    let paused_box =
-                        Label::new(PAUSED, scale, 20).centered_on((w as f32 / 2.0, h as f32 / 2.0));
-
-                    self.canvas.set_draw_color(Color::WHITE);
-                    self.canvas
-                        .fill_rect(std::convert::Into::<FRect>::into(paused_box.area))?;
+                    let paused_box = Label::new(PAUSED, scale, 20, Color::WHITE)
+                        .with_background(Color::BLACK)
+                        .centered_on((w as f32 / 2.0, h as f32 / 2.0));
 
                     paused_box.draw(&mut self.canvas)?;
                 }
