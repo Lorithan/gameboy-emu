@@ -8,33 +8,39 @@ mod outcome_support;
 use gameboy_emu::cpu::CycleOutcome as InstructionCycleOutcome;
 use outcome_support::instruction_complete;
 
-use gameboy_emu::memory::{Bus, Cartridge};
+use gameboy_emu::memory::{
+    Bus, Cartridge, CartridgeError, CartridgeKind, CgbSupport, Header, RamSize, RomSize,
+};
 use gameboy_emu::{cpu::CpuSnapshot, system::System};
 
 #[test]
-fn metadata_is_public_and_mutating_the_snapshot_does_not_change_the_cartridge() {
+fn the_header_is_public_and_a_copy_does_not_change_the_cartridge() {
     let mut rom = vec![0; 32_768];
     rom[0x014D] = 0xE7;
     let cartridge = Cartridge::from_bytes(&rom).expect("valid synthetic ROM");
 
     // Integration tests exercise the library as an external consumer.
-    let mut metadata = cartridge.metadata();
-    assert_eq!(metadata.cartridge_type_code, 0);
-    assert_eq!(metadata.rom_size, 32_768);
-    assert_eq!(metadata.ram_size, 0);
+    let header: &Header = cartridge.header();
+    assert_eq!(header.kind, CartridgeKind::RomOnly);
+    assert_eq!(header.rom_size, RomSize::from_code(0).unwrap());
+    assert_eq!(header.rom_size.bytes(), 32_768);
+    assert_eq!(header.cgb, CgbSupport::DmgOnly);
+    assert_eq!(header.title, None);
+    assert_eq!(RamSize::from_code(0).unwrap(), RamSize::None);
 
-    metadata.cartridge_type_code = 0xFF;
-    metadata.rom_size = 1;
-    metadata.ram_size = 8_192;
-    assert_eq!(metadata.cartridge_type_code, 0xFF);
-    assert_eq!(metadata.rom_size, 1);
-    assert_eq!(metadata.ram_size, 8_192);
-
-    let unchanged = cartridge.metadata();
-    assert_eq!(unchanged.cartridge_type_code, 0);
-    assert_eq!(unchanged.rom_size, 32_768);
-    assert_eq!(unchanged.ram_size, 0);
+    let mut copy = header.clone();
+    copy.title = Some("CHANGED".into());
+    copy.kind = CartridgeKind::Mbc1 {
+        ram: RamSize::Kib8,
+        battery: true,
+    };
+    assert_eq!(cartridge.header().title, None);
+    assert_eq!(cartridge.header().kind, CartridgeKind::RomOnly);
     assert_eq!(cartridge.rom(), rom.as_slice());
+
+    // Errors are public and nameable too.
+    let error: CartridgeError = Cartridge::from_bytes(&rom[..100]).unwrap_err();
+    assert!(matches!(error, CartridgeError::IncompleteHeader { .. }));
 }
 
 #[test]

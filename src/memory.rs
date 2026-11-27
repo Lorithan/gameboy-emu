@@ -4,7 +4,9 @@ mod joypad;
 mod ppu;
 mod timer;
 
-pub use cartridge::Cartridge;
+pub use cartridge::{
+    Cartridge, CartridgeError, CartridgeKind, CgbSupport, Header, RamSize, RomSize,
+};
 pub use interrupts::Interrupt;
 use interrupts::InterruptController;
 pub use joypad::Button;

@@ -1,6 +1,6 @@
 # Testing and ROM evidence
 
-Latest fixture-inclusive regression, #89 frontend F5 on 2026-11-26: **657 passed, zero failed, zero ignored**, with `--include-ignored` across the workspace (613 core, 44 frontend), including 43 hash-verified gated external fixtures (dmg-acid2 among them), the demo ROM smoke tests and the PPU calibration probe. Formatting and workspace-wide strict Clippy pass. The core is unchanged since the M4 checkpoint at 7b10751, where all eight checksum-gated fixture scripts passed.
+Latest fixture-inclusive regression, #90 C1 header parsing on 2026-11-27: **672 passed, zero failed, zero ignored**, with `--include-ignored` across the workspace (624 core, 48 frontend), including 43 hash-verified gated external fixtures (dmg-acid2 among them), the demo ROM smoke tests and the PPU calibration probe. Formatting and workspace-wide strict Clippy pass. All eight checksum-gated fixture scripts pass. Results: [C1](tasks/MBC1.md#c1-result-complete-2026-11-27).
 
 ## Frontend F5: opening a ROM from the window (#89)
 

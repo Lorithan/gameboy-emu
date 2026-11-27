@@ -76,13 +76,20 @@ Sizes in the names are in bits (512 kb = 64 KiB). Each ROM reports through the s
 **Names.** `gameboy_emu::memory` exports `Cartridge`, `CartridgeError`, `Header`, `CartridgeKind`, `RomSize`, `RamSize` and `CgbSupport`.
 - `Header::parse(&[u8]) -> Result<Header, CartridgeError>` checks the header only, from a slice of at least 0x150 bytes: the type, the ROM and RAM codes, their combination, the CGB flag and the checksum.
 - `Cartridge::from_bytes` parses the header, then requires the length to equal `rom_size.bytes()` (`LengthError { expected, actual }`). `Cartridge::header() -> &Header`; `rom()` returns every byte. `metadata()` and `CartridgeMetadata` are removed.
-- `RomSize::from_code` accepts 00-06, with `banks()` and `bytes()`. `RamSize::from_code` accepts 00, 02 and 03, with `bytes()`. All of these, `CgbSupport` and `CartridgeKind` derive `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`; `Header` the same except `Copy`.
+- `RomSize::from_code` accepts 00-06, with `banks()` and `bytes()`. `RamSize::from_code` accepts 00, 02 and 03, with `bytes()`. All of these, `CgbSupport` and `CartridgeKind` derive `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`; `Header` the same except `Copy`. `RomSize` and `RamSize` also derive `PartialOrd` and `Ord`, ordered by size (pinned by a test, since derived order follows declaration order).
 - **Errors:** `UnsupportedCartridgeType { code }`, `UnsupportedRomSize { code }`, `UnsupportedRamSize { code }` and `InvalidHeaderCombination { cartridge_type, rom_size, ram_size }`, all `u8`, replace `VerificationFailure`. Messages show the codes as two hex digits.
 - **CGB flag:** `80` is `CgbCompatible`, `C0` is rejected, and bytes without bit 7 are `DmgOnly`. Other values with bit 7 set are left unspecified.
 
 **Tests,** written ahead of implementation: 30 in `src/memory/cartridge/tests.rs` (12 new, the rest migrated to `rom()` and `header()`) and the public-API test in `tests/core_api.rs`. Against a throwaway reference in a scratch worktree all pass, the whole core suite passes (577), and 23 of 24 deliberate breaks fail at least one test. The survivor treats every flag from 80 to BF as CGB-compatible, which is the unspecified case above.
 
 **Until C2,** an accepted MBC1 cartridge still maps only its first 32 KiB, as ROM-only does.
+
+## C1 result (complete 2026-11-27)
+
+- **Implemented by the user** in `src/memory/cartridge.rs`, as agreed: `Header::parse` checks the length, the codes (through a private `CartridgeKind::new` that reads like the table above), the CGB flag, the title and the checksum; `Cartridge::from_bytes` adds the exact-length check and keeps the ROM as `Box<[u8]>`; the types are exported from `memory`. `VerificationFailure` is removed.
+- **Tests:** 32 in `src/memory/cartridge/tests.rs` (13 new; `size_ordering_agrees_with_byte_counts` was added when the size types gained `Ord`, and fails when two variants are swapped) and the public-API test. During review they caught the RAM code `00`/`01` mix-up, 1028-byte kilobytes, the ROM sizes `07`/`08`, MBC1 decoded as ROM-only, title bytes from the manufacturer code, control characters and an all-space title accepted, the file length checked in `parse` (with RAM added), and two out-of-bounds panics on short input.
+- **Regression:** `cargo test --workspace --all-features --no-fail-fast -- --include-ignored` passes **672, zero failed, zero ignored** (624 core, 48 frontend). fmt and workspace-wide strict Clippy pass; all eight checksum-gated fixture scripts pass.
+- **Kept as is, by choice:** `from_bytes(&[u8])` copies the ROM once at load (at most 2 MiB); the checksum is checked after the fields, so a corrupted code byte is reported as that code. Neither is covered by the contract.
 
 ## Saves (frontend)
 
