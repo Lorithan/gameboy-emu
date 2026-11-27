@@ -91,6 +91,22 @@ Sizes in the names are in bits (512 kb = 64 KiB). Each ROM reports through the s
 - **Regression:** `cargo test --workspace --all-features --no-fail-fast -- --include-ignored` passes **672, zero failed, zero ignored** (624 core, 48 frontend). fmt and workspace-wide strict Clippy pass; all eight checksum-gated fixture scripts pass.
 - **Kept as is, by choice:** `from_bytes(&[u8])` copies the ROM once at load (at most 2 MiB); the checksum is checked after the fields, so a corrupted code byte is reported as that code. Neither is covered by the contract.
 
+## C2 test contract (proposed 2026-11-27, [#91](https://github.com/Lorithan/gameboy-emu/issues/91))
+
+**Names.** The tests call two `Cartridge` methods; their visibility is the user's choice (`pub(crate)` keeps the public API at `Bus`):
+- `read(&self, addr: u16) -> u8` and `write(&mut self, addr: u16, value: u8)`, for 0000-7FFF and A000-BFFF. Other addresses are never passed. `read` takes `&self`: reads have no side effects, so DMA can use it.
+- RAM is allocated when the cartridge is built, sized by the header, filled with `0x00` (decision 3). `rom()` still returns the whole image.
+- **ROM-only:** reads as before; every write is ignored; A000-BFFF reads `FF`.
+- **Bus:** reads and writes of 0000-7FFF and A000-BFFF go to the cartridge, and the OAM DMA source path reads 0000-7FFF and A000-BFFF through `read`.
+- The C3 API (`has_battery`, `ram`, `load_ram`, the change counter) is not part of C2.
+
+**Tests,** written ahead of implementation:
+- `src/memory/cartridge/tests/mbc1.rs` (9): an independent model of rules 1-4; every BANK1 value against eight BANK2 and four MODE values (including high bits that must be dropped) for every ROM size; twelve literal bank numbers from the Pan Docs examples; every RAMG value at three addresses; RAM banking by mode and size; contents kept while disabled; initial state; ROM-only; and 4,000 random accesses on each of the 31 accepted MBC1 combinations, checking the ROM never changes.
+- `src/memory/tests/cartridge_bus.rs` (3): every 0000-7FFF and A000-BFFF address through the Bus against an identically driven second `Cartridge`; ROM-only A000-BFFF unmapped; OAM DMA from disabled RAM, enabled RAM and a switched ROM bank.
+- **Mooneye:** twelve `mooneye_mbc1_*` tests in `tests/cpu_rom_runner.rs`, the [manifest](../../tests/fixtures/mooneye-mbc1.json) and `tests/scripts/run-mooneye-mbc1.ps1`, which checks all 24 hashes first. The ROMs come from the already pinned archive; multicart_rom_8Mb is excluded (decision 1). Six get larger M-cycle caps (see the manifest): bits_ramg runs 6.1 million M-cycles.
+- **Validation:** against a throwaway reference in a scratch worktree, all new tests and all twelve Mooneye ROMs pass, and so does the rest of the workspace (the only failures were four fixtures whose ROMs are not in the worktree). Of 30 deliberate breaks, 29 fail at least one test; the survivor is equivalent to the reference. One break first survived (a ROM-only cartridge banked like an MBC1), and the ROM-only test was strengthened to catch it.
+- **Also required:** every existing ROM-only fixture keeps its M-cycle count.
+
 ## Saves (frontend)
 
 - **Where:** next to the ROM, same stem, `.sav`: raw RAM bytes, the format other emulators use, so saves move between them (decision 4).

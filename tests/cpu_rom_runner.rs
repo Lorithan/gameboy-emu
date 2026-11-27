@@ -234,6 +234,121 @@ fn mooneye_oam_dma_start() {
     run_cpu_fixture("acceptance/oam_dma_start.gb");
 }
 
+// #91: pinned Mooneye MBC1 ROMs (tests/fixtures/mooneye-mbc1.json).
+// multicart_rom_8Mb is excluded: MBC1M wiring is out of M5 (decision 1).
+// Measured 2026-11-27 against a scratch reference: rom_* 232,348 M-cycles,
+// ram_* about 970,000, bits_bank1/bank2/mode about 3.1 million and
+// bits_ramg 6.11 million (it rewrites RAMG at every 0000-1FFF address), so
+// those six get their own caps. A pass still needs the Fibonacci packet.
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_bits_bank1() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/bits_bank1.gb",
+        Limits {
+            mcycles: 4_000_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_bits_bank2() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/bits_bank2.gb",
+        Limits {
+            mcycles: 4_000_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_bits_mode() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/bits_mode.gb",
+        Limits {
+            mcycles: 4_000_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_bits_ramg() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/bits_ramg.gb",
+        Limits {
+            mcycles: 8_000_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_ram_64kb() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/ram_64kb.gb",
+        Limits {
+            mcycles: 1_500_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_ram_256kb() {
+    run_cpu_fixture_within(
+        "emulator-only/mbc1/ram_256kb.gb",
+        Limits {
+            mcycles: 1_500_000,
+            ..runner::MOONEYE_LIMITS
+        },
+    );
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_512kb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_512kb.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_1mb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_1Mb.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_2mb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_2Mb.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_4mb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_4Mb.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_8mb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_8Mb.gb");
+}
+
+#[test]
+#[ignore = "Requires pinned ROMs; verify hashes with tests/scripts/run-mooneye-mbc1.ps1"]
+fn mooneye_mbc1_rom_16mb() {
+    run_cpu_fixture("emulator-only/mbc1/rom_16Mb.gb");
+}
+
 // #79: pinned Mooneye HALT/EI/DI/interrupt-entry ROMs
 // (tests/fixtures/mooneye-cpu-interrupts.json).
 
