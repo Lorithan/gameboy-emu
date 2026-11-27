@@ -71,6 +71,19 @@ Sizes in the names are in bits (512 kb = 64 KiB). Each ROM reports through the s
 - **Header title.** The title is printable ASCII from 0134 up to the first `00`, stopping before 0143 when that byte is a CGB flag (`80`/`C0`). The frontend uses it in the window title when present, otherwise the file name.
 - **Initial RAM content:** `0x00`, matching the WRAM/HRAM policy (decision 3).
 
+## C1 test contract (agreed 2026-11-27, [#90](https://github.com/Lorithan/gameboy-emu/issues/90))
+
+**Names.** `gameboy_emu::memory` exports `Cartridge`, `CartridgeError`, `Header`, `CartridgeKind`, `RomSize`, `RamSize` and `CgbSupport`.
+- `Header::parse(&[u8]) -> Result<Header, CartridgeError>` checks the header only, from a slice of at least 0x150 bytes: the type, the ROM and RAM codes, their combination, the CGB flag and the checksum.
+- `Cartridge::from_bytes` parses the header, then requires the length to equal `rom_size.bytes()` (`LengthError { expected, actual }`). `Cartridge::header() -> &Header`; `rom()` returns every byte. `metadata()` and `CartridgeMetadata` are removed.
+- `RomSize::from_code` accepts 00-06, with `banks()` and `bytes()`. `RamSize::from_code` accepts 00, 02 and 03, with `bytes()`. All of these, `CgbSupport` and `CartridgeKind` derive `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`; `Header` the same except `Copy`.
+- **Errors:** `UnsupportedCartridgeType { code }`, `UnsupportedRomSize { code }`, `UnsupportedRamSize { code }` and `InvalidHeaderCombination { cartridge_type, rom_size, ram_size }`, all `u8`, replace `VerificationFailure`. Messages show the codes as two hex digits.
+- **CGB flag:** `80` is `CgbCompatible`, `C0` is rejected, and bytes without bit 7 are `DmgOnly`. Other values with bit 7 set are left unspecified.
+
+**Tests,** written ahead of implementation: 30 in `src/memory/cartridge/tests.rs` (12 new, the rest migrated to `rom()` and `header()`) and the public-API test in `tests/core_api.rs`. Against a throwaway reference in a scratch worktree all pass, the whole core suite passes (577), and 23 of 24 deliberate breaks fail at least one test. The survivor treats every flag from 80 to BF as CGB-compatible, which is the unspecified case above.
+
+**Until C2,** an accepted MBC1 cartridge still maps only its first 32 KiB, as ROM-only does.
+
 ## Saves (frontend)
 
 - **Where:** next to the ROM, same stem, `.sav`: raw RAM bytes, the format other emulators use, so saves move between them (decision 4).
